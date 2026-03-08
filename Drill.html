@@ -875,8 +875,9 @@
     .slot-add-btn { padding: 10px; font-size: 13px; }
     .slot-time-input { font-size: 16px; width: 56px; padding: 4px 6px; }
     .modal-overlay { padding: 0; align-items: flex-end; }
-    .modal { max-width: 100%; max-height: 92vh; border-radius: 16px 16px 0 0; padding: 20px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-    #picker-modal .modal { max-height: 96vh; border-radius: 16px 16px 0 0; }
+    .modal { max-width: 100%; max-height: 88vh; border-radius: 16px 16px 0 0; padding: 20px; overflow: visible; }
+    #drill-modal-content { max-height: 88vh; }
+    #picker-modal .modal { max-height: 96vh; border-radius: 16px 16px 0 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
     .drill-picker-item { padding: 12px; }
     .drill-picker-name { font-size: 14px; }
     .meta-grid { grid-template-columns: 1fr 1fr; }
@@ -1271,7 +1272,7 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
 
 <!-- DRILL DETAIL MODAL -->
 <div class="modal-overlay hidden" id="drill-modal" onclick="closeDrillModal(event)">
-  <div class="modal" id="drill-modal-content">
+  <div class="modal" id="drill-modal-content" style="display:flex;flex-direction:column;max-height:88vh;">
     <div class="modal-header">
       <div>
         <div class="modal-title" id="modal-drill-name"></div>
@@ -1279,9 +1280,11 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
       </div>
       <button class="modal-close" onclick="closeDrillModal()">×</button>
     </div>
-    <div class="meta-grid" id="modal-meta-grid"></div>
-    <div id="modal-drill-desc" style="margin:12px 0 0;padding:12px;background:var(--surface-2);border-radius:8px;font-size:13px;line-height:1.6;color:var(--text);display:none;"></div>
-    <div id="modal-add-section"></div>
+    <div style="overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;">
+      <div class="meta-grid" id="modal-meta-grid"></div>
+      <div id="modal-drill-desc" style="margin:12px 0 0;padding:12px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.6;color:var(--text);display:none;"></div>
+    </div>
+    <div id="modal-add-section" style="padding-top:12px;border-top:1px solid var(--border);margin-top:12px;flex-shrink:0;"></div>
   </div>
 </div>
 
