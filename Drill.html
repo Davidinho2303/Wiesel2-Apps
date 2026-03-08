@@ -972,7 +972,7 @@ window.fbSavePlans = async (plans) => {
     await setDoc(PLANS_DOC, { plans, updatedAt: Date.now() });
   } catch(e) {
     console.warn('Firebase save:', e.message);
-    setStatus((window.t ? window.t('toast_save_failed') : '⚠ Speichern fehlgeschlagen'), 'var(--red)');
+    setStatus('⚠ Speichern fehlgeschlagen', 'var(--red)');
   }
 };
 
@@ -986,10 +986,9 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
   <header class="topbar">
     <span class="topbar-logo">Wiesel 2</span>
     <div class="topbar-sep"></div>
-    <span class="topbar-subtitle" data-i18n="topbar_subtitle">Drill-Bibliothek & Trainingsplanung · Saison 2025/2026</span>
+    <span class="topbar-subtitle">Drill-Bibliothek & Trainingsplanung · Saison 2025/2026</span>
     <div class="topbar-right">
-      <button class="btn btn-ghost btn-sm" id="lang-toggle" onclick="toggleLang()" style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:.04em;">🌐 EN</button>
-      <button class="btn btn-ghost btn-sm" data-i18n="nav_overview" onclick="showPage('import-export')">📋 Pläne-Übersicht</button>
+      <button class="btn btn-ghost btn-sm" onclick="showPage('import-export')">📋 Pläne-Übersicht</button>
       <span id="sync-status" style="font-size:11px;color:var(--text-subtle);font-family:DM Mono,monospace;">☁ Cloud</span>
     </div>
   </header>
@@ -1011,10 +1010,6 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
     <button class="mobile-nav-btn" id="mnav-import-export" onclick="showPage('import-export')">
       <span class="mnav-icon">🗂</span>
       <span class="mnav-label">Übersicht</span>
-    </button>
-    <button class="mobile-nav-btn" id="mnav-lang" onclick="toggleLang()" style="-webkit-tap-highlight-color:transparent;">
-      <span class="mnav-icon">🌐</span>
-      <span class="mnav-label" id="mnav-lang-label">EN</span>
     </button>
   </nav>
 
@@ -1447,187 +1442,86 @@ const DRILLS = [
 // DRILL-BESCHREIBUNGEN (aus Wiesel2_Drill_Bibliothek_aktualisiert)
 // ============================================================
 const DRILL_DESC = {
-  de: {
-    "doppelpaesse": "Varianten: Basic / Innenhand / Außenhand / Behind the Back / Mit Facing / Einer Chest+Bounce / Laufen / Passvarianten wechseln / Konversation.",
-    "extraball": "4 Spieler im Kreis/Quadrat, 5 Bälle — ein Ball ist immer extra und wird weitergereicht. Stufe 1: Frei. Stufe 2: Keine Bodenbounces. Stufe 3: Eng — Passer muss springen. Stufe 4: Nach jedem Pass Cut durch definierten Spot.",
-    "spielen-ohne-dribbling": "Freies Spielen ohne Dribbling. Auch als Constraint auf andere Drills legbar. Fokus: Pässe, Freilaufen, Spacing.",
-    "10pass": "Alle Würfe 'verteidigt' — nur Kick-Outs erlaubt. Ruhig beginnen, dann schneller. Ablauf: Split into Push → Down into Push → Fist into Push → Push into Swing → Split into Swing.",
-    "7er10er": "Korb = 2 Punkte. Bei Treffer: Offense nimmt raus und weiter. Bei Fehler: Wer Rebound fängt startet bei 0. Defense am Ball nur in der Passing Lane. Falscher Cut: -1 / Turnover.",
-    "kniekehlenfassen": "2 Spieler gegenüber, in Kniekehle fassen = Punkt. V1: ohne Ball. V2: mit Dribbling. Weitere Runden mit Einschränkungen (eine Hand, bestimmte Moves).",
-    "shield": "2-1 Setup: Ein Spieler übernimmt 'Shield'-Rolle. V-A: Shield hält Fänger von Fangenden frei. V-B: Shield blockt Verteidiger ab. Optionaler Abschluss: 1-1 auf den Korb.",
-    "aufdrehen": "V1: Aufdrehen Wing — Face, Fake, Bodentouch, Layup. V2: Face, Fake, 1 Dribble Layup. V3: Face, Fake, ½ Dribble Tempowechsel. Post-V: 1 Dribble Hookshot, Pass Fake vorm Entry.",
-    "aufdrehen-defense": "Gleicher Grundaufbau wie Aufdrehen Drill, jetzt mit Live-Defense. Offense liest den Defender und entscheidet: Face-up, Drive, oder Weiterpassen. Competitive.",
-    "aufdrehen-pnr": "Setup: Spieler mit Ball TOK, Cutter läuft rein und auf einen Flügel raus. 1. Passer folgt seinem Pass → stellt Pick → rollt ab. 2. Erster Cutter schließt ab. 3. Pick-Steller cuttet auf anderen Flügel.",
-    "leiter-dribbling": "Laufleiter-Footwork direkt in Dribbling-Sequence übergehen. Kombiniert Koordination mit Ball-Handling.",
-    "rausschlagen": "Beliebig viele Spieler in einem Bereich. Ball rausschlagen = Punkt. Bereich wird kleiner. V1: Herausgeschlagene kommen wieder rein. V2: Herausgeschlagene spielen unter sich weiter.",
-    "pressbreak": "Baseline-Einwerfer, Ballside Guard, Strongside Wing hinter Mittellinie. Einwurf auf Guard → Wing kommt zurück → Pass → Einwerfer sprintet durch → Pass.",
-    "banana": "4 Linien in Ecken, 2 diagonal haben Ball. Kontinuierlich: 1 passt diagonal → läuft auf 4 zu. 2 passt zu 3 → stellt sich bei 4 an. 3 läuft auf Korb → Pass von 4 → Korbleger → läuft auf 2. Steigerung: 2-3 Bälle, höchstes Tempo.",
-    "dribbling-korridor": "Phase 1: Statisch bis Vorfeld 3er-Linie → Check → 1-1 live. Phase 2: Statisch bis Mittellinie, dann dynamisch — 1-1 ohne Check live. Phase 3: Ganzfeld 1-1 live.",
-    "bh-clinic": "Alle Ballhandling-Varianten: Ohne Ball (Um Körper, Über Schulter etc.) → Mit Ball (2 Bälle, Cross etc.) → Mit Tennisball → Competitive. Ggf. Hütchen.",
-    "issalo": "2 Reihen. Ballhandler dribbelt auf Hütchen, macht Handwechsel, andere Reihe rennt los und catcht 'in stride'. Coach macht den Pass bewusst schwierig.",
-    "ucla": "UCLA-Variante: Fill Cut von Corner auf Wing. V1: Fill Cut → Pass → Aufdrehen → Layup. V2: Fill Cut bis TOC → Backdoor → Layup. V3: Fill Cut → Pass → Aufdrehen → Jumper off Dribble. V4: Fill Cut bis TOC → Backdoor → Floater.",
-    "layup-run": "Spieler verlängerte FW-Linie + Spieler mit Ball Baseline → Pass ins Rückfeld → Give&Go → weiter ins Vorfeld → Give&Go auf verlängerter FW-Linie → Abschluss. Rückfeld→Vorfeld, Vorfeld holt Rebound, Finisher wird Rückfeld andere Seite.",
-    "gegenbewegung": "2 Spieler auf Wing. Gegenbewegung vor dem Catch — erst weg, dann zum Ball. Fokus: Timing, Footwork beim Fangen, direkt in Wurf übergehen.",
-    "pendel": "Pendelbewegung zwischen zwei Spots. Catch & Shoot aus der Bewegung. Fokus: Balance beim Landen, sauberer Release.",
-    "shooting-closeout": "Passer passt raus → Defender sprintet Closeout → Schütze wirft → Defense contested. V2: Closeout mit zwei Verteidigern. V3: Closeout mit drei Verteidigern. Erweiterung: Closeout into Boxout.",
-    "shooting-mittellinie": "Shooting von verschiedenen Spots mit Mittellinie als Ausgangspunkt. Fokus: Schuss nach langem Lauf, Kondition + Technik.",
-    "maedn": "Mensch-ärgere-dich-nicht-Shooting. Spieler schießen von festgelegten Spots. 2er/3er-Wertung. Optional: Half-Court-Shot am Ende.",
-    "onemore": "Shooting mit 'One More'-Regel: Treffer → nächster Spot. Verfehlt → nochmal. Competitive.",
-    "aroundtheworld": "Shooting von Positionen rund um den Korb. Competitive: Wer kommt zuerst durch alle Stationen?",
-    "mos": "Spieler auf beiden Seiten in 2 Reihen Baseline. Extra-Spieler mit Ball in Mitte. Mittelspieler passt auf Outlet → 2 Pässe → Layup → Wings → Jumper. Layup-Spieler holt Rebound → Continuum.",
-    "guards-wing-11": "Fake! BL-Moves: In & Out · 2x Cross. Middle-Moves: In & Out into Cross · 1/3 Cross. Finishes: 1-Step-Lay · Reverse · Eurostep · Rolling. Erweiterung: +1 Verteidiger (2-1 Defense) / +1 statischer Offense-Spieler als Kickout-Option.",
-    "bigs-finishing": "Fakes! Middle Hook · Middle Extendo · BL Drop Step · Up & Under. Erweiterung: +1 Verteidiger (2-1 Defense, live) / +1 statischer Offense-Spieler als Kickout-Option. Competitive. Gamelike.",
-    "fastbreak": "3 Man: Wing Finish · Wing Kickout · 1-Cut-Variationen · Erweiterung 2-1 zurück. 4 Man: Zusätzlicher Trailer, Erweiterung 2-2 zurück. 5 Man: Volle Transition + Rim Runner. Abschlüsse als Transition Cycles: 1.Wing Drive · 2.Wing Shot · 3.Rimrunner Finish · 4.Trailer Jumper · 5.Trailer in PnR.",
-    "transition-cycles": "5 Abschlüsse zyklisch: 1.Wing Drive · 2.Wing Shot · 3.Rimrunner Finish · 4.Trailer Jumper · 5.Trailer in PnR. Jede Rolle rotiert durch alle Spieler.",
-    "53-transition": "2 Teams gleiche Anzahl (3-5 pro Team). Jedes Team bekommt Nummern. Offense Baseline, Defense Freiwurflinie. Coach wirft Ball ein und ruft Nummer — diese Spieler müssen erst die Baseline berühren bevor sie zur Defense. Competitive.",
-    "54plus1": "5 gegen 4+1: Offense in Überzahl startet, ein zusätzlicher Defender kommt verzögert rein. Fokus: Überzahl ausnutzen bevor Verteidigung komplett ist.",
-    "11man": "Kontinuierliches 3-gegen-2. Aufstellung: 3 mit Ball an Mittellinie, 2 Verteidiger in Tandem an jedem Korb, 4 an Freiwurflinie extended. Nach Abschluss: Outlet-Pass → neuer 3-gegen-2 in andere Richtung. Kontinuierlich ohne Stopp.",
-    "zahlenspiel": "Offense startet mit Freiwurf, Defense mit 2 Reboundern. Nach FW: 2-1. Nach Score/Stopp: 2 neue Offense rein → 3-2. Dann anderes Team rein → 4-3. Weiter bis 5-5. Beide Teams spielen einmal volle Sequenz.",
-    "transition-defense": "Transition Defense in Up & Down Konditionsdrillformat. Ball stoppen → aufbauen → Kondition durch wiederholte Sequenzen.",
-    "defense-korridor": "Phase 1: Statisch bis Vorfeld 3er-Linie → Check → 1-1 live. Phase 2: Statisch bis Mittellinie, dann dynamisch — 1-1 ohne Check live. Phase 3: Ganzfeld 1-1 live.",
-    "closeout-clinic": "V1: 1-1 Closeout — technisch, eingeschränkte Defense. V2: Closeout mit zwei Verteidigern (Skip Pass → Closeout). V3: Closeout mit drei Verteidigern. Erweiterung: Hütchen auf Helpside berühren / Defender startet von Baseline / Coach ruft erst 'Live!' wenn Defender falsch steht. Inkl. Closeout into Boxout.",
-    "shell": "4-4 oder 5-5 auf Halbfeld. Phase 1: Nur Pässe, Defense Positioning. Phase 2: 1-2 Dribbles erlaubt — Defense: 'Kill' bei totem Dribbling. Phase 3: Cuts erlaubt. Phase 4: Live — bei 5 Stops Wechsel.",
-    "press-22": "2 Defender / 2 Offense / Ganzfeld. X1 pusht Ball zur Sideline, X2 sichert Weakside auf Korblinie. Nach Swing: X1 und X2 rotieren — X2 wird neue Ballside, X1 geht Weakside. Kontinuierlich.",
-    "press-55": "Vollständige 2-2-1 Zone Press in 5-5. Reihe 1 (1,2): Ballside zur Sideline pushen, Weakside Korblinie. Reihe 2 (3,4): Ballside deckt Linienpass. Reihe 3 (5): Mittig. Ziel: Giveaways erzwingen.",
-    "helpside": "4-man Setup. Coach steht am TOC. Coach passt auf einen Wing: Penetration erlaubt. Restliche Verteidiger: Help the Helper + Rotation. Erweiterungen: Hütchen auf Helpside berühren, Coach ruft 'Drive!', 4-3 Überzahl. Dauer ca. 15 min.",
-    "ole-fickung": "Intensives Konditions- und Defensivtraining. Verschiedene Varianten mit Fokus auf defensive Footwork, Ausdauer und Körperhaltung.",
-    "defense-fickung": "Reines Defensiv-Konditionstraining. Footwork-Sequenzen ohne Ball: Slides, Closeouts, Rotationen.",
-    "quivern": "Defensive Footwork-Sequenz: Baseline quivern → Sprint → Slides auf Anzeige → Sprint → quivern → etc. Ganzfeld-Kondition mit defensiver Stance.",
-    "1-1-ruecken": "1-1 Drill: Defense beginnt mit Rücken zum Angreifer. Ball auf Rücken legen oder Coach passt — Defense muss reagieren und closeout.",
-    "1-1-korridor": "1-1 in definiertem Korridor (Hütchen markieren Bereich). Defense muss Dribbler aus Korridor drängen. Offense versucht durchzubrechen.",
-    "boxout": "Offense in Formation (1-out bis 5-out), passt Ball herum — oder Coach hat den Ball. Defense optional: steht bei ihrem Mann, oder läuft im Kreis (Ringelpiez). Auf Signal oder Coach-Wurf: Defense boxt aus, Offense kämpft um Rebound. Erweiterung: Live Spielform auf Halbfeld oder Ganzfeld.",
-    "closeout-boxout": "Passer passt raus → Defense sprintet zum Closeout → Schütze wirft → Defense dreht und boxt aus.",
-    "entry-clinic": "Verschiedene Entry-Varianten durcharbeiten: Wing Entry, High Post Entry, Backdoor-Option. Fokus: sauberer Entry-Pass und richtiger Timing.",
-    "aufdrehen-clinic": "2-2 Aufdrehen-Drill mit Live-Defense. Offense liest den Defender nach dem Aufdrehen: Face-up, Drive, oder Weiterpassen. Competitive.",
-    "pnr-read": "3-3 oder 4-4 mit Fokus auf Pick & Roll Reads: Ballhandler liest Coverage (Drop → Attack, Hedge → 3rd Man, Switch → Mismatch). Roller und Pop-Big reagieren entsprechend.",
-    "pnr-22": "2-2 Pick & Roll Drill mit 2 Bällen auf einer Seite des Feldes. Hohe Wiederholungszahl. Fokus: Ballhandler-Reads und Roller-Timing.",
-    "33-seite": "3-3 auf einer Seite des Feldes. Enger Raum → besseres Lesen von Cuts, Helpside und Spacing.",
-    "ueberzahl": "4-3 oder 5-4 Spielform. Offense in Überzahl — Fokus: Überzahl ausnutzen, richtige Reads, Defense: Organisation.",
-    "5-0-motion": "5 Spieler ohne Defense üben Motion Offense Patterns durch. Cuts, Screens, Pässe — jede Position lernt alle Rollen.",
-    "backdoor": "1-1 oder 2-2 Setup — Startposition in der Corner oder auf dem Wing. Offense: Auf Wing auffüllen / von Wing auf TOC — dabei immer Freilaufen oder Backdoor! Hütchen markieren Limit wie hoch man rauslaufen darf.",
-    "spielen": "Freies 5-5 Halbfeld oder Ganzfeld. Coach gibt Coverage vor (Mann-Mann oder Zone) oder wechselt mid-game. Constraints je nach Fokus: 3 Dribbles / Bonuspunkte OReb / nur Zone / Plays erzwingen. Wechsel nach Score oder X Stops.",
-    "3dribbles": "5-5 oder kleinere Spielform mit Einschränkung: max. 3 Dribbles pro Ballbesitz und/oder Mindestanzahl Pässe vor Wurf. Zwingt zu Bewegung, Spacing und Ball-Movement. Als Constraint auf beliebige andere Drills legbar.",
-    "bonuspunkte": "Spielform mit Regelset: Offensiver Rebound gibt Bonuspunkte (z.B. +1 extra). Fokussiert auf Offensive Rebounding und Boxout-Versagen der Defense. Als Constraint auf beliebige andere Spielformen legbar.",
-    "1-1-clinic": "Fake! BL-Moves: In & Out · 2x Cross. Middle-Moves: In & Out into Cross · 1/3 Cross. Finishes: 1-Step-Lay · Reverse · Eurostep · Rolling. Blind 1-1: Defense startet mit Rücken. Chase 1-1: beide laufen um Hütchen. Korridor 1-1: definierter Bereich.",
-    "ssg": "Small Sided Games auf kleinem Feld. Viele Wiederholungen, hohe Intensität. Constraints je nach Fokus.",
-    "post-aufdrehen": "Big dreht auf im Post. Varianten: 1 Dribble Hookshot, Pass Fake vor Entry, sauberer Entry Pass. Run-Catch: Big sprintet auf Spot → catcht → Footwork-Move.",
-    "drop-step": "Post-Footwork-Serie: Drop Step → Power Korbleger → Up & Under. Beide Seiten. Erweiterung: mit leichtem Verteidiger.",
-    "post-entry": "Guard spielt Entry Pass in Post → Post spielt Move. Varianten: direkt spielen, erst cutten, Gegenbewegung machen. Fokus: sauberer Entry.",
-    "44-highpost": "4-4 mit Entry in High Post als Initiierung. Big am High Post → Optionen: High-Low, Pull, Push, 1-1 oder Wing Backdoor.",
-    "bigs-smalls": "Bigs und Smalls trainieren getrennt an verschiedenen Körben — spezifisches Positions-Training parallel.",
-    "bigman-shooting": "Big Man-spezifische Spots: beide Blocks, Short Corners, Elbow, High Post. Passer spielt Entry-Pass → Big macht Footwork-Move (Drop Step, Hook, Up & Under, Fade). Variante: 1-1 live.",
-    "leiter": "Laufleiter-Footwork in verschiedenen Varianten. Koordination, Schnelligkeit, Explosivität.",
-    "stationentraining": "S1a: Passen in Laufleiter (2 Bälle). S1b: Gegen Wand passen eine Hand 20x. S2a: Dribbeln + Tennisball fangen. S2b: Dribbeln + Tennisball Handwechsel. S3a: Post Entry + Hookshot. S3b: Post Entry + weiterer Move. S3c: Reincutten → Raus → Fake.",
-    "defense-kondi": "Intensive Konditionseinheit mit Defensiv-Fokus: Slides, Closeouts, Sprints, Quivern in verschiedenen Variationen. Ganzfeld.",
-    "football": "Gespielt mit Basketball, Football und Tennisball gleichzeitig. 3 Versuche pro Team. Nach 3 Versuchen Wechsel. Neuer Versuch wo letzter fester Ballbesitz war.",
-    "motion-durchgehen": "Motion Offense komplett ohne Defense durchspielen. Alle Aktionen (Wing Entry, High Post Entry, Fist, Walk, Philly) in korrekter Reihenfolge und mit richtigen Reads.",
-    "philly": "Iverson Entry → Stagger für Weakside Wing → PnR Dummy → Stagger lesen → falls kein Abschluss: zurück zu Iverson Cutter → Rescreen mit PnR Big.",
-    "smash": "Zone Set: Wing Entry mit Backdoor → 2 Picks von Low Post Bigs → Weakside Wing füllt TOK auf. Ausstiege: Wide Open Wing / Low Post Gegenblock / Downscreen / High PnR.",
-    "123-walk": "Set Plays durcharbeiten: Play '1' (Zipper Entry → Inverse Down Screen → PnR), Play '2' (Handoff Variation), Walk (Wing Entry → 2-Man Backdoor Continuum). Bis zum 2./3. Swing durchziehen.",
-    "bl-sl": "Baseline Box (Mann): Screen the Screener → 3 Ausstiege. Sideline: Play '1', Play '2' oder Into Walk. Zone BL Line: alle 4 in Linie, Improvisation.",
-    "zone-intro": "Zone Offense Prinzipien: Gg. 2-3: Bigs hinter Zone, Wingpass → Ballside Big Short Corner / Weakside Big Highpost. Gg. 3-2: 4-out oder 3-out mit Runner. Immer Baseline beim Drive. Bis 2./3. Swing.",
-  },
-  en: {
-    "doppelpaesse": "Variations: Basic / Inside hand / Outside hand / Behind the Back / With facing / Chest+Bounce / Running / Rotate pass types / Conversation.",
-    "extraball": "4 players in circle/square, 5 balls — one ball is always extra and gets passed along. Level 1: Free. Level 2: No bounce passes. Level 3: Tight — passer must jump. Level 4: After every pass, cut through a defined spot.",
-    "spielen-ohne-dribbling": "Free play without dribbling. Can also be used as a constraint on other drills. Focus: passing, cutting, spacing.",
-    "10pass": "All shots 'contested' — only kick-outs allowed. Start slow, speed up. Sequence: Split into Push → Down into Push → Fist into Push → Push into Swing → Split into Swing.",
-    "7er10er": "Basket = 2 pts. If made: offense takes it out and continues. If missed: whoever gets the rebound starts at 0. Defense on ball only in the passing lane. Wrong cut: -1 / turnover.",
-    "kniekehlenfassen": "2 players facing each other, tag the back of the knee = point. V1: no ball. V2: with dribbling. Extra rounds with restrictions (one hand, specific moves).",
-    "shield": "2-1 setup: one player takes the 'Shield' role. V-A: Shield keeps catcher free from defender. V-B: Shield blocks off defender. Optional finish: 1-1 to the basket.",
-    "aufdrehen": "V1: Wing turn — face, fake, floor touch, layup. V2: face, fake, 1 dribble layup. V3: face, fake, ½ dribble tempo change. Post-V: 1 dribble hook shot, pass fake before entry.",
-    "aufdrehen-defense": "Same base setup as the turn drill, now with live defense. Offense reads the defender and decides: face-up, drive, or pass on. Competitive.",
-    "aufdrehen-pnr": "Setup: player with ball at TOK, cutter runs in and out to a wing. 1. Passer follows pass → sets pick → rolls off. 2. First cutter finishes. 3. Screener cuts to opposite wing.",
-    "leiter-dribbling": "Agility ladder footwork flowing directly into dribbling sequence. Combines coordination with ball handling.",
-    "rausschlagen": "Any number of players in an area. Knock out the ball = point. Area shrinks. V1: knocked-out players re-enter. V2: knocked-out players play among themselves.",
-    "pressbreak": "Baseline inbounder, ballside guard, strongside wing behind half court. Inbound to guard → wing comes back → pass → inbounder sprints through → pass.",
-    "banana": "4 lines in corners, 2 diagonal lines have the ball. Continuous: 1 passes diagonal → runs toward 4. 2 passes to 3 → joins line at 4. 3 runs to basket → catch from 4 → layup → runs to 2. Progression: 2-3 balls, full speed.",
-    "dribbling-korridor": "Phase 1: static to 3pt line → check → 1-1 live. Phase 2: static to half court, then dynamic — 1-1 no check live. Phase 3: full court 1-1 live.",
-    "bh-clinic": "All ball handling variations: without ball (around body, over shoulder etc.) → with ball (two balls, cross etc.) → with tennis ball → competitive. Cones as needed.",
-    "issalo": "2 lines. Ball handler dribbles to cone, makes hand switch, other line sprints and catches 'in stride'. Coach makes the pass deliberately difficult.",
-    "ucla": "UCLA variation: fill cut from corner to wing. V1: fill cut → pass → turn → layup. V2: fill cut to TOC → backdoor → layup. V3: fill cut → pass → turn → jumper off dribble. V4: fill cut to TOC → backdoor → floater.",
-    "layup-run": "Player on extended FT line + player with ball baseline → pass to backcourt → give & go → on to frontcourt → give & go on extended FT line → finish. Backcourt→frontcourt, frontcourt gets rebound, finisher becomes backcourt other side.",
-    "gegenbewegung": "2 players on wing. Counter-movement before the catch — away first, then to the ball. Focus: timing, footwork on the catch, go directly into the shot.",
-    "pendel": "Pendulum movement between two spots. Catch & shoot out of motion. Focus: balance on landing, clean release.",
-    "shooting-closeout": "Passer passes out → defender sprints closeout → shooter shoots → contested shot. V2: closeout with two defenders. V3: closeout with three defenders. Extension: closeout into boxout.",
-    "shooting-mittellinie": "Shooting from various spots using half court as starting point. Focus: shot after a long run, conditioning + technique.",
-    "maedn": "Trouble-style shooting. Players shoot from set spots. 2pt/3pt scoring. Optional: half-court shot at the end.",
-    "onemore": "'One More' rule: make it → next spot. Miss → try again. Competitive.",
-    "aroundtheworld": "Shooting from positions around the basket. Competitive: who gets through all stations first?",
-    "mos": "Players on both sides in 2 baseline rows. Extra player with ball in middle. Middle player passes to outlet → 2 passes → layup → wings → jumper. Layup player gets rebound → continuum.",
-    "guards-wing-11": "Fake! BL-moves: In & Out · 2x Cross. Middle moves: In & Out into Cross · 1/3 Cross. Finishes: 1-step lay · Reverse · Eurostep · Rolling. Extension: +1 defender (2-1 defense) / +1 static offensive player as kickout option.",
-    "bigs-finishing": "Fakes! Middle Hook · Middle Extendo · BL Drop Step · Up & Under. Extension: +1 defender (2-1 defense, live) / +1 static offensive player as kickout option. Competitive. Game-like.",
-    "fastbreak": "3-man: Wing Finish · Wing Kickout · 1-cut variations · extension 2-1 back. 4-man: additional trailer, extension 2-2 back. 5-man: full transition + rim runner. Finishes as transition cycles: 1.Wing Drive · 2.Wing Shot · 3.Rimrunner Finish · 4.Trailer Jumper · 5.Trailer in PnR.",
-    "transition-cycles": "5 finishes cycling: 1.Wing Drive · 2.Wing Shot · 3.Rimrunner Finish · 4.Trailer Jumper · 5.Trailer in PnR. Every role rotates through all players.",
-    "53-transition": "2 teams equal size (3-5 per team). Each team gets numbers. Offense on baseline, defense on free throw line. Coach throws ball in and calls a number — those players must touch the baseline before getting on defense. Competitive.",
-    "54plus1": "5 vs 4+1: offense starts with numbers advantage, one extra defender comes in with a delay. Focus: exploit the advantage before defense is complete.",
-    "11man": "Continuous 3-on-2. Setup: 3 with ball at half court, 2 defenders in tandem at each basket, 4 at extended free throw line. After finish: outlet pass → new 3-on-2 the other direction. Continuous, no stops.",
-    "zahlenspiel": "FW to start offense, 2 rebounders on defense. After FT: 2-1. After score/stop: 2 new offensive players → 3-2. Then other team in → 4-3. Continue to 5-5. Both teams play through once.",
-    "transition-defense": "Transition defense in up-and-down conditioning drill format. Stop the ball → build up → conditioning through repeated sequences.",
-    "defense-korridor": "Phase 1: static to 3pt line → check → 1-1 live. Phase 2: static to half court, then dynamic — 1-1 no check live. Phase 3: full court 1-1 live.",
-    "closeout-clinic": "V1: 1-1 closeout — technical, restricted defense. V2: closeout with two defenders (skip pass → closeout). V3: closeout with three defenders. Extensions: touch cone on help side / defender starts from baseline / coach calls 'Live!' only when defender is out of position. Includes closeout into boxout.",
-    "shell": "4-4 or 5-5 on half court. Phase 1: passes only, defense positioning. Phase 2: 1-2 dribbles allowed — defense: 'kill' on dead dribble. Phase 3: cuts allowed. Phase 4: live — switch after 5 stops.",
-    "press-22": "2 defenders / 2 offense / full court. X1 pushes ball to sideline, X2 secures weak side on baseline. After swing: X1 and X2 rotate — X2 becomes new ballside, X1 goes weak side. Continuous.",
-    "press-55": "Full 2-2-1 zone press in 5-5. Row 1 (1,2): push ballside to sideline, weak side baseline. Row 2 (3,4): ballside covers line pass. Row 3 (5): center. Goal: force turnovers.",
-    "helpside": "4-man setup. Coach stands at TOC. Coach passes to a wing: penetration allowed. Remaining defenders: help the helper + rotation. Extensions: touch cone on help side, coach calls 'Drive!', 4-3 overload. Duration ~15 min.",
-    "ole-fickung": "Intensive conditioning and defensive training. Various variations focusing on defensive footwork, endurance and body posture.",
-    "defense-fickung": "Pure defensive conditioning. Footwork sequences without ball: slides, closeouts, rotations.",
-    "quivern": "Defensive footwork sequence: baseline shuffle → sprint → slides on signal → sprint → shuffle → etc. Full court conditioning with defensive stance.",
-    "1-1-ruecken": "1-1 drill: defense starts with back to attacker. Ball placed on back or coach passes — defense must react and close out.",
-    "1-1-korridor": "1-1 in defined corridor (cones mark the area). Defense must push dribbler out of corridor. Offense tries to break through.",
-    "boxout": "Offense in formation (1-out to 5-out), passing the ball around — or coach has the ball. Defense optional: stands by their man, or runs in a circle (Ringelpiez). On signal or coach's shot: defense boxes out, offense fights for rebound. Extension: live scrimmage on half or full court.",
-    "closeout-boxout": "Passer passes out → defense sprints into closeout → shooter shoots → defense turns and boxes out.",
-    "entry-clinic": "Work through different entry variations: wing entry, high post entry, backdoor option. Focus: clean entry pass and proper timing.",
-    "aufdrehen-clinic": "2-2 turn drill with live defense. Offense reads the defender after turning: face-up, drive, or pass on. Competitive.",
-    "pnr-read": "3-3 or 4-4 focusing on pick & roll reads: ball handler reads coverage (drop → attack, hedge → 3rd man, switch → mismatch). Roller and pop-big react accordingly.",
-    "pnr-22": "2-2 pick & roll drill with 2 balls on one side of the court. High rep count. Focus: ball handler reads and roller timing.",
-    "33-seite": "3-3 on one side of the court. Tight space → better reading of cuts, help side and spacing.",
-    "ueberzahl": "4-3 or 5-4 scrimmage. Offense in numbers advantage — focus: exploit the advantage, correct reads. Defense: organization.",
-    "5-0-motion": "5 players without defense running through motion offense patterns. Cuts, screens, passes — every position learns all roles.",
-    "backdoor": "1-1 or 2-2 setup — starting position in corner or on wing. Offense: fill to wing / from wing to TOC — always cutting or going backdoor! Cones mark the limit of how high you can go.",
-    "spielen": "Free 5-5 half court or full court. Coach sets coverage (man-to-man or zone) or switches mid-game. Constraints by focus: 3 dribbles / bonus OReb / zone only / force plays. Switch after score or X stops.",
-    "3dribbles": "5-5 or smaller game with restriction: max 3 dribbles per possession and/or minimum passes before shot. Forces movement, spacing and ball movement. Can be applied as constraint on any other drill.",
-    "bonuspunkte": "Scrimmage with rules: offensive rebound gives bonus points (e.g. +1 extra). Focuses on offensive rebounding and defensive boxout failures. Can be applied as constraint on any other game.",
-    "1-1-clinic": "Fake! BL-moves: In & Out · 2x Cross. Middle moves: In & Out into Cross · 1/3 Cross. Finishes: 1-step lay · Reverse · Eurostep · Rolling. Blind 1-1: defense starts with back turned. Chase 1-1: both run around cone. Corridor 1-1: defined area.",
-    "ssg": "Small sided games on a small court. High rep count, high intensity. Constraints by focus.",
-    "post-aufdrehen": "Big turns in the post. Variations: 1 dribble hook shot, pass fake before entry, clean entry pass. Run-catch: big sprints to spot → catches → footwork move.",
-    "drop-step": "Post footwork series: drop step → power layup → up & under. Both sides. Extension: with light defender.",
-    "post-entry": "Guard plays entry pass into post → post plays a move. Variations: play directly, cut first, counter-movement. Focus: clean entry.",
-    "44-highpost": "4-4 with entry into high post as initiation. Big at high post → options: high-low, pull, push, 1-1 or wing backdoor.",
-    "bigs-smalls": "Bigs and smalls train separately at different baskets — position-specific training in parallel.",
-    "bigman-shooting": "Big man-specific spots: both blocks, short corners, elbow, high post. Passer plays entry pass → big makes footwork move (drop step, hook, up & under, fade). Variation: 1-1 live.",
-    "leiter": "Agility ladder footwork in various variations. Coordination, speed, explosiveness.",
-    "stationentraining": "S1a: passing in agility ladder (2 balls). S1b: passing against wall one hand 20x. S2a: dribbling + catch tennis ball. S2b: dribbling + tennis ball hand switch. S3a: post entry + hook shot. S3b: post entry + additional move. S3c: cut back in → out → fake.",
-    "defense-kondi": "Intensive conditioning session with defensive focus: slides, closeouts, sprints, shuffles in various variations. Full court.",
-    "football": "Played with basketball, football and tennis ball simultaneously. 3 possessions per team. After 3, switch. New possession from where last firm possession was.",
-    "motion-durchgehen": "Run through complete motion offense without defense. All actions (wing entry, high post entry, fist, walk, Philly) in correct order and with proper reads.",
-    "philly": "Iverson entry → stagger for weak side wing → PnR dummy → read the stagger → if no finish: back to Iverson cutter → re-screen with PnR big.",
-    "smash": "Zone set: wing entry with backdoor → 2 picks from low post bigs → weak side wing fills TOK. Exits: wide open wing / low post counter-block / downscreen / high PnR.",
-    "123-walk": "Work through set plays: Play '1' (zipper entry → inverse down screen → PnR), Play '2' (handoff variation), Walk (wing entry → 2-man backdoor continuum). Run through to 2nd/3rd swing.",
-    "bl-sl": "Baseline Box (man): screen the screener → 3 exits. Sideline: Play '1', Play '2' or into Walk. Zone BL line: all 4 in line, improvisation.",
-    "zone-intro": "Zone offense principles: vs 2-3: bigs behind zone, wing pass → ballside big short corner / weak side big high post. Vs 3-2: 4-out or 3-out with runner. Always baseline on drive. Through 2nd/3rd swing.",
-  }
+  "doppelpaesse": "Varianten: Basic / Innenhand / Außenhand / Behind the Back / Mit Facing / Einer Chest+Bounce / Laufen / Passvarianten wechseln / Konversation.",
+  "extraball": "4 Spieler im Kreis/Quadrat, 5 Bälle — ein Ball ist immer extra und wird weitergereicht. Stufe 1: Frei. Stufe 2: Keine Bodenbounces. Stufe 3: Eng — Passer muss springen. Stufe 4: Nach jedem Pass Cut durch definierten Spot.",
+  "spielen-ohne-dribbling": "Freies Spielen ohne Dribbling. Auch als Constraint auf andere Drills legbar. Fokus: Pässe, Freilaufen, Spacing.",
+  "10pass": "Alle Würfe 'verteidigt' — nur Kick-Outs erlaubt. Ruhig beginnen, dann schneller. Ablauf: Split into Push → Down into Push → Fist into Push → Push into Swing → Split into Swing.",
+  "7er10er": "Korb = 2 Punkte. Bei Treffer: Offense nimmt raus und weiter. Bei Fehler: Wer Rebound fängt startet bei 0. Defense am Ball nur in der Passing Lane. Falscher Cut: -1 / Turnover.",
+  "kniekehlenfassen": "2 Spieler gegenüber, in Kniekehle fassen = Punkt. V1: ohne Ball. V2: mit Dribbling. Weitere Runden mit Einschränkungen (eine Hand, bestimmte Moves).",
+  "shield": "2-1 Setup: Ein Spieler übernimmt 'Shield'-Rolle. V-A: Shield hält Fänger von Fangenden frei. V-B: Shield blockt Verteidiger ab. Optionaler Abschluss: 1-1 auf den Korb.",
+  "aufdrehen": "V1: Aufdrehen Wing — Face, Fake, Bodentouch, Layup. V2: Face, Fake, 1 Dribble Layup. V3: Face, Fake, ½ Dribble Tempowechsel. Post-V: 1 Dribble Hookshot, Pass Fake vorm Entry.",
+  "aufdrehen-defense": "Gleicher Grundaufbau wie Aufdrehen Drill, jetzt mit Live-Defense. Offense liest den Defender und entscheidet: Face-up, Drive, oder Weiterpassen. Competitive.",
+  "aufdrehen-pnr": "Setup: Spieler mit Ball TOK, Cutter läuft rein und auf einen Flügel raus. 1. Passer folgt seinem Pass → stellt Pick → rollt ab. 2. Erster Cutter schließt ab. 3. Pick-Steller cuttet auf anderen Flügel.",
+  "leiter-dribbling": "Laufleiter-Footwork direkt in Dribbling-Sequence übergehen. Kombiniert Koordination mit Ball-Handling.",
+  "rausschlagen": "Beliebig viele Spieler in einem Bereich. Ball rausschlagen = Punkt. Bereich wird kleiner. V1: Herausgeschlagene kommen wieder rein. V2: Herausgeschlagene spielen unter sich weiter.",
+  "pressbreak": "Baseline-Einwerfer, Ballside Guard, Strongside Wing hinter Mittellinie. Einwurf auf Guard → Wing kommt zurück → Pass → Einwerfer sprintet durch → Pass.",
+  "banana": "4 Linien in Ecken, 2 diagonal haben Ball. Kontinuierlich: 1 passt diagonal → läuft auf 4 zu. 2 passt zu 3 → stellt sich bei 4 an. 3 läuft auf Korb → Pass von 4 → Korbleger → läuft auf 2. Steigerung: 2-3 Bälle, höchstes Tempo.",
+  "dribbling-korridor": "Phase 1: Statisch bis Vorfeld 3er-Linie → Check → 1-1 live. Phase 2: Statisch bis Mittellinie, dann dynamisch — 1-1 ohne Check live. Phase 3: Ganzfeld 1-1 live.",
+  "bh-clinic": "Alle Ballhandling-Varianten: Ohne Ball (Um Körper, Über Schulter etc.) → Mit Ball (2 Bälle, Cross etc.) → Mit Tennisball → Competitive. Ggf. Hütchen.",
+  "issalo": "2 Reihen. Ballhandler dribbelt auf Hütchen, macht Handwechsel, andere Reihe rennt los und catcht 'in stride'. Coach macht den Pass bewusst schwierig.",
+  "ucla": "UCLA-Variante: Fill Cut von Corner auf Wing. V1: Fill Cut → Pass → Aufdrehen → Layup. V2: Fill Cut bis TOC → Backdoor → Layup. V3: Fill Cut → Pass → Aufdrehen → Jumper off Dribble. V4: Fill Cut bis TOC → Backdoor → Floater.",
+  "layup-run": "Spieler verlängerte FW-Linie + Spieler mit Ball Baseline → Pass ins Rückfeld → Give&Go → weiter ins Vorfeld → Give&Go auf verlängerter FW-Linie → Abschluss. Rückfeld→Vorfeld, Vorfeld holt Rebound, Finisher wird Rückfeld andere Seite.",
+  "gegenbewegung": "2 Spieler auf Wing. Gegenbewegung vor dem Catch — erst weg, dann zum Ball. Fokus: Timing, Footwork beim Fangen, direkt in Wurf übergehen.",
+  "pendel": "Pendelbewegung zwischen zwei Spots. Catch & Shoot aus der Bewegung. Fokus: Balance beim Landen, sauberer Release.",
+  "shooting-closeout": "Passer passt raus → Defender sprintet Closeout → Schütze wirft → Defense contested. V2: Closeout mit zwei Verteidigern. V3: Closeout mit drei Verteidigern. Erweiterung: Closeout into Boxout.",
+  "shooting-mittellinie": "Shooting von verschiedenen Spots mit Mittellinie als Ausgangspunkt. Fokus: Schuss nach langem Lauf, Kondition + Technik.",
+  "maedn": "Mensch-ärgere-dich-nicht-Shooting. Spieler schießen von festgelegten Spots. 2er/3er-Wertung. Optional: Half-Court-Shot am Ende.",
+  "onemore": "Shooting mit 'One More'-Regel: Treffer → nächster Spot. Verfehlt → nochmal. Competitive.",
+  "aroundtheworld": "Shooting von Positionen rund um den Korb. Competitive: Wer kommt zuerst durch alle Stationen?",
+  "mos": "Spieler auf beiden Seiten in 2 Reihen Baseline. Extra-Spieler mit Ball in Mitte. Mittelspieler passt auf Outlet → 2 Pässe → Layup → Wings → Jumper. Layup-Spieler holt Rebound → Continuum.",
+  "guards-wing-11": "Fake! BL-Moves: In & Out · 2x Cross. Middle-Moves: In & Out into Cross · 1/3 Cross. Finishes: 1-Step-Lay · Reverse · Eurostep · Rolling. Erweiterung: +1 Verteidiger (2-1 Defense) / +1 statischer Offense-Spieler als Kickout-Option.",
+  "bigs-finishing": "Fakes! Middle Hook · Middle Extendo · BL Drop Step · Up & Under. Erweiterung: +1 Verteidiger (2-1 Defense, live) / +1 statischer Offense-Spieler als Kickout-Option. Competitive. Gamelike.",
+  "fastbreak": "3 Man: Wing Finish · Wing Kickout · 1-Cut-Variationen · Erweiterung 2-1 zurück. 4 Man: Zusätzlicher Trailer, Erweiterung 2-2 zurück. 5 Man: Volle Transition + Rim Runner. Abschlüsse als Transition Cycles: 1.Wing Drive · 2.Wing Shot · 3.Rimrunner Finish · 4.Trailer Jumper · 5.Trailer in PnR.",
+  "transition-cycles": "5 Abschlüsse zyklisch: 1.Wing Drive · 2.Wing Shot · 3.Rimrunner Finish · 4.Trailer Jumper · 5.Trailer in PnR. Jede Rolle rotiert durch alle Spieler.",
+  "53-transition": "2 Teams gleiche Anzahl (3-5 pro Team). Jedes Team bekommt Nummern. Offense Baseline, Defense Freiwurflinie. Coach wirft Ball ein und ruft Nummer — diese Spieler müssen erst die Baseline berühren bevor sie zur Defense. Competitive.",
+  "54plus1": "5 gegen 4+1: Offense in Überzahl startet, ein zusätzlicher Defender kommt verzögert rein. Fokus: Überzahl ausnutzen bevor Verteidigung komplett ist.",
+  "11man": "Kontinuierliches 3-gegen-2. Aufstellung: 3 mit Ball an Mittellinie, 2 Verteidiger in Tandem an jedem Korb, 4 an Freiwurflinie extended. Nach Abschluss: Outlet-Pass → neuer 3-gegen-2 in andere Richtung. Kontinuierlich ohne Stopp.",
+  "zahlenspiel": "Offense startet mit Freiwurf, Defense mit 2 Reboundern. Nach FW: 2-1. Nach Score/Stopp: 2 neue Offense rein → 3-2. Dann anderes Team rein → 4-3. Weiter bis 5-5. Beide Teams spielen einmal volle Sequenz.",
+  "transition-defense": "Transition Defense in Up & Down Konditionsdrillformat. Ball stoppen → aufbauen → Kondition durch wiederholte Sequenzen.",
+  "defense-korridor": "Phase 1: Statisch bis Vorfeld 3er-Linie → Check → 1-1 live. Phase 2: Statisch bis Mittellinie, dann dynamisch — 1-1 ohne Check live. Phase 3: Ganzfeld 1-1 live.",
+  "closeout-clinic": "V1: 1-1 Closeout — technisch, eingeschränkte Defense. V2: Closeout mit zwei Verteidigern (Skip Pass → Closeout). V3: Closeout mit drei Verteidigern. Erweiterung: Hütchen auf Helpside berühren / Defender startet von Baseline / Coach ruft erst 'Live!' wenn Defender falsch steht. Inkl. Closeout into Boxout.",
+  "shell": "4-4 oder 5-5 auf Halbfeld. Phase 1: Nur Pässe, Defense Positioning. Phase 2: 1-2 Dribbles erlaubt — Defense: 'Kill' bei totem Dribbling. Phase 3: Cuts erlaubt. Phase 4: Live — bei 5 Stops Wechsel.",
+  "press-22": "2 Defender / 2 Offense / Ganzfeld. X1 pusht Ball zur Sideline, X2 sichert Weakside auf Korblinie. Nach Swing: X1 und X2 rotieren — X2 wird neue Ballside, X1 geht Weakside. Kontinuierlich.",
+  "press-55": "Vollständige 2-2-1 Zone Press in 5-5. Reihe 1 (1,2): Ballside zur Sideline pushen, Weakside Korblinie. Reihe 2 (3,4): Ballside deckt Linienpass. Reihe 3 (5): Mittig. Ziel: Giveaways erzwingen.",
+  "helpside": "4-man Setup. Coach steht am TOC. Coach passt auf einen Wing: Penetration erlaubt. Restliche Verteidiger: Help the Helper + Rotation. Erweiterungen: Hütchen auf Helpside berühren, Coach ruft 'Drive!', 4-3 Überzahl. Dauer ca. 15 min.",
+  "ole-fickung": "Intensives Konditions- und Defensivtraining. Verschiedene Varianten mit Fokus auf defensive Footwork, Ausdauer und Körperhaltung.",
+  "defense-fickung": "Reines Defensiv-Konditionstraining. Footwork-Sequenzen ohne Ball: Slides, Closeouts, Rotationen.",
+  "quivern": "Defensive Footwork-Sequenz: Baseline quivern → Sprint → Slides auf Anzeige → Sprint → quivern → etc. Ganzfeld-Kondition mit defensiver Stance.",
+  "1-1-ruecken": "1-1 Drill: Defense beginnt mit Rücken zum Angreifer. Ball auf Rücken legen oder Coach passt — Defense muss reagieren und closeout.",
+  "1-1-korridor": "1-1 in definiertem Korridor (Hütchen markieren Bereich). Defense muss Dribbler aus Korridor drängen. Offense versucht durchzubrechen.",
+  "boxout": "Offense in Formation (1-out bis 5-out), passt Ball herum — oder Coach hat den Ball. Defense optional: steht bei ihrem Mann, oder läuft im Kreis (Ringelpiez). Auf Signal oder Coach-Wurf: Defense boxt aus, Offense kämpft um Rebound. Erweiterung: Live Spielform auf Halbfeld oder Ganzfeld.",
+  "closeout-boxout": "Passer passt raus → Defense sprintet zum Closeout → Schütze wirft → Defense dreht und boxt aus.",
+  "entry-clinic": "Verschiedene Entry-Varianten durcharbeiten: Wing Entry, High Post Entry, Backdoor-Option. Fokus: sauberer Entry-Pass und richtiger Timing.",
+  "aufdrehen-clinic": "2-2 Aufdrehen-Drill mit Live-Defense. Offense liest den Defender nach dem Aufdrehen: Face-up, Drive, oder Weiterpassen. Competitive.",
+  "pnr-read": "3-3 oder 4-4 mit Fokus auf Pick & Roll Reads: Ballhandler liest Coverage (Drop → Attack, Hedge → 3rd Man, Switch → Mismatch). Roller und Pop-Big reagieren entsprechend.",
+  "pnr-22": "2-2 Pick & Roll Drill mit 2 Bällen auf einer Seite des Feldes. Hohe Wiederholungszahl. Fokus: Ballhandler-Reads und Roller-Timing.",
+  "33-seite": "3-3 auf einer Seite des Feldes. Enger Raum → besseres Lesen von Cuts, Helpside und Spacing.",
+  "ueberzahl": "Offense in Überzahl. Fokus: Vorteil ausnutzen, schnelle Entscheidungen, Help the Helper.",
+  "5-0-motion": "5 Spieler ohne Defense üben Motion Offense Patterns durch. Cuts, Screens, Pässe — jede Position lernt alle Rollen.",
+  "backdoor": "1-1 oder 2-2 Setup — Startposition in der Corner oder auf dem Wing. Offense: Auf Wing auffüllen / von Wing auf TOC — dabei immer Freilaufen oder Backdoor! Hütchen markieren Limit wie hoch man rauslaufen darf.",
+  "spielen": "Freies 5-5 Halbfeld oder Ganzfeld. Coach gibt Coverage vor (Mann-Mann oder Zone) oder wechselt mid-game. Constraints je nach Fokus: 3 Dribbles / Bonuspunkte OReb / nur Zone / Plays erzwingen. Wechsel nach Score oder X Stops.",
+  "3dribbles": "5-5 oder kleinere Spielform mit Einschränkung: max. 3 Dribbles pro Ballbesitz und/oder Mindestanzahl Pässe vor Wurf. Zwingt zu Bewegung, Spacing und Ball-Movement. Als Constraint auf beliebige andere Drills legbar.",
+  "bonuspunkte": "Spielform mit Regelset: Offensiver Rebound gibt Bonuspunkte (z.B. +1 extra). Fokussiert auf Offensive Rebounding und Boxout-Versagen der Defense. Als Constraint auf beliebige andere Spielformen legbar.",
+  "1-1-clinic": "Fake! BL-Moves: In & Out · 2x Cross. Middle-Moves: In & Out into Cross · 1/3 Cross. Finishes: 1-Step-Lay · Reverse · Eurostep · Rolling. Blind 1-1: Defense startet mit Rücken. Chase 1-1: beide laufen um Hütchen. Korridor 1-1: definierter Bereich.",
+  "ssg": "Small Sided Games auf kleinem Feld. Viele Wiederholungen, hohe Intensität. Constraints je nach Fokus.",
+  "post-aufdrehen": "Big dreht auf im Post. Varianten: 1 Dribble Hookshot, Pass Fake vor Entry, sauberer Entry Pass. Run-Catch: Big sprintet auf Spot → catcht → Footwork-Move.",
+  "drop-step": "Post-Footwork-Serie: Drop Step → Power Korbleger → Up & Under. Beide Seiten. Erweiterung: mit leichtem Verteidiger.",
+  "post-entry": "Guard spielt Entry Pass in Post → Post spielt Move. Varianten: direkt spielen, erst cutten, Gegenbewegung machen. Fokus: sauberer Entry.",
+  "44-highpost": "4-4 mit Entry in High Post als Initiierung. Big am High Post → Optionen: High-Low, Pull, Push, 1-1 oder Wing Backdoor.",
+  "bigs-smalls": "Bigs und Smalls trainieren getrennt an verschiedenen Körben — spezifisches Positions-Training parallel.",
+  "bigman-shooting": "Big Man-spezifische Spots: beide Blocks, Short Corners, Elbow, High Post. Passer spielt Entry-Pass → Big macht Footwork-Move (Drop Step, Hook, Up & Under, Fade). Variante: 1-1 live.",
+  "leiter": "Laufleiter-Footwork in verschiedenen Varianten. Koordination, Schnelligkeit, Explosivität.",
+  "stationentraining": "S1a: Passen in Laufleiter (2 Bälle). S1b: Gegen Wand passen eine Hand 20x. S2a: Dribbeln + Tennisball fangen. S2b: Dribbeln + Tennisball Handwechsel. S3a: Post Entry + Hookshot. S3b: Post Entry + weiterer Move. S3c: Reincutten → Raus → Fake.",
+  "defense-kondi": "Intensive Konditionseinheit mit Defensiv-Fokus: Slides, Closeouts, Sprints, Quivern in verschiedenen Variationen. Ganzfeld.",
+  "football": "Gespielt mit Basketball, Football und Tennisball gleichzeitig. 3 Versuche pro Team. Nach 3 Versuchen Wechsel. Neuer Versuch wo letzter fester Ballbesitz war.",
+  "motion-durchgehen": "Motion Offense komplett ohne Defense durchspielen. Alle Aktionen (Wing Entry, High Post Entry, Fist, Walk, Philly) in korrekter Reihenfolge und mit richtigen Reads.",
+  "philly": "Iverson Entry → Stagger für Weakside Wing → PnR Dummy → Stagger lesen → falls kein Abschluss: zurück zu Iverson Cutter → Rescreen mit PnR Big.",
+  "smash": "Zone Set: Wing Entry mit Backdoor → 2 Picks von Low Post Bigs → Weakside Wing füllt TOK auf. Ausstiege: Wide Open Wing / Low Post Gegenblock / Downscreen / High PnR.",
+  "123-walk": "Set Plays durcharbeiten: Play '1' (Zipper Entry → Inverse Down Screen → PnR), Play '2' (Handoff Variation), Walk (Wing Entry → 2-Man Backdoor Continuum). Bis zum 2./3. Swing durchziehen.",
+  "bl-sl": "Baseline Box (Mann): Screen the Screener → 3 Ausstiege. Sideline: Play '1', Play '2' oder Into Walk. Zone BL Line: alle 4 in Linie, Improvisation.",
+  "zone-intro": "Zone Offense Prinzipien: Gg. 2-3: Bigs hinter Zone, Wingpass → Ballside Big Short Corner / Weakside Big Highpost. Gg. 3-2: 4-out oder 3-out mit Runner. Immer Baseline beim Drive. Bis 2./3. Swing.",
 };
-
-// Value translation map for drill metadata fields
-const VAL_MAP = {
-  en: {
-    "ja": "yes", "nein": "no", "ja (live)": "yes (live)",
-    "ja (eingeschränkt)": "yes (restricted)", "eingeschränkt": "restricted",
-    "optional": "optional",
-    "hoch": "high", "mittel": "medium", "niedrig": "low",
-    "Ganzfeld": "Full court", "Halbfeld": "Half court",
-    "keine": "none", "variabel": "variable",
-    "Warmup": "Warmup", "Hauptteil": "Main part",
-    "Technik": "Skill", "SO": "SO", "OT": "OT", "DT": "DT", "SD": "SD",
-  }
-};
-
-function tv(val) {
-  if (currentLang === 'en' && VAL_MAP.en[val] !== undefined) return VAL_MAP.en[val];
-  return val;
-}
-
+// ============================================================
 let currentPlan = null;
 let savedPlans = [];
 let pickerTargetSlotId = null;
@@ -1690,13 +1584,11 @@ const CAT_CLASS = {
 
 function renderBibliothek(drills) {
   const grid = document.getElementById('bib-grid');
-  const resultCount = document.getElementById('bib-result-count');
-  if (resultCount) resultCount.textContent = drills.length + ' Drills';
-  const navCount = document.getElementById('nav-count-bib');
-  if (navCount) navCount.textContent = drills.length;
+  document.getElementById('bib-result-count').textContent = drills.length + ' Drills';
+  document.getElementById('nav-count-bib').textContent = drills.length;
 
   if (drills.length === 0) {
-    grid.innerHTML = `<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">${t('no_drills_found')}</div>`;
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">Keine Drills gefunden — Filter anpassen</div>';
     return;
   }
 
@@ -1707,10 +1599,10 @@ function renderBibliothek(drills) {
         <span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${d.kat}</span>
       </div>
       <div class="drill-meta-row">
-        ${d.phase.map(p => `<span class="meta-pill phase-${p.toLowerCase()}">${p === 'Warmup' ? '🔆' : '⚡'} ${tv(p)}</span>`).join('')}
-        <span class="meta-pill intensity-${d.intensity}">${tv(d.intensity)}</span>
+        ${d.phase.map(p => `<span class="meta-pill phase-${p.toLowerCase()}">${p === 'Warmup' ? '🔆' : '⚡'} ${p}</span>`).join('')}
+        <span class="meta-pill intensity-${d.intensity}">${d.intensity}</span>
         <span class="meta-pill">👥 ${d.minSpieler}+</span>
-        ${d.spielphase.slice(0,2).map(sp => `<span class="meta-pill">${tv(sp)}</span>`).join('')}
+        ${d.spielphase.slice(0,2).map(sp => `<span class="meta-pill">${sp}</span>`).join('')}
       </div>
       <div class="drill-meta-row" style="margin-top:4px;">
         ${d.defense !== 'nein' ? '<span class="meta-pill" style="background:#fee8e8;color:#8b1a1a">D</span>' : ''}
@@ -1718,7 +1610,7 @@ function renderBibliothek(drills) {
         ${d.gamelike ? '<span class="meta-pill" style="background:#e8e8fe;color:#2b2b8b">🎮</span>' : ''}
         ${d.material !== 'keine' ? `<span class="meta-pill">🔧 ${d.material.split(',')[0].trim()}</span>` : ''}
       </div>
-      <button class="drill-add-btn" onclick="event.stopPropagation();quickAddDrill('${d.id}')" title="${t('add_to_plan')}">+</button>
+      <button class="drill-add-btn" onclick="event.stopPropagation();quickAddDrill('${d.id}')" title="Zu Trainingsplan hinzufügen">+</button>
     </div>
   `).join('');
 }
@@ -1762,19 +1654,18 @@ function openDrillModal(drillId, fromPicker) {
   document.getElementById('modal-drill-name').textContent = d.name;
   document.getElementById('modal-drill-cat').innerHTML = `<span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${d.kat}</span>`;
 
-  const yesNo = (v) => v ? (currentLang === 'en' ? 'yes' : 'ja') : (currentLang === 'en' ? 'no' : 'nein');
   const meta = [
-    [t('meta_phase'), d.phase.map(tv).join(' + ')],
-    [t('meta_spielphase'), d.spielphase.map(tv).join(', ')],
-    [t('meta_intensity'), tv(d.intensity)],
-    [t('meta_players'), d.minSpieler + '+'],
-    [t('meta_field'), tv(d.feld)],
-    [t('meta_balls'), d.bälle],
-    [t('meta_material'), tv(d.material)],
-    [t('meta_defense'), tv(d.defense)],
-    [t('meta_competitive'), tv(d.competitive)],
-    [t('meta_gamelike'), yesNo(d.gamelike)],
-    [t('meta_finish'), yesNo(d.abschluss)],
+    ['Trainingsphase', d.phase.join(' + ')],
+    ['Spielphase', d.spielphase.join(', ')],
+    ['Intensität', d.intensity],
+    ['Min. Spieler', d.minSpieler + '+'],
+    ['Feld', d.feld],
+    ['Bälle', d.bälle],
+    ['Material', d.material],
+    ['Defense', d.defense],
+    ['Competitive', d.competitive],
+    ['Gamelike', d.gamelike ? 'ja' : 'nein'],
+    ['Abschluss', d.abschluss ? 'ja' : 'nein'],
   ];
 
   document.getElementById('modal-meta-grid').innerHTML = meta.map(([k,v]) => `
@@ -1783,7 +1674,7 @@ function openDrillModal(drillId, fromPicker) {
 
   // Beschreibung einblenden
   const descEl = document.getElementById('modal-drill-desc');
-  const desc = (DRILL_DESC[currentLang] || DRILL_DESC.de)[d.id];
+  const desc = DRILL_DESC[d.id];
   if (desc) {
     descEl.textContent = desc;
     descEl.style.display = 'block';
@@ -1797,7 +1688,7 @@ function openDrillModal(drillId, fromPicker) {
 
   let addSection = '';
   if (!fromPicker) {
-    addSection = `<button class="btn btn-primary" style="width:100%;" onclick="closeDrillModal();showPage('planung');quickAddDrill('${d.id}')">${t('add_to_plan')}</button>`;
+    addSection = `<button class="btn btn-primary" style="width:100%;" onclick="closeDrillModal();showPage('planung');quickAddDrill('${d.id}')">+ Zu Trainingsplan hinzufügen</button>`;
   }
   document.getElementById('modal-add-section').innerHTML = addSection;
   document.getElementById('modal-add-section').style.display = fromPicker ? 'none' : 'block';
@@ -1903,10 +1794,10 @@ function updatePlanMeta() {
 
 function updatePlanDisplayHeader() {
   if (!currentPlan) return;
-  const name = currentPlan.name || t('plan_title_new');
+  const name = currentPlan.name || 'Neuer Trainingsplan';
   document.getElementById('plan-title-display').textContent = name;
   const sub = [currentPlan.date, currentPlan.theme].filter(Boolean).join(' · ');
-  document.getElementById('plan-subtitle-display').textContent = sub || t('plan_subtitle_default');
+  document.getElementById('plan-subtitle-display').textContent = sub || 'Zeitblöcke planen · Drills zuweisen · Exportieren';
 }
 
 function savePlan() {
@@ -1919,7 +1810,7 @@ function savePlan() {
   saveToStorage();
   renderSavedPlansList();
   renderNavSavedPlans();
-  toast(t('toast_plan_saved'));
+  toast('✓ Plan gespeichert');
 }
 
 function autoSave() {
@@ -1950,14 +1841,14 @@ function loadPlan(planId) {
 
 function deletePlan(planId, e) {
   if (e) e.stopPropagation();
-  showConfirm(t('confirm_delete_plan'), () => {
+  showConfirm('Plan wirklich löschen?', () => {
     savedPlans = savedPlans.filter(p => p.id !== planId);
     if (currentPlan && currentPlan.id === planId) currentPlan = null;
     saveToStorage();
     renderSavedPlansList();
     renderNavSavedPlans();
     renderPlanOverview();
-    toast(t('toast_plan_deleted'));
+    toast('Plan gelöscht');
   });
 }
 
@@ -1968,8 +1859,8 @@ function showConfirm(msg, onYes) {
     <div style="background:#fff;border-radius:10px;padding:24px 28px;max-width:320px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:DM Sans,sans-serif;">
       <div style="font-size:14px;margin-bottom:20px;color:#1a1916;">${msg}</div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <button id="confirm-no" style="padding:7px 16px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">${t('btn_cancel')}</button>
-        <button id="confirm-yes" style="padding:7px 16px;border:none;border-radius:6px;background:#c0392b;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">${t('btn_delete')}</button>
+        <button id="confirm-no" style="padding:7px 16px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Abbrechen</button>
+        <button id="confirm-yes" style="padding:7px 16px;border:none;border-radius:6px;background:#c0392b;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">Löschen</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -1995,6 +1886,7 @@ function renderSlots() {
   if (!currentPlan) return;
   const container = document.getElementById('slot-list');
   container.innerHTML = currentPlan.slots.map((slot, idx) => renderSlotHTML(slot, idx)).join('');
+  attachTouchDragListeners();
 }
 
 function renderSlotHTML(slot, idx) {
@@ -2006,7 +1898,7 @@ function renderSlotHTML(slot, idx) {
   const isNoEdit = !!slot.noEdit;
 
   const drillsHTML = slot.drills.length === 0
-    ? `<div class="slot-empty-hint">${t('slot_no_drills')}</div>`
+    ? '<div class="slot-empty-hint">— Noch keine Drills geplant</div>'
     : slot.drills.map((sd, di) => {
         const d = DRILLS.find(x => x.id === sd.drillId);
         return `<div class="slot-drill-item" 
@@ -2033,7 +1925,7 @@ function renderSlotHTML(slot, idx) {
       }).join('');
 
   const controls = isFixed
-    ? `<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);padding:2px 6px;border:1px solid var(--border);border-radius:10px;">${t('slot_fixed')}</span>`
+    ? `<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);padding:2px 6px;border:1px solid var(--border);border-radius:10px;">fest</span>`
     : `${idx > 0 ? `<button class="btn btn-ghost btn-sm" onclick="moveSlot('${slot.id}',-1)">↑</button>` : ''}
        ${idx < currentPlan.slots.length - 1 ? `<button class="btn btn-ghost btn-sm" onclick="moveSlot('${slot.id}',1)">↓</button>` : ''}
        <button class="btn btn-danger btn-sm" onclick="removeSlot('${slot.id}')">✕</button>`;
@@ -2044,7 +1936,7 @@ function renderSlotHTML(slot, idx) {
     : `<input type="number" class="slot-time-input" value="${slot.durationMin}" min="1" max="120"
         onchange="updateSlotTime('${slot.id}', this.value)">
        <span class="slot-time-label">min</span>
-       <span style="font-family:DM Mono,monospace;font-size:12px;font-weight:500;padding:2px 8px;border-radius:10px;background:${minsOver ? '#fde8e8' : '#e8fef0'};color:${minsOver ? '#8b1a1a' : '#1a5a30'};">${drillMinsTotal} ${t('slot_drill_mins_label')}</span>`;
+       <span style="font-family:DM Mono,monospace;font-size:12px;font-weight:500;padding:2px 8px;border-radius:10px;background:${minsOver ? '#fde8e8' : '#e8fef0'};color:${minsOver ? '#8b1a1a' : '#1a5a30'};">${drillMinsTotal} min Drills</span>`;
 
   return `<div class="slot" id="slot-${slot.id}" ${isFixed ? 'style="border-left:3px solid var(--border-strong);"' : ''}>
     <div class="slot-header">
@@ -2058,7 +1950,7 @@ function renderSlotHTML(slot, idx) {
       ondragleave="onSlotContentDragLeave(event)"
       ondrop="onSlotContentDrop(event, '${slot.id}')">
       ${isNoEdit ? '' : drillsHTML}
-      ${isNoEdit ? '' : `<button class="slot-add-btn" onclick="openPickerForSlot('${slot.id}', '${slot.phase}')">${t('slot_add_drill')}</button>`}
+      ${isNoEdit ? '' : `<button class="slot-add-btn" onclick="openPickerForSlot('${slot.id}', '${slot.phase}')">+ Drill auswählen …</button>`}
     </div>
   </div>`;
 }
@@ -2116,7 +2008,7 @@ function updateTimeSummary() {
   fill.classList.toggle('over', total > planned);
   const remaining = planned - total;
   document.getElementById('time-remaining').textContent =
-    remaining >= 0 ? remaining + ' ' + t('slot_free') + ' ' + planned : Math.abs(remaining) + ' ' + t('slot_over') + ' ' + planned;
+    remaining >= 0 ? remaining + ' min frei von ' + planned : Math.abs(remaining) + ' min über ' + planned;
 }
 
 function updateDrillMins(slotId, drillIdx, val) {
@@ -2135,7 +2027,7 @@ function removeDrillFromSlot(slotId, drillIdx) {
 }
 
 function quickAddDrill(drillId) {
-  if (!currentPlan) { toast(t('toast_no_plan_active')); return; }
+  if (!currentPlan) { toast('Erst einen Plan erstellen oder laden'); return; }
   const drill = DRILLS.find(d => d.id === drillId);
   if (!drill) return;
 
@@ -2207,7 +2099,7 @@ function applyPickerFilters() {
     <div class="drill-picker-item" onclick="addDrillToSlot('${d.id}')">
       <span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}" style="font-size:9px;">${d.kat}</span>
       <span class="drill-picker-name">${d.name}</span>
-      <span class="drill-picker-meta">${tv(d.intensity)} · ${d.minSpieler}+ ${t('sp_abbr')} · ${d.spielphase.map(tv).join('/')}</span>
+      <span class="drill-picker-meta">${d.intensity} · ${d.minSpieler}+ Sp · ${d.spielphase.join('/')}</span>
     </div>
   `).join('');
 }
@@ -2236,10 +2128,10 @@ function exportDOCX() {
 }
 
 function exportWordPro() {
-  if (!currentPlan) { toast(t('toast_no_plan')); return; }
+  if (!currentPlan) { toast('Kein Plan aktiv'); return; }
   const html = buildWordHTMLPro(currentPlan);
   downloadText(html, sanitizeFilename(currentPlan.name || 'Trainingsplan') + '.htm');
-  toast(t('toast_word_exported'));
+  toast('📄 Word-Dokument exportiert — in Word öffnen');
 }
 
 function buildWordHTMLPro(plan) {
@@ -2316,11 +2208,11 @@ ${plan.notes ? `<div class="notes"><strong>📌 Notizen:</strong><br>${esc(plan.
 }
 
 function exportWhatsApp() {
-  if (!currentPlan) { toast(t('toast_no_plan')); return; }
+  if (!currentPlan) { toast('Kein Plan aktiv'); return; }
   const text = buildWhatsAppText(currentPlan);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
-      toast(t('toast_copied'));
+      toast('💬 In Zwischenablage kopiert — in WhatsApp einfügen!');
     }).catch(() => {
       showWhatsAppFallback(text);
     });
@@ -2338,7 +2230,7 @@ function buildWhatsAppText(plan) {
   let txt = `🏀 *${plan.name || 'Trainingsplan'}*\n`;
   if (plan.date) txt += `📅 ${plan.date}`;
   if (plan.theme) txt += ` · ${plan.theme}`;
-  txt += `\n⏱ ${drillTotal} ${t('drilltime_label')} gesamt\n`;
+  txt += `\n⏱ ${drillTotal} min Drillzeit gesamt\n`;
   txt += `${'─'.repeat(28)}\n`;
 
   (plan.slots||[]).forEach(slot => {
@@ -2353,7 +2245,7 @@ function buildWhatsAppText(plan) {
   });
 
   if (plan.notes) {
-    txt += `\n📌 *${t('notes_label')}:*\n${plan.notes}\n`;
+    txt += `\n📌 *Notizen:*\n${plan.notes}\n`;
   }
 
   txt += `\n_Weddinger Wiesel 2 · Saison 2025/2026_`;
@@ -2365,9 +2257,9 @@ function showWhatsAppFallback(text) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:560px;max-height:70vh;display:flex;flex-direction:column;gap:10px;">
-      <div style="font-weight:600;font-size:14px;">${t('whatsapp_title')}</div>
+      <div style="font-weight:600;font-size:14px;">💬 WhatsApp-Text — alles markieren & kopieren</div>
       <textarea readonly style="flex:1;min-height:200px;font-family:monospace;font-size:12px;padding:10px;border:1px solid #ddd;border-radius:8px;resize:none;">${text}</textarea>
-      <button onclick="this.closest('div').parentElement.remove()" style="padding:12px;background:#1a1916;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">${t('btn_close')}</button>
+      <button onclick="this.closest('div').parentElement.remove()" style="padding:12px;background:#1a1916;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Schließen</button>
     </div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('textarea').select();
@@ -2555,7 +2447,7 @@ function buildPrintHTML(plans, title) {
     .no-print { background:#1a1916;color:#fff;padding:8px 14px;font-size:11px;text-align:center;margin-bottom:12px;border-radius:4px; }
     @media print { .no-print { display:none; } @page { margin:10mm 15mm; } }
   </style></head><body>
-  <div class="no-print">${t('print_hint')}</div>
+  <div class="no-print">Druckvorschau · Strg+P (Win) / ⌘+P (Mac) → PDF speichern oder drucken</div>
   <h1>${esc(title||'Trainingspläne')} <span style="font-size:10pt;color:#888;font-weight:normal;">${plansArr.length > 1 ? '('+plansArr.length+' Pläne)' : ''}</span></h1>
   ${plansHTML}
   <div style="margin-top:20px;font-size:8pt;color:#aaa;border-top:1px solid #eee;padding-top:6px;">Weddinger Wiesel 2 · Saison 2025/2026</div>
@@ -2584,13 +2476,13 @@ function exportJSON() {
   if (!currentPlan) return;
   const json = JSON.stringify(currentPlan, null, 2);
   downloadText(json, sanitizeFilename(currentPlan.name || 'plan') + '.json');
-  toast(t('toast_json_exported'));
+  toast('⚙️ JSON exportiert');
 }
 
 function exportAllPlansJSON() {
   const json = JSON.stringify(savedPlans, null, 2);
   downloadText(json, 'wiesel2_alle_plaene.json');
-  toast(t('toast_all_json_exported'));
+  toast('⬇ Alle Pläne als JSON exportiert');
 }
 
 function importFromText() {
@@ -2609,8 +2501,8 @@ function importFromText() {
     saveToStorage();
     renderSavedPlansList();
     renderNavSavedPlans();
-    toast('✓ ' + count + ' ' + t('import_success'));
-  } catch(e) { toast(t('import_invalid')); }
+    toast('✓ ' + count + ' Plan(e) importiert');
+  } catch(e) { toast('⚠ Ungültiges JSON'); }
 }
 
 function importFromFile(event) {
@@ -2702,20 +2594,16 @@ function renderPlanOverview() {
   const totalDrillMins = plans.reduce((a,p) =>
     a + (p.slots||[]).reduce((b,s) => b + (s.drills||[]).reduce((c,sd) => c+(parseInt(sd.mins)||0),0),0), 0);
 
-  const overviewSummaryEl = document.getElementById('overview-summary');
-  if (overviewSummaryEl) overviewSummaryEl.textContent =
-    `${plans.length} ${t('plans_of')} ${savedPlans.length} ${t('plans_label')} · ${totalDrillMins} ${t('drilltime_total')}`;
+  document.getElementById('overview-summary').textContent =
+    `${plans.length} von ${savedPlans.length} Plänen · ${totalDrillMins} min Drillzeit gesamt`;
 
   if (plans.length === 0) {
-    const listEl = document.getElementById('plan-overview-list');
-    if (listEl) listEl.innerHTML =
-      '<div style="padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">' + t('no_plans_found') + '</div>';
+    document.getElementById('plan-overview-list').innerHTML =
+      '<div style="padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">Keine Pläne gefunden — Filter anpassen oder Pläne importieren.</div>';
     return;
   }
 
-  const planOverviewList = document.getElementById('plan-overview-list');
-  if (!planOverviewList) return;
-  planOverviewList.innerHTML = plans.map(p => {
+  document.getElementById('plan-overview-list').innerHTML = plans.map(p => {
     const drillTotal = (p.slots||[]).reduce((a,s) => a + (s.drills||[]).reduce((b,sd) => b+(parseInt(sd.mins)||0),0),0);
     const drillCount = (p.slots||[]).reduce((a,s) => a + (s.drills||[]).length, 0);
     const slotsHTML = (p.slots||[]).map(slot => {
@@ -2742,13 +2630,13 @@ function renderPlanOverview() {
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
           <span style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-muted);">${drillCount} Drills · ${drillTotal} min</span>
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();loadPlan('${p.id}');showPage('planung')">${t('edit_btn')}</button>
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();loadPlan('${p.id}');showPage('planung')">✏ Bearbeiten</button>
           <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();printSinglePlan('${p.id}')">🖨</button>
           <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deletePlan('${p.id}',event)">✕</button>
         </div>
       </div>
       <div style="display:none;padding:0 14px 14px;border-top:1px solid var(--border);">
-        ${slotsHTML || `<div style="color:var(--text-subtle);font-size:12px;padding:8px 0;">${t('no_drills_planned')}</div>`}
+        ${slotsHTML || '<div style="color:var(--text-subtle);font-size:12px;padding:8px 0;">Keine Drills geplant</div>'}
         ${p.notes ? `<div style="margin-top:8px;padding:6px 10px;background:var(--bg);border-left:3px solid var(--border-strong);font-size:11px;color:var(--text-muted);">${p.notes}</div>` : ''}
       </div>
     </div>`;
@@ -2788,15 +2676,14 @@ function openPrintBlob(html) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 15000);
-  toast(t('toast_print'));
+  toast('🖨 Strg+P zum Drucken / Als PDF speichern');
 }
 
 // ============================================================
 // PLAN ÜBERSICHT & EXPORT
 function renderSavedPlansList() {
   const container = document.getElementById('saved-plans-list');
-  const countEl = document.getElementById('saved-plans-count');
-  if (countEl) countEl.textContent = savedPlans.length;
+  document.getElementById('saved-plans-count').textContent = savedPlans.length;
 
   const search = (document.getElementById('plans-search')?.value || '').toLowerCase();
   const sort = document.getElementById('plans-sort')?.value || 'date-desc';
@@ -2816,7 +2703,7 @@ function renderSavedPlansList() {
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = `<div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">${t('no_plans_list')}</div>`;
+    container.innerHTML = '<div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">Keine Pläne gefunden.</div>';
     return;
   }
   container.innerHTML = filtered.map(p => {
@@ -2870,26 +2757,26 @@ function renderTracking() {
 
   document.getElementById('tracking-summary').innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;">
-      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">${t('stat_saved_plans')}</div>
+      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Gespeicherte Pläne</div>
       <div style="font-size:22px;font-weight:600;">${savedPlans.length}</div>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;">
-      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">${t('stat_drill_uses')}</div>
+      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Drill-Einsätze gesamt</div>
       <div style="font-size:22px;font-weight:600;">${totalDrillUses}</div>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;">
-      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">${t('stat_train_mins')}</div>
+      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Trainingsminuten</div>
       <div style="font-size:22px;font-weight:600;">${totalMinsTracked} min</div>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;">
-      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">${t('stat_never_used')}</div>
+      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Nie genutzte Drills</div>
       <div style="font-size:22px;font-weight:600;color:${neverUsed.length > 0 ? 'var(--orange)' : 'var(--green)'};">${neverUsed.length}</div>
     </div>
   `;
 
   if (savedPlans.length === 0) {
     document.getElementById('tracking-grid').innerHTML =
-      `<div style="padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">${t('no_plans_tracking')}</div>`;
+      '<div style="padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">Noch keine Pläne gespeichert — speichere Trainingspläne um Statistiken zu sehen.</div>';
     return;
   }
 
@@ -3010,551 +2897,141 @@ function onSlotContentDrop(e, slotId) {
 }
 
 // ============================================================
-// LANGUAGE SYSTEM
+// TOUCH DRAG & DROP (Mobile Support)
 // ============================================================
-let currentLang = localStorage.getItem('wiesel2_lang') || 'de';
+let touchDragSrc = null;
+let touchClone = null;
+let touchScrollParent = null;
 
-const LANG = {
-  de: {
-    // Topbar
-    topbar_subtitle: 'Drill-Bibliothek & Trainingsplanung · Saison 2025/2026',
-    nav_overview: '📋 Pläne-Übersicht',
-    // Mobile nav
-    nav_drills: 'Drills',
-    nav_plan: 'Plan',
-    nav_tracking: 'Tracking',
-    nav_overview_short: 'Übersicht',
-    // Sidebar
-    sidebar_nav_label: 'Navigation',
-    sidebar_saved_label: 'Gespeicherte Pläne',
-    sidebar_bibliothek: 'Drill-Bibliothek',
-    sidebar_planung: 'Trainingsplan',
-    sidebar_tracking: 'Drill-Tracking',
-    sidebar_overview: 'Pläne-Übersicht',
-    // Bibliothek page
-    bib_title: 'Drill-Bibliothek',
-    bib_subtitle: 'Alle Drills — filterbar, durchsuchbar, klickbar für Details',
-    filter_search: 'Suche',
-    filter_category: 'Kategorie',
-    filter_phase: 'Trainingsphase',
-    filter_spielphase: 'Spielphase',
-    filter_intensity: 'Intensität',
-    filter_players: 'Min. Spieler ≤',
-    filter_search_ph: 'Drill suchen …',
-    filter_players_ph: 'z.B. 8',
-    opt_all: 'Alle',
-    opt_all_cat: 'Alle',
-    opt_warmup: 'Warmup',
-    opt_hauptteil: 'Hauptteil',
-    opt_hoch: 'Hoch',
-    opt_mittel: 'Mittel',
-    opt_niedrig: 'Niedrig',
-    btn_reset: 'Reset',
-    // Planung page
-    plan_title_new: 'Neuer Trainingsplan',
-    plan_subtitle_default: 'Zeitblöcke planen · Drills zuweisen · Exportieren',
-    btn_mo: '📋 Mo Pankstraße',
-    btn_mi: '📋 Mi Wiesenstraße',
-    btn_new_plan: '+ Leerer Plan',
-    btn_save: '💾 Speichern',
-    form_title: 'Titel',
-    form_date: 'Datum',
-    form_theme: 'Gegner / Thema',
-    form_totaltime: 'Gesamtzeit (Min)',
-    form_title_ph: 'z.B. Training #12 — Defense',
-    form_theme_ph: 'z.B. Vor Zehlendorf',
-    btn_add_block: '+ Block hinzufügen',
-    time_total: 'Gesamt',
-    saved_plans_title: 'Gespeicherte Pläne',
-    plans_search_ph: 'Plan suchen …',
-    sort_newest: 'Neueste',
-    sort_oldest: 'Älteste',
-    sort_az: 'A–Z',
-    no_plans_yet: 'Noch keine Pläne gespeichert.',
-    export_title: 'Export',
-    btn_export_word: '📄 Word-Dokument (.htm)',
-    btn_export_whatsapp: '💬 WhatsApp-Text kopieren',
-    btn_export_pdf: '🖨 Drucken / PDF',
-    btn_export_json: '⚙️ JSON (Backup)',
-    btn_export_overview: '📋 Alle Pläne → Übersicht',
-    notes_title: 'Notizen zum Plan',
-    notes_ph: 'Fokus des Trainings, Hinweise, Scouting …',
-    // Tracking page
-    tracking_title: 'Drill-Statistiken',
-    tracking_subtitle: 'Wie oft wurde welcher Drill in gespeicherten Plänen eingesetzt?',
-    sort_most_used: 'Meist genutzt',
-    sort_least_used: 'Selten genutzt',
-    sort_most_mins: 'Meiste Minuten',
-    opt_all_cat2: 'Alle Kategorien',
-    btn_refresh: '🔄 Refresh',
-    stat_saved_plans: 'Gespeicherte Pläne',
-    stat_drill_uses: 'Drill-Einsätze gesamt',
-    stat_train_mins: 'Trainingsminuten',
-    stat_never_used: 'Nie genutzte Drills',
-    no_plans_tracking: 'Noch keine Pläne gespeichert — speichere Trainingspläne um Statistiken zu sehen.',
-    // Overview page
-    overview_title: 'Pläne-Übersicht & Export',
-    overview_subtitle: 'Alle gespeicherten Trainingspläne — filtern, drucken, exportieren',
-    btn_import_json: '📂 JSON importieren',
-    btn_export_all: '⬇ Alle als JSON',
-    btn_print_filtered: '🖨 Gefilterte Pläne drucken',
-    filter_from: 'Von',
-    filter_to: 'Bis',
-    filter_sort: 'Sortierung',
-    sort_newest_first: 'Neueste zuerst',
-    sort_oldest_first: 'Älteste zuerst',
-    sort_name_az: 'Name A–Z',
-    sort_most_drilltime: 'Meiste Drillzeit',
-    btn_reset_x: '✕ Reset',
-    json_manual_title: 'JSON manuell einfügen',
-    json_ph: 'JSON hier einfügen …',
-    btn_import: 'Import',
-    // Picker modal
-    picker_title: 'Drill auswählen',
-    picker_search_ph: 'Suche …',
-    picker_all_cat: 'Alle Kategorien',
-    picker_all_phases: 'Alle Phasen',
-    picker_all_spielphases: 'Alle Spielphasen',
-    picker_all_intens: 'Alle Intensitäten',
-    picker_players_ph: '≤ Spieler',
-    // Slot UI
-    slot_no_drills: '— Noch keine Drills geplant',
-    slot_add_drill: '+ Drill auswählen …',
-    slot_fixed: 'fest',
-    slot_drill_mins_label: 'min Drills',
-    slot_free: 'min frei von',
-    slot_over: 'min über',
-    // Dynamic strings
-    confirm_delete_plan: 'Plan wirklich löschen?',
-    btn_cancel: 'Abbrechen',
-    btn_delete: 'Löschen',
-    toast_plan_saved: '✓ Plan gespeichert',
-    toast_plan_deleted: 'Plan gelöscht',
-    toast_no_plan: 'Kein Plan aktiv',
-    toast_no_plan_active: 'Erst einen Plan erstellen oder laden',
-    toast_word_exported: '📄 Word-Dokument exportiert — in Word öffnen',
-    toast_json_exported: '⚙️ JSON exportiert',
-    toast_all_json_exported: '⬇ Alle Pläne als JSON exportiert',
-    toast_print: '🖨 Strg+P zum Drucken / Als PDF speichern',
-    toast_save_failed: '⚠ Speichern fehlgeschlagen',
-    whatsapp_title: '💬 WhatsApp-Text — alles markieren & kopieren',
-    btn_close: 'Schließen',
-    no_drills_found: 'Keine Drills gefunden.',
-    no_plans_found: 'Keine Pläne gefunden — Filter anpassen oder Pläne importieren.',
-    no_plans_list: 'Keine Pläne gefunden.',
-    edit_btn: '✏ Bearbeiten',
-    no_drills_planned: 'Keine Drills geplant',
-    plans_of: 'von',
-    plans_label: 'Plänen',
-    drilltime_total: 'min Drillzeit gesamt',
-    drills_label: 'Drills',
-    // Print
-    print_hint: 'Druckvorschau · Strg+P (Win) / ⌘+P (Mac) → PDF speichern oder drucken',
-    footer: 'Weddinger Wiesel 2 · Saison 2025/2026',
-    notes_label: 'Notizen',
-    // buildPlanText
-    plan_text_title: 'TRAININGSPLAN',
-    plan_text_date: 'Datum',
-    plan_text_theme: 'Thema',
-    plan_text_notes: 'NOTIZEN',
-    plan_text_no_drills: '(keine Drills)',
-    // drill meta labels
-    meta_field: 'Feld',
-    meta_balls: 'Bälle',
-    meta_players: 'Spieler',
-    meta_material: 'Material',
-    meta_defense: 'Defense',
-    meta_competitive: 'Kompetitiv',
-    meta_gamelike: 'Gamelike',
-    meta_finish: 'Abschluss',
-    meta_intensity: 'Intensität',
-    meta_phase: 'Phase',
-    meta_spielphase: 'Spielphase',
-    // misc
-    sp_abbr: 'Sp',
-    add_to_plan: '+ Zum Plan hinzufügen',
-    no_desc: '—',
-    import_success: 'Plan(e) importiert',
-    import_invalid: '⚠ Ungültiges JSON',
-    toast_copied: '💬 In Zwischenablage kopiert — in WhatsApp einfügen!',
-    drilltime_label: 'min Drillzeit',
-  },
-  en: {
-    topbar_subtitle: 'Drill Library & Practice Planning · Season 2025/2026',
-    nav_overview: '📋 Plans Overview',
-    nav_drills: 'Drills',
-    nav_plan: 'Plan',
-    nav_tracking: 'Tracking',
-    nav_overview_short: 'Overview',
-    sidebar_nav_label: 'Navigation',
-    sidebar_saved_label: 'Saved Plans',
-    sidebar_bibliothek: 'Drill Library',
-    sidebar_planung: 'Practice Plan',
-    sidebar_tracking: 'Drill Tracking',
-    sidebar_overview: 'Plans Overview',
-    bib_title: 'Drill Library',
-    bib_subtitle: 'All drills — filterable, searchable, click for details',
-    filter_search: 'Search',
-    filter_category: 'Category',
-    filter_phase: 'Practice Phase',
-    filter_spielphase: 'Game Phase',
-    filter_intensity: 'Intensity',
-    filter_players: 'Min. Players ≤',
-    filter_search_ph: 'Search drills …',
-    filter_players_ph: 'e.g. 8',
-    opt_all: 'All',
-    opt_all_cat: 'All',
-    opt_warmup: 'Warmup',
-    opt_hauptteil: 'Main Part',
-    opt_hoch: 'High',
-    opt_mittel: 'Medium',
-    opt_niedrig: 'Low',
-    btn_reset: 'Reset',
-    plan_title_new: 'New Practice Plan',
-    plan_subtitle_default: 'Plan time blocks · Assign drills · Export',
-    btn_mo: '📋 Mon Pankstraße',
-    btn_mi: '📋 Wed Wiesenstraße',
-    btn_new_plan: '+ Empty Plan',
-    btn_save: '💾 Save',
-    form_title: 'Title',
-    form_date: 'Date',
-    form_theme: 'Opponent / Theme',
-    form_totaltime: 'Total Time (Min)',
-    form_title_ph: 'e.g. Practice #12 — Defense',
-    form_theme_ph: 'e.g. Before Zehlendorf',
-    btn_add_block: '+ Add Block',
-    time_total: 'Total',
-    saved_plans_title: 'Saved Plans',
-    plans_search_ph: 'Search plan …',
-    sort_newest: 'Newest',
-    sort_oldest: 'Oldest',
-    sort_az: 'A–Z',
-    no_plans_yet: 'No plans saved yet.',
-    export_title: 'Export',
-    btn_export_word: '📄 Word Document (.htm)',
-    btn_export_whatsapp: '💬 Copy WhatsApp text',
-    btn_export_pdf: '🖨 Print / PDF',
-    btn_export_json: '⚙️ JSON (Backup)',
-    btn_export_overview: '📋 All Plans → Overview',
-    notes_title: 'Plan Notes',
-    notes_ph: 'Practice focus, notes, scouting …',
-    tracking_title: 'Drill Statistics',
-    tracking_subtitle: 'How often was each drill used in saved plans?',
-    sort_most_used: 'Most used',
-    sort_least_used: 'Least used',
-    sort_most_mins: 'Most minutes',
-    opt_all_cat2: 'All Categories',
-    btn_refresh: '🔄 Refresh',
-    stat_saved_plans: 'Saved Plans',
-    stat_drill_uses: 'Total Drill Uses',
-    stat_train_mins: 'Practice Minutes',
-    stat_never_used: 'Never Used Drills',
-    no_plans_tracking: 'No plans saved yet — save practice plans to see statistics.',
-    overview_title: 'Plans Overview & Export',
-    overview_subtitle: 'All saved practice plans — filter, print, export',
-    btn_import_json: '📂 Import JSON',
-    btn_export_all: '⬇ All as JSON',
-    btn_print_filtered: '🖨 Print Filtered Plans',
-    filter_from: 'From',
-    filter_to: 'To',
-    filter_sort: 'Sort',
-    sort_newest_first: 'Newest first',
-    sort_oldest_first: 'Oldest first',
-    sort_name_az: 'Name A–Z',
-    sort_most_drilltime: 'Most drill time',
-    btn_reset_x: '✕ Reset',
-    json_manual_title: 'Paste JSON manually',
-    json_ph: 'Paste JSON here …',
-    btn_import: 'Import',
-    picker_title: 'Select Drill',
-    picker_search_ph: 'Search …',
-    picker_all_cat: 'All Categories',
-    picker_all_phases: 'All Phases',
-    picker_all_spielphases: 'All Game Phases',
-    picker_all_intens: 'All Intensities',
-    picker_players_ph: '≤ Players',
-    slot_no_drills: '— No drills planned yet',
-    slot_add_drill: '+ Select drill …',
-    slot_fixed: 'fixed',
-    slot_drill_mins_label: 'min Drills',
-    slot_free: 'min free of',
-    slot_over: 'min over',
-    confirm_delete_plan: 'Really delete this plan?',
-    btn_cancel: 'Cancel',
-    btn_delete: 'Delete',
-    toast_plan_saved: '✓ Plan saved',
-    toast_plan_deleted: 'Plan deleted',
-    toast_no_plan: 'No active plan',
-    toast_no_plan_active: 'First create or load a plan',
-    toast_word_exported: '📄 Word document exported — open in Word',
-    toast_json_exported: '⚙️ JSON exported',
-    toast_all_json_exported: '⬇ All plans exported as JSON',
-    toast_print: '🖨 Ctrl+P to print / Save as PDF',
-    toast_save_failed: '⚠ Save failed',
-    whatsapp_title: '💬 WhatsApp text — select all & copy',
-    btn_close: 'Close',
-    no_drills_found: 'No drills found.',
-    no_plans_found: 'No plans found — adjust filters or import plans.',
-    no_plans_list: 'No plans found.',
-    edit_btn: '✏ Edit',
-    no_drills_planned: 'No drills planned',
-    plans_of: 'of',
-    plans_label: 'plans',
-    drilltime_total: 'min total drill time',
-    drills_label: 'Drills',
-    print_hint: 'Print preview · Ctrl+P (Win) / ⌘+P (Mac) → Save as PDF or print',
-    footer: 'Weddinger Wiesel 2 · Season 2025/2026',
-    notes_label: 'Notes',
-    plan_text_title: 'PRACTICE PLAN',
-    plan_text_date: 'Date',
-    plan_text_theme: 'Theme',
-    plan_text_notes: 'NOTES',
-    plan_text_no_drills: '(no drills)',
-    meta_field: 'Court',
-    meta_balls: 'Balls',
-    meta_players: 'Players',
-    meta_material: 'Equipment',
-    meta_defense: 'Defense',
-    meta_competitive: 'Competitive',
-    meta_gamelike: 'Game-like',
-    meta_finish: 'Finish',
-    meta_intensity: 'Intensity',
-    meta_phase: 'Phase',
-    meta_spielphase: 'Game Phase',
-    sp_abbr: 'Pl',
-    add_to_plan: '+ Add to plan',
-    no_desc: '—',
-    import_success: 'plan(s) imported',
-    import_invalid: '⚠ Invalid JSON',
-    toast_copied: '💬 Copied to clipboard — paste in WhatsApp!',
-    drilltime_label: 'min drill time',
+function getTouchDrillItem(el) {
+  while (el && !el.classList.contains('slot-drill-item')) el = el.parentElement;
+  return el;
+}
+
+function onDrillTouchStart(e) {
+  const item = getTouchDrillItem(e.target);
+  if (!item) return;
+  // Don't intercept taps on buttons/inputs
+  if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+
+  touchDragSrc = { slotId: item.dataset.slot, idx: parseInt(item.dataset.idx), el: item };
+
+  // Create floating clone
+  const rect = item.getBoundingClientRect();
+  touchClone = item.cloneNode(true);
+  touchClone.style.cssText = `
+    position: fixed;
+    left: ${rect.left}px;
+    top: ${rect.top}px;
+    width: ${rect.width}px;
+    opacity: 0.85;
+    pointer-events: none;
+    z-index: 9999;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    border-radius: 6px;
+    background: var(--bg);
+    border: 2px solid var(--text);
+    transition: none;
+  `;
+  document.body.appendChild(touchClone);
+  item.style.opacity = '0.3';
+
+  e.preventDefault();
+}
+
+function onDrillTouchMove(e) {
+  if (!touchDragSrc || !touchClone) return;
+  e.preventDefault();
+
+  const touch = e.touches[0];
+  const rect = touchClone.getBoundingClientRect();
+  touchClone.style.left = (touch.clientX - rect.width / 2) + 'px';
+  touchClone.style.top = (touch.clientY - rect.height / 2) + 'px';
+
+  // Highlight target item under finger
+  touchClone.style.display = 'none';
+  const elUnder = document.elementFromPoint(touch.clientX, touch.clientY);
+  touchClone.style.display = '';
+
+  document.querySelectorAll('.slot-drill-item.drag-over, .slot-content.drag-over')
+    .forEach(el => el.classList.remove('drag-over'));
+
+  const targetItem = getTouchDrillItem(elUnder);
+  if (targetItem && targetItem !== touchDragSrc.el) {
+    targetItem.classList.add('drag-over');
+  } else {
+    // Highlight slot-content if hovering over it
+    let slotContent = elUnder;
+    while (slotContent && !slotContent.classList.contains('slot-content')) slotContent = slotContent?.parentElement;
+    if (slotContent) slotContent.classList.add('drag-over');
   }
-};
-
-function t(key) {
-  return (LANG[currentLang] || LANG.de)[key] || LANG.de[key] || key;
-}
-window.t = t;
-
-function toggleLang() {
-  currentLang = currentLang === 'de' ? 'en' : 'de';
-  localStorage.setItem('wiesel2_lang', currentLang);
-  applyLang();
 }
 
-function applyLang() {
-  const isEN = currentLang === 'en';
-  const btn = document.getElementById('lang-toggle');
-  if (btn) btn.textContent = isEN ? '🌐 EN' : '🌐 DE';
-  const mnavLabel = document.getElementById('mnav-lang-label');
-  if (mnavLabel) mnavLabel.textContent = isEN ? 'DE' : 'EN';
+function onDrillTouchEnd(e) {
+  if (!touchDragSrc || !touchClone) return;
 
-  // Static HTML elements with data-i18n
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-      el.placeholder = t(key);
-    } else {
-      el.textContent = t(key);
+  const touch = e.changedTouches[0];
+
+  // Clean up clone and highlight
+  touchClone.remove();
+  touchClone = null;
+  document.querySelectorAll('.slot-drill-item.drag-over, .slot-content.drag-over')
+    .forEach(el => el.classList.remove('drag-over'));
+  if (touchDragSrc.el) touchDragSrc.el.style.opacity = '';
+
+  // Find drop target
+  const elUnder = document.elementFromPoint(touch.clientX, touch.clientY);
+  const targetItem = getTouchDrillItem(elUnder);
+
+  const srcSlot = currentPlan.slots.find(s => s.id === touchDragSrc.slotId);
+  if (!srcSlot) { touchDragSrc = null; return; }
+
+  if (targetItem && targetItem !== touchDragSrc.el) {
+    // Drop onto another drill item → insert before it
+    const destSlotId = targetItem.dataset.slot;
+    const destIdx = parseInt(targetItem.dataset.idx);
+    const destSlot = currentPlan.slots.find(s => s.id === destSlotId);
+    if (destSlot) {
+      const [moved] = srcSlot.drills.splice(touchDragSrc.idx, 1);
+      destSlot.drills.splice(destIdx, 0, moved);
     }
-  });
-
-  // Sidebar
-  const navLabel = document.querySelector('.nav-section-label');
-  if (navLabel) navLabel.textContent = t('sidebar_nav_label');
-  const navLabels = document.querySelectorAll('.nav-section-label');
-  if (navLabels[0]) navLabels[0].textContent = t('sidebar_nav_label');
-  if (navLabels[1]) navLabels[1].textContent = t('sidebar_saved_label');
-
-  const navBib = document.getElementById('nav-bibliothek');
-  if (navBib) navBib.innerHTML = `<span class="nav-icon">📚</span> ${t('sidebar_bibliothek')} <span class="nav-count" id="nav-count-bib">${document.getElementById('nav-count-bib')?.textContent||'—'}</span>`;
-  const navPlan = document.getElementById('nav-planung');
-  if (navPlan) navPlan.innerHTML = `<span class="nav-icon">📋</span> ${t('sidebar_planung')}`;
-  const navTrack = document.getElementById('nav-tracking');
-  if (navTrack) navTrack.innerHTML = `<span class="nav-icon">📊</span> ${t('sidebar_tracking')}`;
-  const navIE = document.getElementById('nav-import-export');
-  if (navIE) navIE.innerHTML = `<span class="nav-icon">🗂</span> ${t('sidebar_overview')}`;
-
-  // Mobile nav
-  document.querySelectorAll('.mnav-label').forEach((el, i) => {
-    const keys = ['nav_drills','nav_plan','nav_tracking','nav_overview_short'];
-    if (keys[i]) el.textContent = t(keys[i]);
-  });
-
-  // Bibliothek page
-  const bibTitle = document.querySelector('#page-bibliothek .page-title');
-  if (bibTitle) bibTitle.textContent = t('bib_title');
-  const bibSub = document.querySelector('#page-bibliothek .page-subtitle');
-  if (bibSub) bibSub.textContent = t('bib_subtitle');
-
-  // Filter labels in bib
-  const filterLabels = document.querySelectorAll('#bib-filters .filter-label');
-  const bibLabelKeys = ['filter_search','filter_category','filter_phase','filter_spielphase','filter_intensity','filter_players'];
-  filterLabels.forEach((el, i) => { if (bibLabelKeys[i]) el.textContent = t(bibLabelKeys[i]); });
-
-  const bibSearch = document.getElementById('bib-search');
-  if (bibSearch) bibSearch.placeholder = t('filter_search_ph');
-  const bibSpieler = document.getElementById('bib-spieler');
-  if (bibSpieler) bibSpieler.placeholder = t('filter_players_ph');
-
-  // Select options in bib
-  _updateSelectOptions('bib-kat', [
-    ['', t('opt_all')], ['Passing','Passing'], ['Ballhandling','Ballhandling'],
-    ['Shooting','Shooting'], ['Transition','Transition'], ['Defense','Defense'],
-    ['Rebounding','Rebounding'], ['Offense','Offense'], ['Post','Post'],
-    ['Kondition','Kondition'], ['Plays','Plays']
-  ]);
-  _updateSelectOptions('bib-phase', [['', t('opt_all')], ['Warmup', t('opt_warmup')], ['Hauptteil', t('opt_hauptteil')]]);
-  _updateSelectOptions('bib-intens', [['', t('opt_all')], ['hoch', t('opt_hoch')], ['mittel', t('opt_mittel')], ['niedrig', t('opt_niedrig')]]);
-
-  const bibResetBtn = document.querySelector('#bib-filters .btn-ghost');
-  if (bibResetBtn) bibResetBtn.textContent = t('btn_reset');
-
-  // Planung page
-  const planTitleDisp = document.getElementById('plan-title-display');
-  if (planTitleDisp && (!currentPlan || !currentPlan.name)) planTitleDisp.textContent = t('plan_title_new');
-  const planSubDisp = document.getElementById('plan-subtitle-display');
-  if (planSubDisp && (!currentPlan || (!currentPlan.date && !currentPlan.theme))) planSubDisp.textContent = t('plan_subtitle_default');
-
-  // Form labels in planung
-  const formLabels = document.querySelectorAll('.plan-header-form .form-label');
-  const formKeys = ['form_title','form_date','form_theme','form_totaltime'];
-  formLabels.forEach((el, i) => { if (formKeys[i]) el.textContent = t(formKeys[i]); });
-
-  const planNameInput = document.getElementById('plan-name');
-  if (planNameInput) planNameInput.placeholder = t('form_title_ph');
-  const planThemeInput = document.getElementById('plan-theme');
-  if (planThemeInput) planThemeInput.placeholder = t('form_theme_ph');
-
-  // Template buttons
-  const addSlotBtn = document.querySelector('.add-slot-btn');
-  if (addSlotBtn) addSlotBtn.textContent = t('btn_add_block');
-
-  // Time summary
-  const timeSummaryLabel = document.querySelector('.time-summary-label');
-  if (timeSummaryLabel) timeSummaryLabel.textContent = t('time_total');
-
-  // Saved plans panel
-  const savedPanelTitle = document.querySelector('#page-planung .panel-title');
-  if (savedPanelTitle) savedPanelTitle.textContent = t('saved_plans_title') + ' ';
-
-  const plansSearchInput = document.getElementById('plans-search');
-  if (plansSearchInput) plansSearchInput.placeholder = t('plans_search_ph');
-
-  _updateSelectOptions('plans-sort', [['date-desc', t('sort_newest')], ['date-asc', t('sort_oldest')], ['name-asc', t('sort_az')]]);
-
-  // Export panel
-  const planPanels = document.querySelectorAll('#page-planung .panel-title');
-  if (planPanels[1]) planPanels[1].textContent = t('export_title');
-  if (planPanels[2]) planPanels[2].textContent = t('notes_title');
-
-  const exportBtns = document.querySelectorAll('.export-btn');
-  const exportKeys = ['btn_export_word','btn_export_whatsapp','btn_export_pdf','btn_export_json','btn_export_overview'];
-  exportBtns.forEach((el, i) => {
-    if (exportKeys[i]) {
-      const icon = el.querySelector('.export-icon');
-      const iconHTML = icon ? icon.outerHTML : '';
-      el.innerHTML = iconHTML + ' ' + t(exportKeys[i]).replace(/^[^\s]+\s/, '');
+  } else {
+    // Try dropping onto slot-content → append to slot
+    let slotContent = elUnder;
+    while (slotContent && !slotContent.classList.contains('slot-content')) slotContent = slotContent?.parentElement;
+    if (slotContent) {
+      // Find slot id from ondrop attribute
+      const onDrop = slotContent.getAttribute('ondrop') || '';
+      const match = onDrop.match(/'([^']+)'\)/);
+      if (match) {
+        const destSlotId = match[1];
+        const destSlot = currentPlan.slots.find(s => s.id === destSlotId);
+        if (destSlot && destSlot.id !== touchDragSrc.slotId) {
+          const [moved] = srcSlot.drills.splice(touchDragSrc.idx, 1);
+          destSlot.drills.push(moved);
+        }
+      }
     }
-  });
+  }
 
-  const notesArea = document.getElementById('plan-notes');
-  if (notesArea) notesArea.placeholder = t('notes_ph');
-
-  // Tracking page
-  const trackTitle = document.querySelector('#page-tracking .page-title');
-  if (trackTitle) trackTitle.textContent = t('tracking_title');
-  const trackSub = document.querySelector('#page-tracking .page-subtitle');
-  if (trackSub) trackSub.textContent = t('tracking_subtitle');
-
-  _updateSelectOptions('tracking-sort', [
-    ['count-desc', t('sort_most_used')], ['count-asc', t('sort_least_used')],
-    ['mins-desc', t('sort_most_mins')], ['name-asc', t('sort_az')]
-  ]);
-  _updateSelectOptions('tracking-kat', [
-    ['', t('opt_all_cat2')], ['Passing','Passing'], ['Ballhandling','Ballhandling'],
-    ['Shooting','Shooting'], ['Transition','Transition'], ['Defense','Defense'],
-    ['Rebounding','Rebounding'], ['Offense','Offense'], ['Post','Post'],
-    ['Kondition','Kondition'], ['Plays','Plays']
-  ]);
-
-  // Overview page
-  const overviewTitle = document.querySelector('#page-import-export .page-title');
-  if (overviewTitle) overviewTitle.textContent = t('overview_title');
-  const overviewSub = document.querySelector('#page-import-export .page-subtitle');
-  if (overviewSub) overviewSub.textContent = t('overview_subtitle');
-
-  _updateSelectOptions('overview-sort', [
-    ['date-desc', t('sort_newest_first')], ['date-asc', t('sort_oldest_first')],
-    ['name-asc', t('sort_name_az')], ['mins-desc', t('sort_most_drilltime')]
-  ]);
-  const overviewSearch = document.getElementById('overview-search');
-  if (overviewSearch) overviewSearch.placeholder = isEN ? 'Title, theme …' : 'Titel, Thema …';
-
-  // Picker modal
-  const pickerTitle = document.querySelector('#picker-modal .modal-title');
-  if (pickerTitle) pickerTitle.textContent = t('picker_title');
-  const pickerSearch = document.getElementById('picker-search');
-  if (pickerSearch) pickerSearch.placeholder = t('picker_search_ph');
-  _updateSelectOptions('picker-kat', [
-    ['', t('picker_all_cat')], ['Passing','Passing'], ['Ballhandling','Ballhandling'],
-    ['Shooting','Shooting'], ['Transition','Transition'], ['Defense','Defense'],
-    ['Rebounding','Rebounding'], ['Offense','Offense'], ['Post','Post'],
-    ['Kondition','Kondition'], ['Plays','Plays']
-  ]);
-  _updateSelectOptions('picker-phase', [['', t('picker_all_phases')], ['Warmup', t('opt_warmup')], ['Hauptteil', t('opt_hauptteil')]]);
-  _updateSelectOptions('picker-intens', [['', t('picker_all_intens')], ['hoch', t('opt_hoch')], ['mittel', t('opt_mittel')], ['niedrig', t('opt_niedrig')]]);
-  const pickerSpieler = document.getElementById('picker-spieler');
-  if (pickerSpieler) pickerSpieler.placeholder = t('picker_players_ph');
-
-  // JSON import section
-  const jsonTitle = document.querySelector('#json-import-section .panel-title');
-  if (jsonTitle) jsonTitle.textContent = t('json_manual_title');
-  const importJson = document.getElementById('import-json');
-  if (importJson) importJson.placeholder = t('json_ph');
-  const importBtn = document.querySelector('#json-import-section .btn-secondary');
-  if (importBtn) importBtn.textContent = t('btn_import');
-
-  // Re-render dynamic content with new language
-  try { if (currentPlan) renderSlots(); } catch(e) { console.error('renderSlots:', e); }
-  try { renderBibliothek(applyBibFiltersReturn()); } catch(e) { console.error('renderBibliothek:', e); }
-  try { renderSavedPlansList(); } catch(e) { console.error('renderSavedPlansList:', e); }
-  try { renderTracking(); } catch(e) { console.error('renderTracking:', e); }
-  try { renderPlanOverview(); } catch(e) { console.error('renderPlanOverview:', e); }
-  try { if (currentPlan) updateTimeSummary(); } catch(e) { console.error('updateTimeSummary:', e); }
-  try { if (currentPlan) updatePlanDisplayHeader(); } catch(e) { console.error('updatePlanDisplayHeader:', e); }
+  touchDragSrc = null;
+  renderSlots();
+  updateTimeSummary();
+  autoSave();
 }
 
-function _updateSelectOptions(id, pairs) {
-  const sel = document.getElementById(id);
-  if (!sel) return;
-  const cur = sel.value;
-  pairs.forEach(([val, label], i) => {
-    if (sel.options[i]) { sel.options[i].value = val; sel.options[i].textContent = label; }
-  });
-  sel.value = cur;
-}
-
-function applyBibFiltersReturn() {
-  // Same logic as applyBibFilters but returns filtered array for re-render
-  const search = (document.getElementById('bib-search')?.value || '').toLowerCase();
-  const kat = document.getElementById('bib-kat')?.value || '';
-  const phase = document.getElementById('bib-phase')?.value || '';
-  const spielphase = document.getElementById('bib-spielphase')?.value || '';
-  const intens = document.getElementById('bib-intens')?.value || '';
-  const spieler = parseInt(document.getElementById('bib-spieler')?.value) || 999;
-  return DRILLS.filter(d => {
-    if (search && !d.name.toLowerCase().includes(search)) return false;
-    if (kat && d.kat !== kat) return false;
-    if (phase && !d.phase.includes(phase)) return false;
-    if (spielphase && !d.spielphase.includes(spielphase)) return false;
-    if (intens && d.intensity !== intens) return false;
-    if (d.minSpieler > spieler) return false;
-    return true;
+// Attach touch listeners to all drill items after render
+function attachTouchDragListeners() {
+  document.querySelectorAll('.slot-drill-item').forEach(item => {
+    item.addEventListener('touchstart', onDrillTouchStart, { passive: false });
+    item.addEventListener('touchmove', onDrillTouchMove, { passive: false });
+    item.addEventListener('touchend', onDrillTouchEnd, { passive: false });
   });
 }
 
-
+// ============================================================
+// INIT
+// ============================================================
 loadFromStorage();
 renderBibliothek(DRILLS);
 document.getElementById('nav-count-bib').textContent = DRILLS.length;
@@ -3562,8 +3039,6 @@ newPlan();
 renderNavSavedPlans();
 // Set today's date
 document.getElementById('plan-date').value = new Date().toISOString().split('T')[0];
-// Apply saved language
-applyLang();
 </script>
 </body>
 </html>
