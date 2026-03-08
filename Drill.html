@@ -359,21 +359,15 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: transparent;
+    background: rgba(0,0,0,0.4);
     z-index: 200;
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: center;
-    pointer-events: none;
+    padding: 20px;
   }
-  .modal-overlay.hidden { display: none; }
-  .modal-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(0,0,0,0.4);
-    pointer-events: all;
-    cursor: pointer;
-  }
+  .modal-overlay.hidden { display: none !important; }
+  .modal-backdrop { display: none; }
   .modal {
     background: var(--surface);
     border-radius: var(--radius-lg);
@@ -383,6 +377,7 @@
     overflow-y: auto;
     box-shadow: var(--shadow-lg);
     padding: 24px;
+    pointer-events: all;
   }
   .modal-header {
     display: flex;
@@ -883,19 +878,17 @@
     .slot-drill-mins input { width: 44px; font-size: 16px; padding: 4px 6px; }
     .slot-add-btn { padding: 10px; font-size: 13px; }
     .slot-time-input { font-size: 16px; width: 56px; padding: 4px 6px; }
-    .modal-overlay { align-items: flex-end; }
-    .modal-overlay > div:not(.modal-backdrop) { pointer-events: all; }
+    .modal-overlay { padding: 16px; align-items: center; }
     .modal {
       max-width: 100%;
       width: 100%;
-      max-height: 85dvh;
-      border-radius: 16px 16px 0 0;
-      padding: 20px;
+      max-height: 80dvh;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
+      padding: 20px 16px;
+      padding-bottom: 32px;
     }
-    #drill-modal > div:not(.modal-backdrop) { max-width: 100% !important; }
-    .drill-picker-list { max-height: 45dvh; }
+    .drill-picker-list { max-height: 40dvh; }
     .drill-picker-item { padding: 14px 12px; min-height: 52px; }
     .drill-picker-name { font-size: 14px; }
     .meta-grid { grid-template-columns: 1fr 1fr; }
@@ -1292,71 +1285,67 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
 <!-- DRILL DETAIL MODAL -->
 <div class="modal-overlay hidden" id="drill-modal">
   <div class="modal-backdrop" onclick="closeDrillModal()"></div>
-  <div style="width:100%;max-width:560px;display:flex;flex-direction:column;max-height:85dvh;background:var(--surface);border-radius:16px 16px 0 0;overflow:hidden;position:relative;z-index:1;">
-    <div class="modal" id="drill-modal-content" style="overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;border-radius:0;margin:0;max-height:none;">
-      <div class="modal-header">
-        <div>
-          <div class="modal-title" id="modal-drill-name"></div>
-          <div style="margin-top:4px;" id="modal-drill-cat"></div>
-        </div>
-        <button class="modal-close" onclick="closeDrillModal()">×</button>
+  <div class="modal" id="drill-modal-content">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-drill-name"></div>
+        <div style="margin-top:4px;" id="modal-drill-cat"></div>
       </div>
-      <div class="meta-grid" id="modal-meta-grid"></div>
-      <div id="modal-drill-desc" style="margin:12px 0 0;padding:12px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.6;color:var(--text);display:none;"></div>
-      <div id="modal-note-section"></div>
+      <button class="modal-close" onclick="closeDrillModal()">×</button>
     </div>
-    <div id="modal-add-section" style="flex-shrink:0;padding:12px 20px 16px;border-top:1px solid var(--border);background:var(--surface);"></div>
+    <div class="meta-grid" id="modal-meta-grid"></div>
+    <div id="modal-drill-desc" style="margin:12px 0 0;padding:12px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.6;color:var(--text);display:none;"></div>
+    <div id="modal-note-section"></div>
+    <div id="modal-add-section"></div>
   </div>
 </div>
 
 <!-- DRILL PICKER MODAL -->
 <div class="modal-overlay hidden" id="picker-modal">
   <div class="modal-backdrop" onclick="closePickerModal()"></div>
-  <div style="width:100%;max-width:560px;display:flex;flex-direction:column;max-height:92dvh;background:var(--surface);border-radius:16px 16px 0 0;overflow:hidden;position:relative;z-index:1;">
-    <div style="padding:16px 20px 12px;flex-shrink:0;border-bottom:1px solid var(--border);">
-      <div class="modal-header" style="margin-bottom:10px;">
-        <div class="modal-title">Drill auswählen</div>
-        <button class="modal-close" onclick="closePickerModal()">×</button>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;" id="picker-filters">
-        <input type="text" class="filter-input" id="picker-search" placeholder="Suche …" oninput="applyPickerFilters()" style="flex:1;min-width:140px;font-size:16px;">
-        <select class="filter-select" id="picker-kat" onchange="applyPickerFilters()" style="font-size:16px;">
-          <option value="">Alle Kategorien</option>
-          <option value="Passing">Passing</option>
-          <option value="Ballhandling">Ballhandling</option>
-          <option value="Shooting">Shooting</option>
-          <option value="Transition">Transition</option>
-          <option value="Defense">Defense</option>
-          <option value="Rebounding">Rebounding</option>
-          <option value="Offense">Offense</option>
-          <option value="Post">Post</option>
-          <option value="Kondition">Kondition</option>
-          <option value="Plays">Plays</option>
-        </select>
-        <select class="filter-select" id="picker-phase" onchange="applyPickerFilters()" style="font-size:16px;">
-          <option value="">Alle Phasen</option>
-          <option value="Warmup">Warmup</option>
-          <option value="Hauptteil">Hauptteil</option>
-        </select>
-        <select class="filter-select" id="picker-spielphase" onchange="applyPickerFilters()" style="font-size:16px;">
-          <option value="">Alle Spielphasen</option>
-          <option value="SO">SO</option>
-          <option value="OT">OT</option>
-          <option value="DT">DT</option>
-          <option value="SD">SD</option>
-          <option value="Technik">Technik</option>
-        </select>
-        <select class="filter-select" id="picker-intens" onchange="applyPickerFilters()" style="font-size:16px;">
-          <option value="">Alle Intensitäten</option>
-          <option value="hoch">Hoch</option>
-          <option value="mittel">Mittel</option>
-          <option value="niedrig">Niedrig</option>
-        </select>
-        <input type="number" class="filter-input" id="picker-spieler" placeholder="≤ Spieler" min="1" max="15" style="width:90px;font-size:16px;" oninput="applyPickerFilters()">
-      </div>
-      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);margin-top:6px;" id="picker-count"></div>
+  <div class="modal" id="picker-modal-content">
+    <div class="modal-header">
+      <div class="modal-title">Drill auswählen</div>
+      <button class="modal-close" onclick="closePickerModal()">×</button>
     </div>
-    <div class="drill-picker-list" id="picker-list" style="overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;border:none;border-radius:0;max-height:none;"></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;" id="picker-filters">
+      <input type="text" class="filter-input" id="picker-search" placeholder="Suche …" oninput="applyPickerFilters()" style="flex:1;min-width:140px;font-size:16px;">
+      <select class="filter-select" id="picker-kat" onchange="applyPickerFilters()" style="font-size:16px;">
+        <option value="">Alle Kategorien</option>
+        <option value="Passing">Passing</option>
+        <option value="Ballhandling">Ballhandling</option>
+        <option value="Shooting">Shooting</option>
+        <option value="Transition">Transition</option>
+        <option value="Defense">Defense</option>
+        <option value="Rebounding">Rebounding</option>
+        <option value="Offense">Offense</option>
+        <option value="Post">Post</option>
+        <option value="Kondition">Kondition</option>
+        <option value="Plays">Plays</option>
+      </select>
+      <select class="filter-select" id="picker-phase" onchange="applyPickerFilters()" style="font-size:16px;">
+        <option value="">Alle Phasen</option>
+        <option value="Warmup">Warmup</option>
+        <option value="Hauptteil">Hauptteil</option>
+      </select>
+      <select class="filter-select" id="picker-spielphase" onchange="applyPickerFilters()" style="font-size:16px;">
+        <option value="">Alle Spielphasen</option>
+        <option value="SO">SO</option>
+        <option value="OT">OT</option>
+        <option value="DT">DT</option>
+        <option value="SD">SD</option>
+        <option value="Technik">Technik</option>
+      </select>
+      <select class="filter-select" id="picker-intens" onchange="applyPickerFilters()" style="font-size:16px;">
+        <option value="">Alle Intensitäten</option>
+        <option value="hoch">Hoch</option>
+        <option value="mittel">Mittel</option>
+        <option value="niedrig">Niedrig</option>
+      </select>
+      <input type="number" class="filter-input" id="picker-spieler" placeholder="≤ Spieler" min="1" max="15" style="width:90px;font-size:16px;" oninput="applyPickerFilters()">
+    </div>
+    <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);margin-bottom:4px;" id="picker-count"></div>
+    <div class="drill-picker-list" id="picker-list"></div>
   </div>
 </div>
 
