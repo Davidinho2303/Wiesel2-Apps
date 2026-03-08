@@ -539,6 +539,7 @@
 
   .slot-drill-item {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     background: var(--bg);
@@ -554,6 +555,7 @@
   .drag-handle { color: var(--text-subtle); font-size: 12px; cursor: grab; flex-shrink: 0; padding: 0 2px; }
   .info-btn { background: none; border: none; cursor: pointer; color: var(--text-subtle); font-size: 13px; padding: 0 2px; flex-shrink: 0; transition: color 0.1s; }
   .info-btn:hover { color: var(--text); }
+  .slot-drill-main-row { display: flex; align-items: center; gap: 8px; width: 100%; flex-wrap: nowrap; }
   .slot-drill-name {
     font-size: 12px;
     font-weight: 500;
@@ -579,6 +581,86 @@
     background: var(--surface);
     color: var(--text);
   }
+
+  /* CONSTRAINT CHIPS */
+  .constraint-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    width: 100%;
+    padding-left: 20px;
+  }
+  .constraint-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    padding: 2px 6px 2px 8px;
+    border-radius: 100px;
+    background: #fffbe6;
+    color: #7a5c00;
+    border: 1px solid #f0d070;
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .constraint-chip-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 10px;
+    color: #b09030;
+    padding: 0;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .constraint-chip-remove:hover { color: var(--red); }
+  .constraint-add-btn {
+    background: none;
+    border: 1px dashed #c8c090;
+    border-radius: 100px;
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    color: #a09060;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .constraint-add-btn:hover { background: #fffbe6; border-color: #a09060; color: #7a5c00; }
+
+  /* CONSTRAINT PICKER MODAL */
+  .constraint-modal {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    max-width: 440px;
+    width: 100%;
+    max-height: 75vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+    padding: 20px;
+    pointer-events: all;
+  }
+  .constraint-preset-btn {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.12s;
+    margin-bottom: 5px;
+  }
+  .constraint-preset-btn:hover { background: #fffbe6; border-color: #d4c060; }
+  .constraint-preset-btn.selected { background: #fffbe6; border-color: #b09030; }
+  .constraint-preset-label { font-size: 12px; font-weight: 600; color: var(--text); }
+  .constraint-preset-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
   .slot-empty-hint {
     font-size: 12px;
     color: var(--text-subtle);
@@ -943,7 +1025,7 @@ const setStatus = (text, color) => {
 
 // Anonym einloggen, dann Listener starten
 signInAnonymously(auth).then(() => {
-  setStatus('☁ Verbunden', 'var(--green)');
+  setStatus('☁ ' + (currentLang==="en"?"Connected":"Verbunden"), 'var(--green)');
   setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
 
   onSnapshot(PLANS_DOC, (snap) => {
@@ -972,7 +1054,7 @@ window.fbSavePlans = async (plans) => {
     await setDoc(PLANS_DOC, { plans, updatedAt: Date.now() });
   } catch(e) {
     console.warn('Firebase save:', e.message);
-    setStatus('⚠ Speichern fehlgeschlagen', 'var(--red)');
+    setStatus(currentLang==="en"?'⚠ Save failed':'⚠ Speichern fehlgeschlagen', 'var(--red)');
   }
 };
 
@@ -988,7 +1070,10 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
     <div class="topbar-sep"></div>
     <span class="topbar-subtitle">Drill-Bibliothek & Trainingsplanung · Saison 2025/2026</span>
     <div class="topbar-right">
-      <button class="btn btn-ghost btn-sm" onclick="showPage('import-export')">📋 Pläne-Übersicht</button>
+      <button class="btn btn-ghost btn-sm" onclick="showPage('import-export')" id="btn-plan-overview">📋 Pläne-Übersicht</button>
+      <button onclick="toggleLang()" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:5px;transition:all 0.15s;" id="lang-toggle-btn">
+        <span id="lang-flag">🇬🇧</span><span id="lang-label">EN</span>
+      </button>
       <span id="sync-status" style="font-size:11px;color:var(--text-subtle);font-family:DM Mono,monospace;">☁ Cloud</span>
     </div>
   </header>
@@ -1349,6 +1434,37 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
   </div>
 </div>
 
+<!-- CONSTRAINT PICKER MODAL -->
+<div class="modal-overlay hidden" id="constraint-modal">
+  <div class="constraint-modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">⚡ Constraint / Modifier</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;" id="constraint-modal-subtitle">Drill: —</div>
+      </div>
+      <button class="modal-close" onclick="closeConstraintModal()">×</button>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <div id="constraint-preset-section-label" style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Vorlagen</div>
+      <div id="constraint-preset-list"></div>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <div id="constraint-custom-section-label" style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Eigener Constraint</div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="constraint-custom-input" class="filter-input" placeholder="z.B. Nur Catchshot · 2 Pässe vor Drive …"
+          style="flex:1;font-size:14px;" onkeydown="if(event.key==='Enter')addCustomConstraint()">
+        <button class="btn btn-primary btn-sm" onclick="addCustomConstraint()">+ Add</button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" id="constraint-close-btn" onclick="closeConstraintModal()">Schließen</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST CONTAINER -->
 <div class="toast-container" id="toast-container"></div>
 
@@ -1439,9 +1555,9 @@ const DRILLS = [
 ];
 
 // ============================================================
-// DRILL-BESCHREIBUNGEN (aus Wiesel2_Drill_Bibliothek_aktualisiert)
+// DRILL-BESCHREIBUNGEN — DE
 // ============================================================
-const DRILL_DESC = {
+const DRILL_DESC_DE = {
   "doppelpaesse": "Varianten: Basic / Innenhand / Außenhand / Behind the Back / Mit Facing / Einer Chest+Bounce / Laufen / Passvarianten wechseln / Konversation.",
   "extraball": "4 Spieler im Kreis/Quadrat, 5 Bälle — ein Ball ist immer extra und wird weitergereicht. Stufe 1: Frei. Stufe 2: Keine Bodenbounces. Stufe 3: Eng — Passer muss springen. Stufe 4: Nach jedem Pass Cut durch definierten Spot.",
   "spielen-ohne-dribbling": "Freies Spielen ohne Dribbling. Auch als Constraint auf andere Drills legbar. Fokus: Pässe, Freilaufen, Spacing.",
@@ -1484,8 +1600,6 @@ const DRILL_DESC = {
   "press-22": "2 Defender / 2 Offense / Ganzfeld. X1 pusht Ball zur Sideline, X2 sichert Weakside auf Korblinie. Nach Swing: X1 und X2 rotieren — X2 wird neue Ballside, X1 geht Weakside. Kontinuierlich.",
   "press-55": "Vollständige 2-2-1 Zone Press in 5-5. Reihe 1 (1,2): Ballside zur Sideline pushen, Weakside Korblinie. Reihe 2 (3,4): Ballside deckt Linienpass. Reihe 3 (5): Mittig. Ziel: Giveaways erzwingen.",
   "helpside": "4-man Setup. Coach steht am TOC. Coach passt auf einen Wing: Penetration erlaubt. Restliche Verteidiger: Help the Helper + Rotation. Erweiterungen: Hütchen auf Helpside berühren, Coach ruft 'Drive!', 4-3 Überzahl. Dauer ca. 15 min.",
-  "ole-fickung": "Intensives Konditions- und Defensivtraining. Verschiedene Varianten mit Fokus auf defensive Footwork, Ausdauer und Körperhaltung.",
-  "defense-fickung": "Reines Defensiv-Konditionstraining. Footwork-Sequenzen ohne Ball: Slides, Closeouts, Rotationen.",
   "quivern": "Defensive Footwork-Sequenz: Baseline quivern → Sprint → Slides auf Anzeige → Sprint → quivern → etc. Ganzfeld-Kondition mit defensiver Stance.",
   "1-1-ruecken": "1-1 Drill: Defense beginnt mit Rücken zum Angreifer. Ball auf Rücken legen oder Coach passt — Defense muss reagieren und closeout.",
   "1-1-korridor": "1-1 in definiertem Korridor (Hütchen markieren Bereich). Defense muss Dribbler aus Korridor drängen. Offense versucht durchzubrechen.",
@@ -1521,6 +1635,279 @@ const DRILL_DESC = {
   "bl-sl": "Baseline Box (Mann): Screen the Screener → 3 Ausstiege. Sideline: Play '1', Play '2' oder Into Walk. Zone BL Line: alle 4 in Linie, Improvisation.",
   "zone-intro": "Zone Offense Prinzipien: Gg. 2-3: Bigs hinter Zone, Wingpass → Ballside Big Short Corner / Weakside Big Highpost. Gg. 3-2: 4-out oder 3-out mit Runner. Immer Baseline beim Drive. Bis 2./3. Swing.",
 };
+
+// ============================================================
+// DRILL-BESCHREIBUNGEN — EN
+// ============================================================
+const DRILL_DESC_EN = {
+  "doppelpaesse": "Variants: Basic / Inside hand / Outside hand / Behind the back / With facing / One Chest+Bounce / Running / Switch pass types / Conversation.",
+  "extraball": "4 players in a circle/square, 5 balls — one ball is always extra and gets passed around. Level 1: Free. Level 2: No bounce passes. Level 3: Tight — passer must jump. Level 4: After each pass cut through a defined spot.",
+  "spielen-ohne-dribbling": "Free play without dribbling. Can be layered as a constraint onto any drill. Focus: passing, cutting, spacing.",
+  "10pass": "All shots 'contested' — kick-outs only. Start slow, increase pace. Sequence: Split into Push → Down into Push → Fist into Push → Push into Swing → Split into Swing.",
+  "7er10er": "Basket = 2 pts. On make: offense takes out and continues. On miss: whoever catches the rebound starts at 0. Defense may only guard in the passing lane. Wrong cut: -1 / turnover.",
+  "kniekehlenfassen": "2 players facing each other — grab the back of the knee = point. V1: no ball. V2: with dribbling. Further rounds with restrictions (one hand, specific moves).",
+  "shield": "2-1 setup: one player takes 'Shield' role. V-A: Shield screens the tagger away from the runner. V-B: Shield blocks the defender. Optional finish: 1-on-1 to the basket.",
+  "aufdrehen": "V1: Wing turn — face up, fake, floor touch, layup. V2: Face, fake, 1 dribble layup. V3: Face, fake, ½ dribble tempo change. Post-V: 1 dribble hookshot, pass fake before entry.",
+  "aufdrehen-defense": "Same base as Turn Drill, now with live defense. Offense reads the defender and decides: face-up, drive, or pass. Competitive.",
+  "aufdrehen-pnr": "Setup: player with ball at TOC, cutter runs in and out to a wing. 1. Passer follows his pass → sets pick → rolls off. 2. First cutter finishes. 3. Screen-setter cuts to opposite wing.",
+  "leiter-dribbling": "Transition directly from ladder footwork into a dribbling sequence. Combines coordination with ball handling.",
+  "rausschlagen": "Any number of players in a zone. Knock the ball away = point. Zone shrinks. V1: knocked-out players re-enter. V2: knocked-out players continue among themselves.",
+  "pressbreak": "Baseline inbounder, ballside guard, strongside wing behind halfcourt. Inbound to guard → wing comes back → pass → inbounder sprints through → pass.",
+  "banana": "4 lines in corners, 2 diagonals have the ball. Continuous: 1 passes diagonal → runs toward 4. 2 passes to 3 → joins 4's line. 3 runs to basket → pass from 4 → layup → runs to 2's line. Progression: 2-3 balls, max pace.",
+  "dribbling-korridor": "Phase 1: Static to near 3-pt line → check → 1-on-1 live. Phase 2: Static to halfcourt, then dynamic — 1-on-1 no check live. Phase 3: Full court 1-on-1 live.",
+  "bh-clinic": "All ball handling variants: No ball (around body, over shoulder etc.) → With ball (2 balls, cross etc.) → With tennis ball → Competitive. Cones optional.",
+  "issalo": "2 lines. Ball handler dribbles to cone, makes a hand change, other line sprints and catches 'in stride'. Coach makes the pass deliberately difficult.",
+  "ucla": "UCLA variant: fill cut from corner to wing. V1: Fill Cut → pass → turn → layup. V2: Fill cut to TOC → backdoor → layup. V3: Fill cut → pass → turn → jumper off dribble. V4: Fill cut to TOC → backdoor → floater.",
+  "layup-run": "Player at extended FT line + player with ball at baseline → pass into backcourt → give & go → continue to frontcourt → give & go at extended FT line → finish. Backcourt→Frontcourt, frontcourt gets rebound, finisher becomes next backcourt player on other side.",
+  "gegenbewegung": "2 players on wing. Counter-move before the catch — first away, then toward the ball. Focus: timing, footwork on the catch, going directly into the shot.",
+  "pendel": "Pendulum movement between two spots. Catch & shoot on the move. Focus: balance on landing, clean release.",
+  "shooting-closeout": "Passer kicks out → defender sprints closeout → shooter fires → contested shot. V2: Closeout with two defenders. V3: Closeout with three defenders. Extension: closeout into box out.",
+  "shooting-mittellinie": "Shooting from various spots starting at halfcourt. Focus: shot after a long run, conditioning + technique.",
+  "maedn": "Sorry!-style shooting game. Players shoot from set spots. 2pt/3pt scoring. Optional: half-court shot at the end.",
+  "onemore": "Shooting with 'One More' rule: make → next spot. Miss → try again. Competitive.",
+  "aroundtheworld": "Shooting from positions around the basket. Competitive: who completes all stations first?",
+  "mos": "Players on both sides in 2 baseline lines. Extra player with ball in middle. Middle player passes to outlet → 2 passes → layup → wings → jumper. Layup player gets rebound → continuum.",
+  "guards-wing-11": "Fakes! Baseline moves: In & Out · 2x Cross. Middle moves: In & Out into Cross · 1/3 Cross. Finishes: 1-Step-Lay · Reverse · Eurostep · Rolling. Extension: +1 defender (2-1 defense) / +1 static offensive player as kickout option.",
+  "bigs-finishing": "Fakes! Middle Hook · Middle Extendo · BL Drop Step · Up & Under. Extension: +1 defender (2-1 defense, live) / +1 static offensive player as kickout option. Competitive. Gamelike.",
+  "fastbreak": "3-Man: Wing Finish · Wing Kickout · 1-Cut variations · 2-1 back. 4-Man: Extra trailer, 2-2 back. 5-Man: Full transition + rim runner. Finish cycles: 1.Wing Drive · 2.Wing Shot · 3.Rimrunner Finish · 4.Trailer Jumper · 5.Trailer in PnR.",
+  "transition-cycles": "5 finishes cyclically: 1.Wing Drive · 2.Wing Shot · 3.Rimrunner Finish · 4.Trailer Jumper · 5.Trailer in PnR. Every role rotates through all players.",
+  "53-transition": "2 equal-sized teams (3-5 per team). Each team gets numbers. Offense at baseline, defense at free-throw line. Coach throws ball in and calls a number — those players must touch baseline before playing defense. Competitive.",
+  "54plus1": "5 vs 4+1: offense starts with an advantage, one extra defender comes in delayed. Focus: exploit the advantage before defense is complete.",
+  "11man": "Continuous 3-on-2. Setup: 3 with ball at halfcourt, 2 defenders in tandem at each basket, 4 at extended free-throw line. After finish: outlet pass → new 3-on-2 other direction. Continuous, no stops.",
+  "zahlenspiel": "Offense starts with free throw, defense with 2 rebounders. After FT: 2-1. After score/stop: 2 new offense → 3-2. Next team in → 4-3. Continue to 5-5. Both teams play one full sequence.",
+  "transition-defense": "Transition defense in up & down conditioning drill format. Stop the ball → build up → conditioning through repeated sequences.",
+  "defense-korridor": "Phase 1: Static to near 3-pt line → check → 1-on-1 live. Phase 2: Static to halfcourt, then dynamic — 1-on-1 no check live. Phase 3: Full court 1-on-1 live.",
+  "closeout-clinic": "V1: 1-on-1 closeout — technical, restricted defense. V2: Closeout with two defenders (skip pass → closeout). V3: Closeout with three defenders. Extensions: touch helpside cone / defender starts from baseline / coach calls 'Live!' only when defender is out of position. Includes closeout into box out.",
+  "shell": "4-4 or 5-5 on halfcourt. Phase 1: Passes only, defense positioning. Phase 2: 1-2 dribbles allowed — defense: 'Kill' on dead dribble. Phase 3: Cuts allowed. Phase 4: Live — switch after 5 stops.",
+  "press-22": "2 defenders / 2 offense / full court. X1 pushes ball to sideline, X2 secures weakside at baseline. After swing: X1 and X2 rotate — X2 becomes new ballside, X1 goes weakside. Continuous.",
+  "press-55": "Full 2-2-1 zone press in 5-5. Row 1 (1,2): push ballside to sideline, weakside baseline. Row 2 (3,4): ballside covers the line pass. Row 3 (5): middle. Goal: force giveaways, not gamble for steals.",
+  "helpside": "4-man setup. Coach at TOC. Coach passes to a wing: penetration allowed. Remaining defenders: help the helper + rotation. Extensions: touch helpside cone, coach calls 'Drive!', 4-3 overload. Duration approx. 15 min.",
+  "quivern": "Defensive footwork sequence: baseline quiver → sprint → slides on command → sprint → quiver → etc. Full-court conditioning in defensive stance.",
+  "1-1-ruecken": "1-on-1 drill: defense begins with back to the attacker. Ball placed on back or coach passes — defense must react and close out.",
+  "1-1-korridor": "1-on-1 in a defined corridor (cones mark the zone). Defense must push the dribbler out of the corridor. Offense tries to break through.",
+  "boxout": "Offense in formation (1-out to 5-out), passing around — or coach has the ball. Defense optional: stands on their man, or runs in a circle (Ringelpiez). On signal or coach's shot: defense boxes out, offense fights for rebound. Extension: live half or full court.",
+  "closeout-boxout": "Passer kicks out → defense sprints closeout → shooter fires → defense turns and boxes out.",
+  "entry-clinic": "Work through various entry options: Wing Entry, High Post Entry, Backdoor option. Focus: clean entry pass and correct timing.",
+  "aufdrehen-clinic": "2-2 turn drill with live defense. Offense reads the defender after turning: face-up, drive, or pass. Competitive.",
+  "pnr-read": "3-3 or 4-4 focused on PnR reads: ball handler reads coverage (drop → attack, hedge → 3rd man, switch → mismatch). Roller and pop big react accordingly.",
+  "pnr-22": "2-2 pick & roll drill with 2 balls on one side of the court. High rep count. Focus: ball handler reads and roller timing.",
+  "33-seite": "3-3 on one side of the court. Tight space → better reading of cuts, helpside and spacing.",
+  "ueberzahl": "Offense with numerical advantage. Focus: exploit the advantage, quick decisions, help the helper.",
+  "5-0-motion": "5 players without defense rehearse motion offense patterns. Cuts, screens, passes — every position learns every role.",
+  "backdoor": "1-on-1 or 2-on-2 setup — starting position in corner or on wing. Offense: fill to wing / from wing to TOC — always: get open or go backdoor immediately! Cones mark how high you're allowed to go.",
+  "spielen": "Free 5-5 halfcourt or full court. Coach sets coverage (man or zone) or switches mid-game. Constraints per focus: 3 dribbles / bonus OReb / zone only / force plays. Switch after score or X stops.",
+  "3dribbles": "5-5 or smaller game with restriction: max. 3 dribbles per possession and/or minimum passes before shot. Forces movement, spacing and ball movement. Can be layered as a constraint onto any drill.",
+  "bonuspunkte": "Game with rule set: offensive rebound scores bonus points (e.g. +1 extra). Focuses on offensive rebounding and boxing-out failures. Can be layered as a constraint onto any game.",
+  "1-1-clinic": "Fakes! Baseline moves: In & Out · 2x Cross. Middle moves: In & Out into Cross · 1/3 Cross. Finishes: 1-Step-Lay · Reverse · Eurostep · Rolling. Blind 1-on-1: defense starts with back. Chase 1-on-1: both run around cone. Corridor 1-on-1: defined zone.",
+  "ssg": "Small sided games on a small court. High reps, high intensity. Constraints per focus.",
+  "post-aufdrehen": "Big turns in the post. Variants: 1 dribble hookshot, pass fake before entry, clean entry pass. Run-catch: big sprints to spot → catches → footwork move.",
+  "drop-step": "Post footwork series: Drop step → power layup → up & under. Both sides. Extension: with light defender.",
+  "post-entry": "Guard plays entry pass into post → post makes move. Variants: play immediately, cut first, counter-move. Focus: clean entry.",
+  "44-highpost": "4-4 with entry into high post as initiation. Big at high post → options: high-low, pull, push, 1-on-1 or wing backdoor.",
+  "bigs-smalls": "Bigs and smalls train separately at different baskets — position-specific training in parallel.",
+  "bigman-shooting": "Big man specific spots: both blocks, short corners, elbow, high post. Passer plays entry pass → big makes footwork move (drop step, hook, up & under, fade). Variant: 1-on-1 live.",
+  "leiter": "Ladder footwork in various patterns. Coordination, quickness, explosiveness.",
+  "stationentraining": "S1a: Passing in agility ladder (2 balls). S1b: Passing against wall one hand 20x. S2a: Dribbling + catch tennis ball. S2b: Dribbling + tennis ball hand switch. S3a: Post entry + hookshot. S3b: Post entry + another move. S3c: Cut in → out → fake.",
+  "defense-kondi": "Intensive conditioning session with defensive focus: slides, closeouts, sprints, quivering in various combinations. Full court.",
+  "football": "Played with basketball, football and tennis ball simultaneously. 3 possessions per team. Switch after 3. New possession starts where last solid possession was.",
+  "motion-durchgehen": "Run through full motion offense without defense. All actions (Wing Entry, High Post Entry, Fist, Walk, Philly) in correct order with correct reads.",
+  "philly": "Iverson Entry → stagger for weakside wing → PnR dummy → read stagger → if no finish: back to Iverson cutter → rescreen with PnR big.",
+  "smash": "Zone set: wing entry with backdoor → 2 picks from low-post bigs → weakside wing fills TOC. Exits: wide open wing / low post counter screen / downscreen / high PnR.",
+  "123-walk": "Work through set plays: Play '1' (Zipper Entry → Inverse Down Screen → PnR), Play '2' (Handoff Variation), Walk (Wing Entry → 2-man backdoor continuum). Run to 2nd/3rd swing.",
+  "bl-sl": "Baseline Box (man): screen the screener → 3 exits. Sideline: Play '1', Play '2' or Into Walk. Zone BL Line: all 4 in a line, improvise.",
+  "zone-intro": "Zone offense principles: vs. 2-3: bigs behind zone, wing pass → ballside big short corner / weakside big high post. vs. 3-2: 4-out or 3-out with runner. Always baseline on drive. Up to 2nd/3rd swing.",
+};
+
+// Helper: get drill description in current language
+function getDrillDesc(id) {
+  if (currentLang === 'en') return DRILL_DESC_EN[id] || DRILL_DESC_DE[id] || '';
+  return DRILL_DESC_DE[id] || '';
+}
+
+// Compatibility alias
+const DRILL_DESC = DRILL_DESC_DE;
+
+// ============================================================
+// DRILL NAMES — EN
+// ============================================================
+const DRILL_NAMES_EN = {
+  "doppelpaesse":"Double Pass Drill","extraball":"Extra Ball Pass Drill (4+1)","spielen-ohne-dribbling":"No-Dribble Scrimmage","10pass":"10 Pass Drill / 5-0 Motion","7er10er":"7s / 10s Passing in Motion","kniekehlenfassen":"Back-of-Knee Tag / Dribbling Progression","shield":"Shield Drill (2-1 / into 1-1)","aufdrehen":"Turn & Face Drill (Wing / Post)","aufdrehen-defense":"Turn & Face with Defense","aufdrehen-pnr":"Turn & Face into PnR Warmup","leiter-dribbling":"Ladder into Dribbling","rausschlagen":"Dribbling Knockout","pressbreak":"Press Break Warmup","banana":"Banana Drill","dribbling-korridor":"Dribbling Corridor","bh-clinic":"Ball Handling Clinic","issalo":"Issalo Shooting","ucla":"UCLA Shooting Warmup Drill","layup-run":"Layup Run Drill","gegenbewegung":"Counter-Move Shooting","pendel":"Pendulum Shooting","shooting-closeout":"Shooting Closeout","shooting-mittellinie":"Halfcourt Shooting","maedn":"Sorry! Shooting / KKW","onemore":"One More Shooting","aroundtheworld":"Around the World","mos":"Mos Drill","guards-wing-11":"Guards Wing 1-on-1 Clinic","bigs-finishing":"Bigs Finishing Clinic","fastbreak-clinic":"Fastbreak Clinic (3/4/5 Man)","53-transition":"5-3 / 5-4 Transition","11man":"11 Man","zahlenspiel":"FT, 2-1, 3-2 … (Number Game)","defense-korridor":"Defense Corridor","closeout-clinic":"Closeout Clinic","shell":"Shell Drill","press-22":"2-2 Fullcourt Press Drill","press-55":"5-5 Fullcourt Press Drill","helpside":"5-5 Helpside Drill","quivern":"Quiver Defense","1-1-ruecken":"1-on-1 Back-to-Attacker","1-1-korridor":"1-on-1 Corridor","boxout":"Box Out Drill (1-1 / 3-3 / 4-4 / 5-5)","closeout-boxout":"Closeout into Box Out","entry-clinic":"Entry Clinic (PnR / Post / DHO)","orbit":"Orbit Drill","aufdrehen-clinic":"Turn & Face Clinic (2-2 Live)","pnr-read":"PnR Read Drill","pnr-22":"PnR 2-2 Side Drill (2 Balls)","33-seite":"3-3 One Side","ueberzahl":"Overload (4-3, 5-4 etc.)","5-0-motion":"5-0 Motion","backdoor":"Backdoor Cut Drill","spielen":"Scrimmage (Man / Zone)","3dribbles":"3 Dribbles / X Passes","bonuspunkte":"Bonus Points OReb","1-1-clinic":"1-on-1 Clinic (Blind / Corridor / Chase)","ssg":"Small Sided Games","post-aufdrehen":"Post Turn / Run-Catch","drop-step":"Drop Step / Power Layup / Up & Under","post-entry":"Post Entry Drill","44-highpost":"4-4 High Post Entry","bigs-smalls":"Bigs / Smalls Split","bigman-shooting":"Big Man Shooting / 1-on-1 Bigs","leiter":"Agility Ladder","stationentraining":"Station Training","defense-kondi":"Defense Conditioning Corridor","football":"Football (Basketball / Tennis Ball)","motion-durchgehen":"Motion 5-0 Walkthrough","philly":"Philly / Philly Flip","smash":"Smash (Zone)","123-walk":'"1" / "2" / Walk',"bl-sl":"BL / SL Inbound Play","zone-intro":"Zone Intro / 4-out / 3-out",
+};
+function getDrillName(d) { return currentLang === 'en' ? (DRILL_NAMES_EN[d.id] || d.name) : d.name; }
+
+// ============================================================
+// META TRANSLATIONS
+// ============================================================
+const ML = {
+  de: { phase:'Trainingsphase', spielphase:'Spielphase', intensity:'Intensität', minSpieler:'Min. Spieler', feld:'Feld', baelle:'Bälle', material:'Material', defense:'Defense', competitive:'Competitive', gamelike:'Gamelike', abschluss:'Abschluss' },
+  en: { phase:'Training Phase', spielphase:'Game Phase', intensity:'Intensity', minSpieler:'Min. Players', feld:'Court', baelle:'Balls', material:'Equipment', defense:'Defense', competitive:'Competitive', gamelike:'Gamelike', abschluss:'Finish' },
+};
+const SLOT_LABELS = { de:{ Warmup:'Warmup', Stretching:'Stretching', Hauptteil:'Hauptteil', Ausdehnen:'Ausdehnen' }, en:{ Warmup:'Warm-up', Stretching:'Stretching', Hauptteil:'Main Part', Ausdehnen:'Cool-down' } };
+function tSlot(l) { return (currentLang==='en'?SLOT_LABELS.en:SLOT_LABELS.de)[l]||l; }
+function tPhase(p) { return currentLang==='en'?(p==='Warmup'?'Warm-up':p==='Hauptteil'?'Main Part':p):p; }
+function tIntensity(v) { return currentLang==='en'?({hoch:'high',mittel:'medium',niedrig:'low'}[v]||v):v; }
+function tFeld(v) { return currentLang==='en'?({Ganzfeld:'Full Court',Halbfeld:'Half Court'}[v]||v):v; }
+function tBool(v) { return currentLang==='en'?(v?'yes':'no'):(v?'ja':'nein'); }
+function tDefense(v) { return currentLang==='en'?({nein:'no','ja (live)':'yes (live)','ja (eingeschränkt)':'yes (restricted)','ja (live/eingeschränkt)':'yes (live/restricted)',eingeschränkt:'restricted',optional:'optional'}[v]||v):v; }
+function tCompetitive(v) { return currentLang==='en'?({nein:'no',ja:'yes',optional:'optional'}[v]||v):v; }
+const CAT_EN = {Kondition:'Conditioning',Plays:'Plays',Passing:'Passing',Ballhandling:'Ball Handling',Shooting:'Shooting',Transition:'Transition',Defense:'Defense',Rebounding:'Rebounding',Offense:'Offense',Post:'Post'};
+function tCat(c) { return currentLang==='en'?(CAT_EN[c]||c):c; }
+
+const DRILL_NOTES_EN = {
+  "spielen-ohne-dribbling":"Can also be used as a constraint/modifier on other drills",
+  "shooting-closeout":"Includes shooting with box out as a variant",
+  "fastbreak-clinic":"Includes: 3/4/5 Man Fastbreak + Transition Cycles",
+  "closeout-clinic":"Incl. 2-2/3-3 Closeout + Closeout into Box Out",
+  "helpside":"Incl. Small Sided Games Help the Helper + 3-3 Help-Rotate",
+  "boxout":"Combined: 5-5/3-3/1-1 Box Out + Ringelpiez rotation",
+  "3dribbles":"Can also be used as a constraint/modifier on other drills",
+  "bonuspunkte":"Can also be used as a constraint/modifier on other drills",
+  "defense-kondi":"Replaces: Ole/Defense Fickung",
+};
+function getDrillNote(d) { return currentLang==='en'?(DRILL_NOTES_EN[d.id]||d.note||''):(d.note||''); }
+
+function toastMsg(key) {
+  const m={'plan-deleted':{de:'Plan gelöscht',en:'Plan deleted'},'no-plan':{de:'Erst einen Plan erstellen oder laden',en:'Create or load a plan first'},'no-active':{de:'Kein Plan aktiv',en:'No active plan'},'saved':{de:'✓ Plan gespeichert',en:'✓ Plan saved'},'copied':{de:'✓ Kopiert',en:'✓ Copied'}};
+  return m[key]?.[currentLang]||key;
+}
+
+// ============================================================
+// CONSTRAINTS / MODIFIER — Bibliothek
+// ============================================================
+const CONSTRAINTS = [
+  // SCORING & REGELN
+  { id: "max3dribbel", label: "Max. 3 Dribbles", desc: "Max. 3 Dribbles pro Ballbesitz — zwingt zu Bewegung, Spacing und Ball-Movement.", cat: "Scoring & Regeln" },
+  { id: "xpaesse", label: "X Pässe vor Abschluss", desc: "Mindestanzahl Pässe erforderlich bevor ein Wurf erlaubt ist.", cat: "Scoring & Regeln" },
+  { id: "kein-dribbling", label: "Kein Dribbling", desc: "Keine Dribbles erlaubt — nur Pässe, Cuts und Bewegung ohne Ball.", cat: "Scoring & Regeln" },
+  { id: "bonuspunkte-oreb", label: "Bonuspunkte Off. Rebound", desc: "Offensiver Rebound gibt Bonuspunkte (z.B. +1 extra) — Fokus: OReb und Boxout.", cat: "Scoring & Regeln" },
+  { id: "nur-catchshot", label: "Nur Catch & Shoot", desc: "Würfe nur direkt aus dem Catch — kein zusätzliches Dribbling vor dem Abschluss.", cat: "Scoring & Regeln" },
+  { id: "minus1-turnover", label: "-1 bei Turnover", desc: "Jeder Turnover gibt der Defense einen Punkt oder zieht der Offense einen Punkt ab.", cat: "Scoring & Regeln" },
+  { id: "minus1-wrongcut", label: "-1 bei falschem Cut", desc: "Falscher Cut oder schlechtes Leseverhalten kostet sofort einen Punkt.", cat: "Scoring & Regeln" },
+  { id: "wechsel-5stops", label: "Wechsel nach 5 Stops", desc: "Defense und Offense tauschen die Seiten nach 5 erfolgreichen Defensiv-Stops.", cat: "Scoring & Regeln" },
+  { id: "wechsel-score", label: "Wechsel nach Score", desc: "Nach jedem erfolgreichen Korb wechseln Offense und Defense.", cat: "Scoring & Regeln" },
+  // OFFENSE FOKUS
+  { id: "plays-erzwingen", label: "Plays erzwingen", desc: "Offense muss gesetzte Plays laufen bevor frei gespielt werden darf.", cat: "Offense" },
+  { id: "nur-backdoor", label: "Backdoor lesen", desc: "Offense darf nur Backdoor Cuts machen wenn Defender in Passing Lane steht.", cat: "Offense" },
+  { id: "3rd-man", label: "3rd Man Option", desc: "Nach PnR oder Cut: Ball muss zuerst zum 3rd Man bevor Abschluss möglich.", cat: "Offense" },
+  { id: "highlow", label: "High-Low Pflicht", desc: "Jeder Angriff muss über High-Low Aktion initiiert werden.", cat: "Offense" },
+  // DEFENSE FOKUS
+  { id: "nur-zone", label: "Nur Zone Defense", desc: "Defense spielt ausschließlich Zone — keine Mann-Mann erlaubt.", cat: "Defense" },
+  { id: "nur-mann", label: "Nur Mann-Mann", desc: "Defense spielt ausschließlich Mann-Mann — keine Zone erlaubt.", cat: "Defense" },
+  { id: "help-helper", label: "Help the Helper", desc: "Nach jeder Helpside-Aktion muss ein zweiter Spieler rotieren und helfen.", cat: "Defense" },
+  { id: "help-rotate", label: "Help-Rotate Pflicht", desc: "Jede Rotation muss komplett durchgezogen werden — kein Hängenbleiben erlaubt.", cat: "Defense" },
+  { id: "huetchen-helpline", label: "Hütchen Helpside-Linie", desc: "Defender muss Hütchen auf Helpside-Linie berühren bevor er helfen darf.", cat: "Defense" },
+  { id: "baseline-first", label: "Baseline zuerst berühren", desc: "Defender muss erst Baseline berühren bevor er rotieren oder helfen darf.", cat: "Defense" },
+  { id: "coach-drive", label: "Nur auf Coach-Signal", desc: "Penetration oder Aktion ist erst erlaubt wenn Coach 'Drive!' / das Signal ruft.", cat: "Defense" },
+  // KONDITION & SCHWIERIGKEIT
+  { id: "zeitdruck", label: "Zeitdruck", desc: "Angriff muss innerhalb von X Sekunden abgeschlossen werden (z.B. 8 Sek Shotclock).", cat: "Kondition" },
+  { id: "1sek-delay", label: "1 Sek. Verzögerung", desc: "Defender oder Offense wartet 1 Sekunde nach Signal bevor Aktion beginnt.", cat: "Kondition" },
+  { id: "offense-halbfeld", label: "Nur von bestimmten Spots", desc: "Offense darf nur von definierten Positionen (z.B. nur Wing) penetrieren oder abschließen.", cat: "Kondition" },
+];
+
+// ============================================================
+// CONSTRAINT STATE
+// ============================================================
+let constraintTargetSlotId = null;
+let constraintTargetDrillIdx = null;
+
+function openConstraintModal(slotId, drillIdx, drillName, e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  constraintTargetSlotId = slotId;
+  constraintTargetDrillIdx = drillIdx;
+
+  document.getElementById('constraint-modal-subtitle').textContent = (currentLang==='en'?'Drill: ':'Drill: ') + drillName;
+  document.getElementById('constraint-custom-input').value = '';
+
+  // Get current constraints for this drill slot
+  const slot = currentPlan?.slots.find(s => s.id === slotId);
+  const sd = slot?.drills[drillIdx];
+  const active = sd?.constraints || [];
+
+  // Group presets by category
+  const cats = [...new Set(CONSTRAINTS.map(c => c.cat))];
+  let html = '';
+  cats.forEach(cat => {
+    const catLabel = currentLang === 'en' ? (CONSTRAINT_T[cat]?.en || cat) : cat;
+    html += `<div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.07em;margin:10px 0 4px;">${catLabel}</div>`;
+    CONSTRAINTS.filter(c => c.cat === cat).forEach(c => {
+      const isActive = active.includes(c.label);
+      const displayLabel = currentLang === 'en' ? (CONSTRAINT_T[c.label]?.en || c.label) : c.label;
+      const displayDesc  = currentLang === 'en' ? (CONSTRAINT_DESC_EN[c.label] || c.desc) : c.desc;
+      html += `<button class="constraint-preset-btn ${isActive ? 'selected' : ''}" onclick="toggleConstraint('${c.id}','${c.label.replace(/'/g,"\\'")}')">
+        <span style="font-size:14px;flex-shrink:0;">${isActive ? '✓' : '+'}</span>
+        <span>
+          <div class="constraint-preset-label">${displayLabel}</div>
+          <div class="constraint-preset-desc">${displayDesc}</div>
+        </span>
+      </button>`;
+    });
+  });
+
+  document.getElementById('constraint-preset-list').innerHTML = html;
+  document.getElementById('constraint-modal').classList.remove('hidden');
+}
+
+function closeConstraintModal() {
+  document.getElementById('constraint-modal').classList.add('hidden');
+  constraintTargetSlotId = null;
+  constraintTargetDrillIdx = null;
+}
+
+function toggleConstraint(cId, label) {
+  const slot = currentPlan?.slots.find(s => s.id === constraintTargetSlotId);
+  if (!slot) return;
+  const sd = slot.drills[constraintTargetDrillIdx];
+  if (!sd) return;
+  if (!sd.constraints) sd.constraints = [];
+
+  const idx = sd.constraints.indexOf(label);
+  if (idx >= 0) {
+    sd.constraints.splice(idx, 1);
+  } else {
+    sd.constraints.push(label);
+  }
+
+  renderSlots();
+  autoSave();
+
+  // Re-render the modal to reflect new state
+  const drill = DRILLS.find(d => d.id === sd.drillId);
+  openConstraintModal(constraintTargetSlotId, constraintTargetDrillIdx, drill?.name || sd.drillId);
+}
+
+function addCustomConstraint() {
+  const val = document.getElementById('constraint-custom-input').value.trim();
+  if (!val) return;
+
+  const slot = currentPlan?.slots.find(s => s.id === constraintTargetSlotId);
+  if (!slot) return;
+  const sd = slot.drills[constraintTargetDrillIdx];
+  if (!sd) return;
+  if (!sd.constraints) sd.constraints = [];
+
+  if (!sd.constraints.includes(val)) {
+    sd.constraints.push(val);
+    renderSlots();
+    autoSave();
+    toast('+ Constraint: ' + val);
+  }
+  document.getElementById('constraint-custom-input').value = '';
+
+  const drill = DRILLS.find(d => d.id === sd.drillId);
+  openConstraintModal(constraintTargetSlotId, constraintTargetDrillIdx, drill?.name || sd.drillId);
+}
+
+function removeConstraint(slotId, drillIdx, label, e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  const slot = currentPlan?.slots.find(s => s.id === slotId);
+  if (!slot) return;
+  const sd = slot.drills[drillIdx];
+  if (!sd || !sd.constraints) return;
+  sd.constraints = sd.constraints.filter(c => c !== label);
+  renderSlots();
+  autoSave();
+}
+
 // ============================================================
 let currentPlan = null;
 let savedPlans = [];
@@ -1542,9 +1929,9 @@ function saveToStorage() {
   if (typeof fbSavePlans === 'function') {
     if (typeof fbSetSyncing === 'function') fbSetSyncing(true);
     const el = document.getElementById('sync-status');
-    if (el) { el.textContent = '☁ Speichern…'; el.style.color = 'var(--text-muted)'; }
+    if (el) { el.textContent = currentLang==="en"?'☁ Saving…':'☁ Speichern…'; el.style.color = 'var(--text-muted)'; }
     fbSavePlans(savedPlans).then(() => {
-      if (el) { el.textContent = '☁ Gespeichert'; el.style.color = 'var(--green)'; }
+      if (el) { el.textContent = currentLang==="en"?'☁ Saved':'☁ Gespeichert'; el.style.color = 'var(--green)'; }
       setTimeout(() => {
         if (el) { el.textContent = '☁ Cloud'; el.style.color = 'var(--text-subtle)'; }
         if (typeof fbSetSyncing === 'function') fbSetSyncing(false);
@@ -1584,33 +1971,34 @@ const CAT_CLASS = {
 
 function renderBibliothek(drills) {
   const grid = document.getElementById('bib-grid');
-  document.getElementById('bib-result-count').textContent = drills.length + ' Drills';
+  const countLabel = currentLang === 'en' ? drills.length + ' Drills' : drills.length + ' Drills';
+  document.getElementById('bib-result-count').textContent = countLabel;
   document.getElementById('nav-count-bib').textContent = drills.length;
 
   if (drills.length === 0) {
-    grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">Keine Drills gefunden — Filter anpassen</div>';
+    grid.innerHTML = `<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">${currentLang==='en'?'No drills found — adjust filters':'Keine Drills gefunden — Filter anpassen'}</div>`;
     return;
   }
 
   grid.innerHTML = drills.map(d => `
     <div class="drill-card" onclick="openDrillModal('${d.id}')">
       <div class="drill-card-header">
-        <div class="drill-card-name">${d.name}</div>
-        <span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${d.kat}</span>
+        <div class="drill-card-name">${getDrillName(d)}</div>
+        <span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${tCat(d.kat)}</span>
       </div>
       <div class="drill-meta-row">
-        ${d.phase.map(p => `<span class="meta-pill phase-${p.toLowerCase()}">${p === 'Warmup' ? '🔆' : '⚡'} ${p}</span>`).join('')}
-        <span class="meta-pill intensity-${d.intensity}">${d.intensity}</span>
+        ${d.phase.map(p => `<span class="meta-pill phase-${p.toLowerCase()}">🔆 ${tPhase(p)}</span>`).join('')}
+        <span class="meta-pill intensity-${d.intensity}">${tIntensity(d.intensity)}</span>
         <span class="meta-pill">👥 ${d.minSpieler}+</span>
         ${d.spielphase.slice(0,2).map(sp => `<span class="meta-pill">${sp}</span>`).join('')}
       </div>
       <div class="drill-meta-row" style="margin-top:4px;">
-        ${d.defense !== 'nein' ? '<span class="meta-pill" style="background:#fee8e8;color:#8b1a1a">D</span>' : ''}
-        ${d.competitive === 'ja' ? '<span class="meta-pill" style="background:#e8f0e8;color:#1a6b1a">🏆</span>' : ''}
-        ${d.gamelike ? '<span class="meta-pill" style="background:#e8e8fe;color:#2b2b8b">🎮</span>' : ''}
+        ${d.defense !== 'nein' ? `<span class="meta-pill" style="background:#fee8e8;color:#8b1a1a">D</span>` : ''}
+        ${d.competitive === 'ja' ? `<span class="meta-pill" style="background:#e8f0e8;color:#1a6b1a">🏆</span>` : ''}
+        ${d.gamelike ? `<span class="meta-pill" style="background:#e8e8fe;color:#2b2b8b">🎮</span>` : ''}
         ${d.material !== 'keine' ? `<span class="meta-pill">🔧 ${d.material.split(',')[0].trim()}</span>` : ''}
       </div>
-      <button class="drill-add-btn" onclick="event.stopPropagation();quickAddDrill('${d.id}')" title="Zu Trainingsplan hinzufügen">+</button>
+      <button class="drill-add-btn" onclick="event.stopPropagation();quickAddDrill('${d.id}')" title="${currentLang==='en'?'Add to practice plan':'Zu Trainingsplan hinzufügen'}">+</button>
     </div>
   `).join('');
 }
@@ -1624,7 +2012,9 @@ function applyBibFilters() {
   const spieler = parseInt(document.getElementById('bib-spieler').value) || 999;
 
   const filtered = DRILLS.filter(d => {
-    if (search && !d.name.toLowerCase().includes(search) && !d.kat.toLowerCase().includes(search)) return false;
+    const enName = (DRILL_NAMES_EN[d.id] || '').toLowerCase();
+    const enCat = (CAT_EN[d.kat] || '').toLowerCase();
+    if (search && !d.name.toLowerCase().includes(search) && !d.kat.toLowerCase().includes(search) && !enName.includes(search) && !enCat.includes(search)) return false;
     if (kat && d.kat !== kat) return false;
     if (phase && !d.phase.includes(phase)) return false;
     if (spielphase && !d.spielphase.includes(spielphase)) return false;
@@ -1651,30 +2041,30 @@ function resetBibFilters() {
 function openDrillModal(drillId, fromPicker) {
   const d = DRILLS.find(x => x.id === drillId);
   if (!d) return;
-  document.getElementById('modal-drill-name').textContent = d.name;
-  document.getElementById('modal-drill-cat').innerHTML = `<span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${d.kat}</span>`;
+  document.getElementById('modal-drill-name').textContent = getDrillName(d);
+  document.getElementById('modal-drill-cat').innerHTML = `<span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${tCat(d.kat)}</span>`;
 
+  const L = ML[currentLang];
   const meta = [
-    ['Trainingsphase', d.phase.join(' + ')],
-    ['Spielphase', d.spielphase.join(', ')],
-    ['Intensität', d.intensity],
-    ['Min. Spieler', d.minSpieler + '+'],
-    ['Feld', d.feld],
-    ['Bälle', d.bälle],
-    ['Material', d.material],
-    ['Defense', d.defense],
-    ['Competitive', d.competitive],
-    ['Gamelike', d.gamelike ? 'ja' : 'nein'],
-    ['Abschluss', d.abschluss ? 'ja' : 'nein'],
+    [L.phase,       d.phase.map(tPhase).join(' + ')],
+    [L.spielphase,  d.spielphase.join(', ')],
+    [L.intensity,   tIntensity(d.intensity)],
+    [L.minSpieler,  d.minSpieler + '+'],
+    [L.feld,        tFeld(d.feld)],
+    [L.baelle,      d.bälle],
+    [L.material,    currentLang==='en'&&d.material==='keine'?'none':d.material],
+    [L.defense,     tDefense(d.defense)],
+    [L.competitive, tCompetitive(d.competitive)],
+    [L.gamelike,    tBool(d.gamelike)],
+    [L.abschluss,   tBool(d.abschluss)],
   ];
 
   document.getElementById('modal-meta-grid').innerHTML = meta.map(([k,v]) => `
     <div class="meta-item"><div class="meta-item-label">${k}</div><div class="meta-item-value">${v}</div></div>
   `).join('');
 
-  // Beschreibung einblenden
   const descEl = document.getElementById('modal-drill-desc');
-  const desc = DRILL_DESC[d.id];
+  const desc = getDrillDesc(d.id);
   if (desc) {
     descEl.textContent = desc;
     descEl.style.display = 'block';
@@ -1682,13 +2072,13 @@ function openDrillModal(drillId, fromPicker) {
     descEl.style.display = 'none';
   }
 
-  let noteSection = '';
-  if (d.note) noteSection += `<div class="inline-note">📌 ${d.note}</div>`;
-  document.getElementById('modal-note-section').innerHTML = noteSection;
+  const note = getDrillNote(d);
+  document.getElementById('modal-note-section').innerHTML = note ? `<div class="inline-note">📌 ${note}</div>` : '';
 
   let addSection = '';
   if (!fromPicker) {
-    addSection = `<button class="btn btn-primary" style="width:100%;" onclick="closeDrillModal();showPage('planung');quickAddDrill('${d.id}')">+ Zu Trainingsplan hinzufügen</button>`;
+    const btnLabel = currentLang === 'en' ? '+ Add to practice plan' : '+ Zu Trainingsplan hinzufügen';
+    addSection = `<button class="btn btn-primary" style="width:100%;" onclick="closeDrillModal();showPage('planung');quickAddDrill('${d.id}')">${btnLabel}</button>`;
   }
   document.getElementById('modal-add-section').innerHTML = addSection;
   document.getElementById('modal-add-section').style.display = fromPicker ? 'none' : 'block';
@@ -1794,10 +2184,10 @@ function updatePlanMeta() {
 
 function updatePlanDisplayHeader() {
   if (!currentPlan) return;
-  const name = currentPlan.name || 'Neuer Trainingsplan';
+  const name = currentPlan.name || (currentLang === 'en' ? 'New Practice Plan' : 'Neuer Trainingsplan');
   document.getElementById('plan-title-display').textContent = name;
   const sub = [currentPlan.date, currentPlan.theme].filter(Boolean).join(' · ');
-  document.getElementById('plan-subtitle-display').textContent = sub || 'Zeitblöcke planen · Drills zuweisen · Exportieren';
+  document.getElementById('plan-subtitle-display').textContent = sub || (currentLang === 'en' ? 'Plan time blocks · Assign drills · Export' : 'Zeitblöcke planen · Drills zuweisen · Exportieren');
 }
 
 function savePlan() {
@@ -1810,7 +2200,7 @@ function savePlan() {
   saveToStorage();
   renderSavedPlansList();
   renderNavSavedPlans();
-  toast('✓ Plan gespeichert');
+  toast(toastMsg('saved'));
 }
 
 function autoSave() {
@@ -1841,14 +2231,14 @@ function loadPlan(planId) {
 
 function deletePlan(planId, e) {
   if (e) e.stopPropagation();
-  showConfirm('Plan wirklich löschen?', () => {
+  showConfirm(currentLang === 'en' ? 'Delete this plan?' : 'Plan wirklich löschen?', () => {
     savedPlans = savedPlans.filter(p => p.id !== planId);
     if (currentPlan && currentPlan.id === planId) currentPlan = null;
     saveToStorage();
     renderSavedPlansList();
     renderNavSavedPlans();
     renderPlanOverview();
-    toast('Plan gelöscht');
+    toast(toastMsg('plan-deleted'));
   });
 }
 
@@ -1859,8 +2249,8 @@ function showConfirm(msg, onYes) {
     <div style="background:#fff;border-radius:10px;padding:24px 28px;max-width:320px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:DM Sans,sans-serif;">
       <div style="font-size:14px;margin-bottom:20px;color:#1a1916;">${msg}</div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <button id="confirm-no" style="padding:7px 16px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Abbrechen</button>
-        <button id="confirm-yes" style="padding:7px 16px;border:none;border-radius:6px;background:#c0392b;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">Löschen</button>
+        <button id="confirm-no" style="padding:7px 16px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">${currentLang==='en'?'Cancel':'Abbrechen'}</button>
+        <button id="confirm-yes" style="padding:7px 16px;border:none;border-radius:6px;background:#c0392b;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">${currentLang==='en'?'Delete':'Löschen'}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -1898,9 +2288,21 @@ function renderSlotHTML(slot, idx) {
   const isNoEdit = !!slot.noEdit;
 
   const drillsHTML = slot.drills.length === 0
-    ? '<div class="slot-empty-hint">— Noch keine Drills geplant</div>'
+    ? `<div class="slot-empty-hint">— ${currentLang === 'en' ? 'No drills planned yet' : 'Noch keine Drills geplant'}</div>`
     : slot.drills.map((sd, di) => {
         const d = DRILLS.find(x => x.id === sd.drillId);
+        const constraints = sd.constraints || [];
+        const constraintRow = constraints.length > 0 || true ? `
+          <div class="constraint-row">
+            ${constraints.map(c => {
+              const displayC = currentLang === 'en' ? (CONSTRAINT_T[c]?.en || c) : c;
+              return `<span class="constraint-chip" title="${c}">
+                ⚡ ${displayC}
+                <button class="constraint-chip-remove" onclick="removeConstraint('${slot.id}',${di},'${c.replace(/'/g,"\\'")}',event)" title="${currentLang === 'en' ? 'Remove' : 'Entfernen'}">✕</button>
+              </span>`;
+            }).join('')}
+            <button class="constraint-add-btn" onclick="openConstraintModal('${slot.id}',${di},'${(d?.name||sd.drillId).replace(/'/g,"\\'")}',event)">⚡ +</button>
+          </div>` : '';
         return `<div class="slot-drill-item" 
           draggable="true"
           data-slot="${slot.id}" data-idx="${di}"
@@ -1909,23 +2311,26 @@ function renderSlotHTML(slot, idx) {
           ondragleave="onDrillDragLeave(event)"
           ondrop="onDrillDrop(event)"
           ondragend="onDrillDragEnd(event)">
-          <span class="drag-handle" title="Verschieben">⠿</span>
-          <span class="drill-cat-badge ${d ? CAT_CLASS[d.kat] : ''}" style="font-size:8px;">${d ? d.kat : '?'}</span>
-          <span class="slot-drill-name">${d ? d.name : sd.drillId}</span>
-          ${d ? `<button class="info-btn" onclick="event.stopPropagation();openDrillModal('${d.id}')" title="Details">ℹ</button>` : ''}
-          <span class="slot-drill-mins">
-            <input type="number" value="${sd.mins}" min="1" max="120"
-              ondragstart="event.stopPropagation()"
-              onchange="updateDrillMins('${slot.id}',${di},this.value)"
-              style="width:36px;padding:1px 4px;border:1px solid var(--border);border-radius:3px;font-family:DM Mono,monospace;font-size:11px;text-align:center;background:var(--surface);color:var(--text);">
-            min
-          </span>
-          <button onclick="removeDrillFromSlot('${slot.id}',${di})" style="background:none;border:none;cursor:pointer;color:var(--text-subtle);font-size:14px;padding:0 2px;">✕</button>
+          <div class="slot-drill-main-row">
+            <span class="drag-handle" title="Verschieben">⠿</span>
+            <span class="drill-cat-badge ${d ? CAT_CLASS[d.kat] : ''}" style="font-size:8px;">${d ? d.kat : '?'}</span>
+            <span class="slot-drill-name">${d ? getDrillName(d) : sd.drillId}</span>
+            ${d ? `<button class="info-btn" onclick="event.stopPropagation();openDrillModal('${d.id}')" title="Details">ℹ</button>` : ''}
+            <span class="slot-drill-mins">
+              <input type="number" value="${sd.mins}" min="1" max="120"
+                ondragstart="event.stopPropagation()"
+                onchange="updateDrillMins('${slot.id}',${di},this.value)"
+                style="width:36px;padding:1px 4px;border:1px solid var(--border);border-radius:3px;font-family:DM Mono,monospace;font-size:11px;text-align:center;background:var(--surface);color:var(--text);">
+              min
+            </span>
+            <button onclick="removeDrillFromSlot('${slot.id}',${di})" style="background:none;border:none;cursor:pointer;color:var(--text-subtle);font-size:14px;padding:0 2px;">✕</button>
+          </div>
+          ${constraintRow}
         </div>`;
       }).join('');
 
   const controls = isFixed
-    ? `<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);padding:2px 6px;border:1px solid var(--border);border-radius:10px;">fest</span>`
+    ? `<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);padding:2px 6px;border:1px solid var(--border);border-radius:10px;">${currentLang === 'en' ? 'fixed' : 'fest'}</span>`
     : `${idx > 0 ? `<button class="btn btn-ghost btn-sm" onclick="moveSlot('${slot.id}',-1)">↑</button>` : ''}
        ${idx < currentPlan.slots.length - 1 ? `<button class="btn btn-ghost btn-sm" onclick="moveSlot('${slot.id}',1)">↓</button>` : ''}
        <button class="btn btn-danger btn-sm" onclick="removeSlot('${slot.id}')">✕</button>`;
@@ -1941,7 +2346,7 @@ function renderSlotHTML(slot, idx) {
   return `<div class="slot" id="slot-${slot.id}" ${isFixed ? 'style="border-left:3px solid var(--border-strong);"' : ''}>
     <div class="slot-header">
       <div class="slot-phase-indicator ${dotClass}"></div>
-      <span class="slot-phase-label">${slot.label}</span>
+      <span class="slot-phase-label">${tSlot(slot.label)}</span>
       ${minsDisplay}
       <div class="slot-header-right">${controls}</div>
     </div>
@@ -1950,7 +2355,7 @@ function renderSlotHTML(slot, idx) {
       ondragleave="onSlotContentDragLeave(event)"
       ondrop="onSlotContentDrop(event, '${slot.id}')">
       ${isNoEdit ? '' : drillsHTML}
-      ${isNoEdit ? '' : `<button class="slot-add-btn" onclick="openPickerForSlot('${slot.id}', '${slot.phase}')">+ Drill auswählen …</button>`}
+      ${isNoEdit ? '' : `<button class="slot-add-btn" onclick="openPickerForSlot('${slot.id}', '${slot.phase}')">${currentLang === 'en' ? '+ Select drill …' : '+ Drill auswählen …'}</button>`}
     </div>
   </div>`;
 }
@@ -1958,7 +2363,7 @@ function renderSlotHTML(slot, idx) {
 function addSlot() {
   if (!currentPlan) return;
   const id = 's' + Date.now();
-  currentPlan.slots.push({ id, label: 'Hauptteil', phase: 'hauptteil', durationMin: 15, drills: [] });
+  currentPlan.slots.push({ id, label: currentLang === 'en' ? 'Main Part' : 'Hauptteil', phase: 'hauptteil', durationMin: 15, drills: [] });
   renderSlots();
   updateTimeSummary();
   autoSave();
@@ -2027,7 +2432,7 @@ function removeDrillFromSlot(slotId, drillIdx) {
 }
 
 function quickAddDrill(drillId) {
-  if (!currentPlan) { toast('Erst einen Plan erstellen oder laden'); return; }
+  if (!currentPlan) { toast(toastMsg('no-plan')); return; }
   const drill = DRILLS.find(d => d.id === drillId);
   if (!drill) return;
 
@@ -2050,7 +2455,7 @@ function quickAddDrill(drillId) {
   updateTimeSummary();
   autoSave();
   showPage('planung');
-  toast('+ ' + drill.name + ' → ' + targetSlot.label);
+  toast('+ ' + getDrillName(drill) + ' → ' + tSlot(targetSlot.label));
 }
 
 // ============================================================
@@ -2085,7 +2490,8 @@ function applyPickerFilters() {
   const spieler = parseInt(document.getElementById('picker-spieler').value) || 999;
 
   const filtered = DRILLS.filter(d => {
-    if (search && !d.name.toLowerCase().includes(search)) return false;
+    const searchName = currentLang === 'en' ? (DRILL_NAMES_EN[d.id] || d.name) : d.name;
+    if (search && !searchName.toLowerCase().includes(search) && !d.name.toLowerCase().includes(search)) return false;
     if (kat && d.kat !== kat) return false;
     if (phase && !d.phase.includes(phase)) return false;
     if (spielphase && !d.spielphase.includes(spielphase)) return false;
@@ -2095,11 +2501,12 @@ function applyPickerFilters() {
   });
 
   document.getElementById('picker-count').textContent = filtered.length + ' Drills';
+  const plLabel = currentLang === 'en' ? 'pl' : 'Sp';
   document.getElementById('picker-list').innerHTML = filtered.map(d => `
     <div class="drill-picker-item" onclick="addDrillToSlot('${d.id}')">
-      <span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}" style="font-size:9px;">${d.kat}</span>
-      <span class="drill-picker-name">${d.name}</span>
-      <span class="drill-picker-meta">${d.intensity} · ${d.minSpieler}+ Sp · ${d.spielphase.join('/')}</span>
+      <span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}" style="font-size:9px;">${tCat(d.kat)}</span>
+      <span class="drill-picker-name">${getDrillName(d)}</span>
+      <span class="drill-picker-meta">${tIntensity(d.intensity)} · ${d.minSpieler}+ ${plLabel} · ${d.spielphase.join('/')}</span>
     </div>
   `).join('');
 }
@@ -2114,7 +2521,8 @@ function addDrillToSlot(drillId) {
   updateTimeSummary();
   autoSave();
   document.getElementById('picker-modal').classList.add('hidden');
-  toast('+ ' + DRILLS.find(d => d.id === drillId)?.name);
+  const d = DRILLS.find(d => d.id === drillId);
+  toast('+ ' + getDrillName(d));
 }
 
 // ============================================================
@@ -2124,14 +2532,14 @@ function exportDOCX() {
   if (!currentPlan) return;
   const html = buildWordHTML(currentPlan);
   downloadText(html, sanitizeFilename(currentPlan.name || 'Trainingsplan') + '.htm');
-  toast('📄 Word-Datei exportiert');
+  toast(currentLang==='en'?'📄 Word file exported':'📄 Word-Datei exportiert');
 }
 
 function exportWordPro() {
-  if (!currentPlan) { toast('Kein Plan aktiv'); return; }
+  if (!currentPlan) { toast(toastMsg('no-active')); return; }
   const html = buildWordHTMLPro(currentPlan);
   downloadText(html, sanitizeFilename(currentPlan.name || 'Trainingsplan') + '.htm');
-  toast('📄 Word-Dokument exportiert — in Word öffnen');
+  toast(currentLang==='en'?'📄 Word document exported — open in Word':'📄 Word-Dokument exportiert — in Word öffnen');
 }
 
 function buildWordHTMLPro(plan) {
@@ -2165,8 +2573,10 @@ function buildWordHTMLPro(plan) {
       const d = DRILLS.find(x => x.id === sd.drillId);
       const bg = i % 2 === 0 ? '#ffffff' : '#f7f6f3';
       const details = d ? `${d.minSpieler}+ Sp · ${d.feld}${d.material !== 'keine' ? ' · ' + d.material.split(',')[0] : ''}` : '';
+      const constraintStr = (sd.constraints||[]).length > 0
+        ? `<div style="font-size:8pt;color:#8b6900;margin-top:2pt;">⚡ ${(sd.constraints||[]).join(' · ')}</div>` : '';
       return `<tr style="background:${bg};font-size:9.5pt;">
-        <td style="padding:4pt 8pt;border-bottom:1pt solid #eee;font-weight:600;">${esc(d ? d.name : sd.drillId)}</td>
+        <td style="padding:4pt 8pt;border-bottom:1pt solid #eee;font-weight:600;">${esc(d ? d.name : sd.drillId)}${constraintStr}</td>
         <td style="padding:4pt 8pt;border-bottom:1pt solid #eee;">${sd.mins}'</td>
         <td style="padding:4pt 8pt;border-bottom:1pt solid #eee;">${esc(d ? d.kat : '')}</td>
         <td style="padding:4pt 8pt;border-bottom:1pt solid #eee;">${esc(d ? d.intensity : '')}</td>
@@ -2208,11 +2618,11 @@ ${plan.notes ? `<div class="notes"><strong>📌 Notizen:</strong><br>${esc(plan.
 }
 
 function exportWhatsApp() {
-  if (!currentPlan) { toast('Kein Plan aktiv'); return; }
+  if (!currentPlan) { toast(toastMsg('no-active')); return; }
   const text = buildWhatsAppText(currentPlan);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
-      toast('💬 In Zwischenablage kopiert — in WhatsApp einfügen!');
+      toast(currentLang==='en'?'💬 Copied to clipboard — paste in WhatsApp!':'💬 In Zwischenablage kopiert — in WhatsApp einfügen!');
     }).catch(() => {
       showWhatsAppFallback(text);
     });
@@ -2240,7 +2650,11 @@ function buildWhatsAppText(plan) {
     txt += `\n${emoji} *${slot.label}* (${slotMins} min)\n`;
     slot.drills.forEach(sd => {
       const d = DRILLS.find(x => x.id === sd.drillId);
-      txt += `  • ${d ? d.name : sd.drillId} — ${sd.mins} min\n`;
+      txt += `  • ${d ? d.name : sd.drillId} — ${sd.mins} min`;
+      if (sd.constraints && sd.constraints.length > 0) {
+        txt += `\n    ⚡ ${sd.constraints.join(' · ')}`;
+      }
+      txt += '\n';
     });
   });
 
@@ -2476,7 +2890,7 @@ function exportJSON() {
   if (!currentPlan) return;
   const json = JSON.stringify(currentPlan, null, 2);
   downloadText(json, sanitizeFilename(currentPlan.name || 'plan') + '.json');
-  toast('⚙️ JSON exportiert');
+  toast(currentLang==='en'?'⚙️ JSON exported':'⚙️ JSON exportiert');
 }
 
 function exportAllPlansJSON() {
@@ -2594,12 +3008,13 @@ function renderPlanOverview() {
   const totalDrillMins = plans.reduce((a,p) =>
     a + (p.slots||[]).reduce((b,s) => b + (s.drills||[]).reduce((c,sd) => c+(parseInt(sd.mins)||0),0),0), 0);
 
-  document.getElementById('overview-summary').textContent =
-    `${plans.length} von ${savedPlans.length} Plänen · ${totalDrillMins} min Drillzeit gesamt`;
+  document.getElementById('overview-summary').textContent = currentLang==='en'
+    ? `${plans.length} of ${savedPlans.length} plans · ${totalDrillMins} min total drill time`
+    : `${plans.length} von ${savedPlans.length} Plänen · ${totalDrillMins} min Drillzeit gesamt`;
 
   if (plans.length === 0) {
     document.getElementById('plan-overview-list').innerHTML =
-      '<div style="padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">Keine Pläne gefunden — Filter anpassen oder Pläne importieren.</div>';
+      `<div style="padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">${currentLang==='en'?'No plans found — adjust filters or import plans.':'Keine Pläne gefunden — Filter anpassen oder Pläne importieren.'}</div>`;
     return;
   }
 
@@ -2612,16 +3027,17 @@ function renderPlanOverview() {
       const drillList = slot.drills.map(sd => {
         const d = DRILLS.find(x => x.id === sd.drillId);
         return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:12px;">
-          <span>${d ? d.name : sd.drillId}</span>
+          <span>${d ? getDrillName(d) : sd.drillId}</span>
           <span style="font-family:DM Mono,monospace;color:var(--text-muted);flex-shrink:0;margin-left:8px;">${sd.mins} min</span>
         </div>`;
       }).join('');
       return `<div style="margin-bottom:10px;">
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px;">${slot.label} · ${slotMins} min</div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px;">${tSlot(slot.label)} · ${slotMins} min</div>
         ${drillList}
       </div>`;
     }).filter(Boolean).join('');
 
+    const editLabel = currentLang==='en'?'✏ Edit':'✏ Bearbeiten';
     return `<div class="panel" style="overflow:hidden;">
       <div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;cursor:pointer;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
         <div>
@@ -2630,13 +3046,13 @@ function renderPlanOverview() {
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
           <span style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-muted);">${drillCount} Drills · ${drillTotal} min</span>
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();loadPlan('${p.id}');showPage('planung')">✏ Bearbeiten</button>
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();loadPlan('${p.id}');showPage('planung')">${editLabel}</button>
           <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();printSinglePlan('${p.id}')">🖨</button>
           <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deletePlan('${p.id}',event)">✕</button>
         </div>
       </div>
       <div style="display:none;padding:0 14px 14px;border-top:1px solid var(--border);">
-        ${slotsHTML || '<div style="color:var(--text-subtle);font-size:12px;padding:8px 0;">Keine Drills geplant</div>'}
+        ${slotsHTML || `<div style="color:var(--text-subtle);font-size:12px;padding:8px 0;">${currentLang==='en'?'No drills planned':'Keine Drills geplant'}</div>`}
         ${p.notes ? `<div style="margin-top:8px;padding:6px 10px;background:var(--bg);border-left:3px solid var(--border-strong);font-size:11px;color:var(--text-muted);">${p.notes}</div>` : ''}
       </div>
     </div>`;
@@ -2660,8 +3076,8 @@ function printSinglePlan(planId) {
 
 function printFilteredPlans() {
   const plans = getFilteredOverviewPlans();
-  if (plans.length === 0) { toast('Keine Pläne zum Drucken'); return; }
-  const title = plans.length === 1 ? (plans[0].name || 'Trainingsplan') : `${plans.length} Trainingspläne`;
+  if (plans.length === 0) { toast(currentLang==='en'?'No plans to print':'Keine Pläne zum Drucken'); return; }
+  const title = plans.length === 1 ? (plans[0].name || (currentLang==='en'?'Practice Plan':'Trainingsplan')) : (currentLang==='en'?`${plans.length} Training Plans`:`${plans.length} Trainingspläne`);
   const html = buildPrintHTML(plans, title);
   openPrintBlob(html);
 }
@@ -2676,7 +3092,7 @@ function openPrintBlob(html) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 15000);
-  toast('🖨 Strg+P zum Drucken / Als PDF speichern');
+  toast(currentLang==='en'?'🖨 Ctrl+P to print / Save as PDF':'🖨 Strg+P zum Drucken / Als PDF speichern');
 }
 
 // ============================================================
@@ -2703,7 +3119,7 @@ function renderSavedPlansList() {
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = '<div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">Keine Pläne gefunden.</div>';
+    container.innerHTML = `<div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">${currentLang==='en'?'No plans found.':'Keine Pläne gefunden.'}</div>`;
     return;
   }
   container.innerHTML = filtered.map(p => {
@@ -2757,26 +3173,26 @@ function renderTracking() {
 
   document.getElementById('tracking-summary').innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;">
-      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Gespeicherte Pläne</div>
+      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">${T['tracking-stat-plans'][currentLang]}</div>
       <div style="font-size:22px;font-weight:600;">${savedPlans.length}</div>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;">
-      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Drill-Einsätze gesamt</div>
+      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">${T['tracking-stat-uses'][currentLang]}</div>
       <div style="font-size:22px;font-weight:600;">${totalDrillUses}</div>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;">
-      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Trainingsminuten</div>
+      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">${T['tracking-stat-mins'][currentLang]}</div>
       <div style="font-size:22px;font-weight:600;">${totalMinsTracked} min</div>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;">
-      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Nie genutzte Drills</div>
+      <div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">${T['tracking-stat-unused'][currentLang]}</div>
       <div style="font-size:22px;font-weight:600;color:${neverUsed.length > 0 ? 'var(--orange)' : 'var(--green)'};">${neverUsed.length}</div>
     </div>
   `;
 
   if (savedPlans.length === 0) {
     document.getElementById('tracking-grid').innerHTML =
-      '<div style="padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">Noch keine Pläne gespeichert — speichere Trainingspläne um Statistiken zu sehen.</div>';
+      `<div style="padding:40px;text-align:center;color:var(--text-subtle);font-size:13px;">${T['tracking-empty'][currentLang]}</div>`;
     return;
   }
 
@@ -2794,7 +3210,7 @@ function renderTracking() {
     if (sortVal === 'count-desc') return b.count - a.count;
     if (sortVal === 'count-asc') return a.count - b.count;
     if (sortVal === 'mins-desc') return b.totalMins - a.totalMins;
-    if (sortVal === 'name-asc') return a.drill.name.localeCompare(b.drill.name);
+    if (sortVal === 'name-asc') return getDrillName(a.drill).localeCompare(getDrillName(b.drill));
     return 0;
   });
 
@@ -2804,8 +3220,8 @@ function renderTracking() {
     const barW = Math.round((r.count / globalMax) * 100);
     const avgMins = r.count > 0 ? Math.round(r.totalMins / r.count) : 0;
     return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 14px;display:flex;align-items:center;gap:12px;">
-      <span class="drill-cat-badge ${CAT_CLASS[r.drill.kat] || ''}" style="font-size:8px;flex-shrink:0;width:70px;text-align:center;">${r.drill.kat}</span>
-      <span style="font-size:13px;font-weight:${r.count > 0 ? 600 : 400};flex:1;min-width:0;color:${r.count === 0 ? 'var(--text-subtle)' : 'var(--text)'};">${r.drill.name}</span>
+      <span class="drill-cat-badge ${CAT_CLASS[r.drill.kat] || ''}" style="font-size:8px;flex-shrink:0;width:70px;text-align:center;">${tCat(r.drill.kat)}</span>
+      <span style="font-size:13px;font-weight:${r.count > 0 ? 600 : 400};flex:1;min-width:0;color:${r.count === 0 ? 'var(--text-subtle)' : 'var(--text)'};">${getDrillName(r.drill)}</span>
       <div style="flex:0 0 160px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
         <div style="height:100%;width:${barW}%;background:${r.count === 0 ? 'var(--border)' : 'var(--text)'};border-radius:3px;"></div>
       </div>
@@ -3027,6 +3443,407 @@ function attachTouchDragListeners() {
     item.addEventListener('touchmove', onDrillTouchMove, { passive: false });
     item.addEventListener('touchend', onDrillTouchEnd, { passive: false });
   });
+}
+
+// ============================================================
+// I18N — SPRACH-TOGGLE
+// ============================================================
+let currentLang = 'de';
+
+const T = {
+  // TOPBAR & NAV
+  'nav-bibliothek':   { de: 'Drill-Bibliothek', en: 'Drill Library' },
+  'nav-planung':      { de: 'Trainingsplan',     en: 'Practice Plan' },
+  'nav-tracking':     { de: 'Drill-Tracking',    en: 'Drill Tracking' },
+  'nav-overview':     { de: 'Pläne-Übersicht',   en: 'Overview' },
+  'btn-plan-overview-text': { de: '📋 Pläne-Übersicht', en: '📋 Overview' },
+  'topbar-subtitle':  { de: 'Drill-Bibliothek & Trainingsplanung · Saison 2025/2026', en: 'Drill Library & Training Planning · Season 2025/2026' },
+
+  // BIBLIOTHEK PAGE
+  'bib-title':        { de: 'Drill-Bibliothek', en: 'Drill Library' },
+  'bib-subtitle':     { de: 'Alle Drills — filterbar, durchsuchbar, klickbar für Details', en: 'All drills — filterable, searchable, click for details' },
+  'filter-suche':     { de: 'Suche', en: 'Search' },
+  'filter-kat':       { de: 'Kategorie', en: 'Category' },
+  'filter-phase':     { de: 'Trainingsphase', en: 'Training Phase' },
+  'filter-spielphase':{ de: 'Spielphase', en: 'Game Phase' },
+  'filter-intens':    { de: 'Intensität', en: 'Intensity' },
+  'filter-spieler':   { de: 'Min. Spieler ≤', en: 'Min. Players ≤' },
+  'bib-search-ph':    { de: 'Drill suchen …', en: 'Search drill …' },
+  'bib-reset':        { de: 'Reset', en: 'Reset' },
+
+  // PLAN PAGE
+  'plan-title-new':   { de: 'Neuer Trainingsplan', en: 'New Practice Plan' },
+  'plan-subtitle':    { de: 'Zeitblöcke planen · Drills zuweisen · Exportieren', en: 'Plan time blocks · Assign drills · Export' },
+  'btn-mo':           { de: '📋 Mo Pankstraße', en: '📋 Mon Pankstraße' },
+  'btn-mi':           { de: '📋 Mi Wiesenstraße', en: '📋 Wed Wiesenstraße' },
+  'btn-empty':        { de: '+ Leerer Plan', en: '+ Empty Plan' },
+  'btn-save':         { de: '💾 Speichern', en: '💾 Save' },
+  'label-title':      { de: 'Titel', en: 'Title' },
+  'label-date':       { de: 'Datum', en: 'Date' },
+  'label-theme':      { de: 'Gegner / Thema', en: 'Opponent / Theme' },
+  'label-totaltime':  { de: 'Gesamtzeit (Min)', en: 'Total Time (Min)' },
+  'plan-name-ph':     { de: 'z.B. Training #12 — Defense', en: 'e.g. Training #12 — Defense' },
+  'plan-theme-ph':    { de: 'z.B. Vor Zehlendorf', en: 'e.g. vs. Zehlendorf' },
+  'btn-add-block':    { de: '+ Block hinzufügen', en: '+ Add block' },
+  'label-total':      { de: 'Gesamt', en: 'Total' },
+
+  // SLOT
+  'slot-empty-hint':  { de: '— Noch keine Drills geplant', en: '— No drills planned yet' },
+  'slot-add-drill':   { de: '+ Drill auswählen …', en: '+ Select drill …' },
+  'slot-fest':        { de: 'fest', en: 'fixed' },
+
+  // EXPORT PANEL
+  'panel-export':     { de: 'Export', en: 'Export' },
+  'export-word':      { de: '📄 Word-Dokument (.htm)', en: '📄 Word Document (.htm)' },
+  'export-wa':        { de: '💬 WhatsApp-Text kopieren', en: '💬 Copy WhatsApp text' },
+  'export-pdf':       { de: '🖨 Drucken / PDF', en: '🖨 Print / PDF' },
+  'export-json':      { de: '⚙️ JSON (Backup)', en: '⚙️ JSON (Backup)' },
+  'export-overview':  { de: '📋 Alle Pläne → Übersicht', en: '📋 All Plans → Overview' },
+  'panel-notes':      { de: 'Notizen zum Plan', en: 'Plan Notes' },
+  'notes-ph':         { de: 'Fokus des Trainings, Hinweise, Scouting …', en: 'Training focus, notes, scouting …' },
+  'panel-saved':      { de: 'Gespeicherte Pläne', en: 'Saved Plans' },
+
+  // TRACKING PAGE
+  'tracking-title':   { de: 'Drill-Statistiken', en: 'Drill Statistics' },
+  'tracking-subtitle':{ de: 'Wie oft wurde welcher Drill in gespeicherten Plänen eingesetzt?', en: 'How often was each drill used in saved plans?' },
+  'sort-most':        { de: 'Meist genutzt', en: 'Most used' },
+  'sort-least':       { de: 'Selten genutzt', en: 'Least used' },
+  'sort-mins':        { de: 'Meiste Minuten', en: 'Most minutes' },
+  'sort-az':          { de: 'A–Z', en: 'A–Z' },
+  'tracking-stat-plans':    { de: 'Gespeicherte Pläne', en: 'Saved Plans' },
+  'tracking-stat-uses':     { de: 'Drill-Einsätze gesamt', en: 'Total Drill Uses' },
+  'tracking-stat-mins':     { de: 'Trainingsminuten', en: 'Training Minutes' },
+  'tracking-stat-unused':   { de: 'Nie genutzte Drills', en: 'Never Used Drills' },
+  'tracking-empty':   { de: 'Noch keine Pläne gespeichert — speichere Trainingspläne um Statistiken zu sehen.', en: 'No plans saved yet — save practice plans to see statistics.' },
+
+  // OVERVIEW PAGE
+  'overview-title':   { de: 'Pläne-Übersicht & Export', en: 'Overview & Export' },
+  'overview-subtitle':{ de: 'Alle gespeicherten Trainingspläne — filtern, drucken, exportieren', en: 'All saved practice plans — filter, print, export' },
+
+  // DETAIL MODAL
+  'modal-add-slot':   { de: 'Zu Slot hinzufügen:', en: 'Add to slot:' },
+  'modal-add-plan':   { de: '+ Zum aktuellen Plan', en: '+ Add to current plan' },
+
+  // DRILL PICKER
+  'picker-title':     { de: 'Drill auswählen', en: 'Select Drill' },
+  'picker-search-ph': { de: 'Suche …', en: 'Search …' },
+
+  // CONSTRAINT MODAL
+  'constraint-title': { de: '⚡ Constraint / Modifier', en: '⚡ Constraint / Modifier' },
+  'constraint-preset-label': { de: 'Vorlagen', en: 'Presets' },
+  'constraint-custom-label': { de: 'Eigener Constraint', en: 'Custom Constraint' },
+  'constraint-custom-ph': { de: 'z.B. Nur Catchshot · 2 Pässe vor Drive …', en: 'e.g. Catch & shoot only · 2 passes before drive …' },
+  'constraint-close': { de: 'Schließen', en: 'Close' },
+  'constraint-add':   { de: '+ Add', en: '+ Add' },
+
+  // FILTER OPTIONS
+  'alle':             { de: 'Alle', en: 'All' },
+  'alle-kat':         { de: 'Alle Kategorien', en: 'All Categories' },
+  'alle-phasen':      { de: 'Alle Phasen', en: 'All Phases' },
+  'hoch':             { de: 'Hoch', en: 'High' },
+  'mittel':           { de: 'Mittel', en: 'Medium' },
+  'niedrig':          { de: 'Niedrig', en: 'Low' },
+  'warmup':           { de: 'Warmup', en: 'Warm-up' },
+  'hauptteil':        { de: 'Hauptteil', en: 'Main Part' },
+
+  // SLOT PHASE LABELS
+  'phase-warmup':     { de: 'Warmup', en: 'Warm-up' },
+  'phase-hauptteil':  { de: 'Hauptteil', en: 'Main Part' },
+  'phase-abschluss':  { de: 'Abschluss', en: 'Cool-down' },
+
+  // DRILL CARD META
+  'min':              { de: 'min', en: 'min' },
+  'spieler':          { de: 'Sp.', en: 'pl.' },
+
+  // NAV LABELS
+  'nav-saved-label':  { de: 'Gespeicherte Pläne', en: 'Saved Plans' },
+  'nav-label-nav':    { de: 'Navigation', en: 'Navigation' },
+
+  // MOBILE NAV
+  'mnav-drills':      { de: 'Drills', en: 'Drills' },
+  'mnav-plan':        { de: 'Plan', en: 'Plan' },
+  'mnav-tracking':    { de: 'Tracking', en: 'Tracking' },
+  'mnav-overview':    { de: 'Übersicht', en: 'Overview' },
+
+  // TOAST / MISC
+  'sync-cloud':       { de: '☁ Cloud', en: '☁ Cloud' },
+  'no-plan':          { de: 'Erst einen Plan erstellen oder laden', en: 'First create or load a plan' },
+  'saved-ok':         { de: '✓ Plan gespeichert', en: '✓ Plan saved' },
+  'min-label':        { de: 'min', en: 'min' },
+};
+
+// Constraint translations
+const CONSTRAINT_T = {
+  // Labels
+  'Max. 3 Dribbles':           { en: 'Max. 3 Dribbles' },
+  'X Pässe vor Abschluss':     { en: 'X Passes Before Shot' },
+  'Kein Dribbling':            { en: 'No Dribbling' },
+  'Bonuspunkte Off. Rebound':  { en: 'Bonus Points Off. Rebound' },
+  'Nur Catch & Shoot':         { en: 'Catch & Shoot Only' },
+  '-1 bei Turnover':           { en: '-1 for Turnover' },
+  '-1 bei falschem Cut':       { en: '-1 for Wrong Cut' },
+  'Wechsel nach 5 Stops':      { en: 'Switch After 5 Stops' },
+  'Wechsel nach Score':        { en: 'Switch After Score' },
+  'Plays erzwingen':           { en: 'Force Plays' },
+  'Backdoor lesen':            { en: 'Read Backdoor' },
+  '3rd Man Option':            { en: '3rd Man Option' },
+  'High-Low Pflicht':          { en: 'High-Low Required' },
+  'Nur Zone Defense':          { en: 'Zone Defense Only' },
+  'Nur Mann-Mann':             { en: 'Man-to-Man Only' },
+  'Help the Helper':           { en: 'Help the Helper' },
+  'Help-Rotate Pflicht':       { en: 'Help-Rotate Required' },
+  'Hütchen Helpside-Linie':    { en: 'Touch Helpside Cone' },
+  'Baseline zuerst berühren':  { en: 'Touch Baseline First' },
+  'Nur auf Coach-Signal':      { en: 'Coach Signal Only' },
+  'Zeitdruck':                 { en: 'Shot Clock Pressure' },
+  '1 Sek. Verzögerung':        { en: '1 Sec. Delay' },
+  'Nur von bestimmten Spots':  { en: 'Specific Spots Only' },
+  // Categories
+  'Scoring & Regeln':          { en: 'Scoring & Rules' },
+  'Offense':                   { en: 'Offense' },
+  'Defense':                   { en: 'Defense' },
+  'Kondition':                 { en: 'Conditioning' },
+};
+
+// Constraint descriptions in English
+const CONSTRAINT_DESC_EN = {
+  'Max. 3 Dribbles':           'Max. 3 dribbles per possession — forces movement, spacing and ball movement.',
+  'X Pässe vor Abschluss':     'Minimum number of passes required before a shot is allowed.',
+  'Kein Dribbling':            'No dribbling allowed — only passes, cuts and off-ball movement.',
+  'Bonuspunkte Off. Rebound':  'Offensive rebound scores bonus points (e.g. +1 extra) — focus: OReb & boxing out.',
+  'Nur Catch & Shoot':         'Shots only directly from the catch — no extra dribble before finishing.',
+  '-1 bei Turnover':           'Every turnover scores a point for defense or deducts a point from offense.',
+  '-1 bei falschem Cut':       'Wrong cut or bad read immediately costs a point.',
+  'Wechsel nach 5 Stops':      'Defense and offense switch sides after 5 successful defensive stops.',
+  'Wechsel nach Score':        'Offense and defense switch after every made basket.',
+  'Plays erzwingen':           'Offense must run set plays before freelancing is allowed.',
+  'Backdoor lesen':            'Offense may only cut backdoor when defender is in the passing lane.',
+  '3rd Man Option':            'After PnR or cut: ball must go to 3rd man before finishing.',
+  'High-Low Pflicht':          'Every attack must be initiated via a high-low action.',
+  'Nur Zone Defense':          'Defense plays zone only — no man-to-man allowed.',
+  'Nur Mann-Mann':             'Defense plays man-to-man only — no zone allowed.',
+  'Help the Helper':           'After any helpside action a second player must rotate and help.',
+  'Help-Rotate Pflicht':       'Every rotation must be completed fully — no stalling allowed.',
+  'Hütchen Helpside-Linie':    'Defender must touch the helpside cone before helping.',
+  'Baseline zuerst berühren':  'Defender must touch baseline before rotating or helping.',
+  'Nur auf Coach-Signal':      'Penetration or action only allowed when coach calls "Drive!" / signals.',
+  'Zeitdruck':                 'Attack must be completed within X seconds (e.g. 8-second shot clock).',
+  '1 Sek. Verzögerung':        'Defender or offense waits 1 second after signal before acting.',
+  'Nur von bestimmten Spots':  'Offense may only penetrate or finish from defined positions (e.g. wing only).',
+};
+
+function toggleLang() {
+  currentLang = currentLang === 'de' ? 'en' : 'de';
+  applyLang();
+}
+
+function applyLang() {
+  const isEN = currentLang === 'en';
+  document.getElementById('lang-flag').textContent = isEN ? '🇩🇪' : '🇬🇧';
+  document.getElementById('lang-label').textContent = isEN ? 'DE' : 'EN';
+
+  // Topbar
+  document.querySelector('.topbar-subtitle').textContent = T['topbar-subtitle'][currentLang];
+  document.getElementById('btn-plan-overview').textContent = T['btn-plan-overview-text'][currentLang];
+
+  // Sidebar nav labels
+  const navLabels = {
+    'nav-bibliothek': T['nav-bibliothek'][currentLang],
+    'nav-planung':    T['nav-planung'][currentLang],
+    'nav-tracking':   T['nav-tracking'][currentLang],
+    'nav-import-export': T['nav-overview'][currentLang],
+  };
+  Object.entries(navLabels).forEach(([id, text]) => {
+    const el = document.getElementById(id);
+    if (el) {
+      // Preserve icon + count span
+      const icon = el.querySelector('.nav-icon');
+      const count = el.querySelector('.nav-count');
+      el.textContent = '';
+      if (icon) el.appendChild(icon);
+      el.appendChild(document.createTextNode(' ' + text));
+      if (count) el.appendChild(count);
+    }
+  });
+
+  // Sidebar section labels
+  document.querySelectorAll('.nav-section-label').forEach((el, i) => {
+    if (i === 0) el.textContent = T['nav-label-nav'][currentLang];
+    if (i === 1) el.textContent = T['nav-saved-label'][currentLang];
+  });
+
+  // Mobile nav labels
+  const mnavMap = {
+    'mnav-bibliothek':   T['mnav-drills'][currentLang],
+    'mnav-planung':      T['mnav-plan'][currentLang],
+    'mnav-tracking':     T['mnav-tracking'][currentLang],
+    'mnav-import-export':T['mnav-overview'][currentLang],
+  };
+  Object.entries(mnavMap).forEach(([id, text]) => {
+    const el = document.getElementById(id);
+    if (el) {
+      const icon = el.querySelector('.mnav-icon');
+      const label = el.querySelector('.mnav-label');
+      if (label) label.textContent = text;
+    }
+  });
+
+  // Page: Bibliothek
+  const bibTitle = document.querySelector('#page-bibliothek .page-title');
+  const bibSub   = document.querySelector('#page-bibliothek .page-subtitle');
+  if (bibTitle) bibTitle.textContent = T['bib-title'][currentLang];
+  if (bibSub)   bibSub.textContent   = T['bib-subtitle'][currentLang];
+  const bibSearch = document.getElementById('bib-search');
+  if (bibSearch) bibSearch.placeholder = currentLang==='en' ? 'Search drill …' : 'Drill suchen …';
+
+  // Filter dropdowns — Bibliothek
+  const bibKat = document.getElementById('bib-kat');
+  if (bibKat && bibKat.options[0]) bibKat.options[0].text = currentLang==='en'?'All Categories':'Alle Kategorien';
+  const bibPhase = document.getElementById('bib-phase');
+  if (bibPhase) {
+    if (bibPhase.options[0]) bibPhase.options[0].text = currentLang==='en'?'All Phases':'Alle Phasen';
+    if (bibPhase.options[1]) bibPhase.options[1].text = currentLang==='en'?'Warm-up':'Warmup';
+    if (bibPhase.options[2]) bibPhase.options[2].text = currentLang==='en'?'Main Part':'Hauptteil';
+  }
+  const bibSp = document.getElementById('bib-spielphase');
+  if (bibSp && bibSp.options[0]) bibSp.options[0].text = currentLang==='en'?'All Game Phases':'Alle Spielphasen';
+  const bibInt = document.getElementById('bib-intens');
+  if (bibInt) {
+    if (bibInt.options[0]) bibInt.options[0].text = currentLang==='en'?'All Intensities':'Alle Intensitäten';
+    if (bibInt.options[1]) bibInt.options[1].text = currentLang==='en'?'High':'hoch';
+    if (bibInt.options[2]) bibInt.options[2].text = currentLang==='en'?'Medium':'mittel';
+    if (bibInt.options[3]) bibInt.options[3].text = currentLang==='en'?'Low':'niedrig';
+  }
+  const bibSpieler = document.getElementById('bib-spieler');
+  if (bibSpieler) bibSpieler.placeholder = currentLang==='en'?'e.g. 8':'z.B. 8';
+
+  // Picker modal
+  const pickerSearch = document.getElementById('picker-search');
+  if (pickerSearch) pickerSearch.placeholder = currentLang==='en'?'Search …':'Suche …';
+  const pickerKat = document.getElementById('picker-kat');
+  if (pickerKat && pickerKat.options[0]) pickerKat.options[0].text = currentLang==='en'?'All Categories':'Alle Kategorien';
+  const pickerPhase = document.getElementById('picker-phase');
+  if (pickerPhase) {
+    if (pickerPhase.options[0]) pickerPhase.options[0].text = currentLang==='en'?'All Phases':'Alle Phasen';
+    if (pickerPhase.options[1]) pickerPhase.options[1].text = currentLang==='en'?'Warm-up':'Warmup';
+    if (pickerPhase.options[2]) pickerPhase.options[2].text = currentLang==='en'?'Main Part':'Hauptteil';
+  }
+  const pickerSp = document.getElementById('picker-spielphase');
+  if (pickerSp && pickerSp.options[0]) pickerSp.options[0].text = currentLang==='en'?'All Game Phases':'Alle Spielphasen';
+  const pickerInt = document.getElementById('picker-intens');
+  if (pickerInt) {
+    if (pickerInt.options[0]) pickerInt.options[0].text = currentLang==='en'?'All Intensities':'Alle Intensitäten';
+    if (pickerInt.options[1]) pickerInt.options[1].text = currentLang==='en'?'High':'hoch';
+    if (pickerInt.options[2]) pickerInt.options[2].text = currentLang==='en'?'Medium':'mittel';
+    if (pickerInt.options[3]) pickerInt.options[3].text = currentLang==='en'?'Low':'niedrig';
+  }
+  const pickerTitle = document.querySelector('#drill-picker-modal .modal-title');
+  if (pickerTitle) pickerTitle.textContent = currentLang==='en'?'Select Drill':'Drill auswählen';
+
+  // Tracking category filter
+  const trackKat = document.getElementById('tracking-kat');
+  if (trackKat && trackKat.options[0]) trackKat.options[0].text = currentLang==='en'?'All Categories':'Alle Kategorien';
+
+  // Page: Planung
+  const planSub = document.querySelector('#page-planung .page-subtitle');
+  if (planSub) planSub.textContent = T['plan-subtitle'][currentLang];
+  const planNameInput = document.getElementById('plan-name');
+  if (planNameInput) planNameInput.placeholder = T['plan-name-ph'][currentLang];
+  const planThemeInput = document.getElementById('plan-theme');
+  if (planThemeInput) planThemeInput.placeholder = T['plan-theme-ph'][currentLang];
+  // Form labels
+  document.querySelectorAll('#page-planung .form-label').forEach(el => {
+    const t = el.textContent.trim();
+    if (t === 'Titel' || t === 'Title') el.textContent = T['label-title'][currentLang];
+    if (t === 'Datum' || t === 'Date') el.textContent = T['label-date'][currentLang];
+    if (t === 'Gegner / Thema' || t === 'Opponent / Theme') el.textContent = T['label-theme'][currentLang];
+    if (t.startsWith('Gesamt') || t.startsWith('Total')) el.textContent = T['label-totaltime'][currentLang];
+  });
+  // Planung buttons
+  document.querySelectorAll('#page-planung .page-header button').forEach(btn => {
+    const t = btn.textContent.trim();
+    if (t.includes('Pankstraße') || t.includes('Mon')) btn.textContent = T['btn-mo'][currentLang];
+    if (t.includes('Wiesenstraße') || t.includes('Wed')) btn.textContent = T['btn-mi'][currentLang];
+    if (t.includes('Leerer') || t.includes('Empty')) btn.textContent = T['btn-empty'][currentLang];
+    if (t.includes('Speichern') || t.includes('Save')) btn.textContent = T['btn-save'][currentLang];
+  });
+  // Add block button
+  document.querySelectorAll('.add-slot-btn').forEach(btn => {
+    btn.textContent = T['btn-add-block'][currentLang];
+  });
+  // Time summary label
+  document.querySelectorAll('.time-summary-label').forEach(el => {
+    el.textContent = T['label-total'][currentLang];
+  });
+  // Export panel
+  document.querySelectorAll('.panel-title').forEach(el => {
+    const t = el.textContent.trim();
+    if (t === 'Export') el.textContent = 'Export';
+    if (t === 'Gespeicherte Pläne' || t === 'Saved Plans') el.textContent = T['panel-saved'][currentLang];
+    if (t === 'Notizen zum Plan' || t === 'Plan Notes') el.textContent = T['panel-notes'][currentLang];
+  });
+  document.querySelectorAll('.export-btn').forEach(btn => {
+    const t = btn.textContent.trim();
+    if (t.includes('Word')) btn.textContent = T['export-word'][currentLang];
+    if (t.includes('WhatsApp') || t.includes('Copy')) btn.textContent = T['export-wa'][currentLang];
+    if (t.includes('Drucken') || t.includes('Print')) btn.textContent = T['export-pdf'][currentLang];
+    if (t.includes('JSON')) btn.textContent = T['export-json'][currentLang];
+    if (t.includes('Übersicht') || t.includes('Overview')) btn.textContent = T['export-overview'][currentLang];
+  });
+  const notesTA = document.getElementById('plan-notes');
+  if (notesTA) notesTA.placeholder = T['notes-ph'][currentLang];
+
+  // Page: Tracking
+  const trackTitle = document.querySelector('#page-tracking .page-title');
+  const trackSub   = document.querySelector('#page-tracking .page-subtitle');
+  if (trackTitle) trackTitle.textContent = T['tracking-title'][currentLang];
+  if (trackSub)   trackSub.textContent   = T['tracking-subtitle'][currentLang];
+  const trackSort = document.getElementById('tracking-sort');
+  if (trackSort) {
+    trackSort.options[0].text = T['sort-most'][currentLang];
+    trackSort.options[1].text = T['sort-least'][currentLang];
+    trackSort.options[2].text = T['sort-mins'][currentLang];
+    trackSort.options[3].text = T['sort-az'][currentLang];
+  }
+
+  // Page: Overview
+  const ovTitle = document.querySelector('#page-import-export .page-title');
+  const ovSub   = document.querySelector('#page-import-export .page-subtitle');
+  if (ovTitle) ovTitle.textContent = T['overview-title'][currentLang];
+  if (ovSub)   ovSub.textContent   = T['overview-subtitle'][currentLang];
+
+  // Constraint modal
+  document.querySelector('#constraint-modal .modal-title').textContent = T['constraint-title'][currentLang];
+  document.getElementById('constraint-custom-input').placeholder = T['constraint-custom-ph'][currentLang];
+  const presetLabel = document.getElementById('constraint-preset-section-label');
+  if (presetLabel) presetLabel.textContent = T['constraint-preset-label'][currentLang];
+  const customLabel = document.getElementById('constraint-custom-section-label');
+  if (customLabel) customLabel.textContent = T['constraint-custom-label'][currentLang];
+  const closeBtn = document.getElementById('constraint-close-btn');
+  if (closeBtn) closeBtn.textContent = T['constraint-close'][currentLang];
+
+  // Plans sidebar search/sort
+  const plSearch = document.getElementById('plans-search');
+  if (plSearch) plSearch.placeholder = currentLang==='en'?'Search plan …':'Plan suchen …';
+  const plSort = document.getElementById('plans-sort');
+  if (plSort) {
+    if (plSort.options[0]) plSort.options[0].text = currentLang==='en'?'Newest':'Neueste';
+    if (plSort.options[1]) plSort.options[1].text = currentLang==='en'?'Oldest':'Älteste';
+  }
+  // Overview search/sort
+  const ovSearch = document.getElementById('overview-search');
+  if (ovSearch) ovSearch.placeholder = currentLang==='en'?'Title, theme …':'Titel, Thema …';
+  const ovSort = document.getElementById('overview-sort');
+  if (ovSort) {
+    if (ovSort.options[0]) ovSort.options[0].text = currentLang==='en'?'Newest first':'Neueste zuerst';
+    if (ovSort.options[1]) ovSort.options[1].text = currentLang==='en'?'Oldest first':'Älteste zuerst';
+    if (ovSort.options[2]) ovSort.options[2].text = currentLang==='en'?'A–Z':'Alphabetisch';
+  }
+
+  // Re-render dynamic content
+  applyBibFilters();
+  if (currentPlan) renderSlots();
+  renderTracking();
 }
 
 // ============================================================
