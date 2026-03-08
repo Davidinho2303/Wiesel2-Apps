@@ -1272,19 +1272,19 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
 
 <!-- DRILL DETAIL MODAL -->
 <div class="modal-overlay hidden" id="drill-modal" onclick="closeDrillModal(event)">
-  <div class="modal" id="drill-modal-content" style="display:flex;flex-direction:column;max-height:88vh;">
-    <div class="modal-header">
+  <div class="modal" id="drill-modal-content" style="display:flex;flex-direction:column;max-height:88vh;padding:0;">
+    <div class="modal-header" style="padding:20px 20px 0;flex-shrink:0;">
       <div>
         <div class="modal-title" id="modal-drill-name"></div>
         <div style="margin-top:4px;" id="modal-drill-cat"></div>
       </div>
       <button class="modal-close" onclick="closeDrillModal()">×</button>
     </div>
-    <div style="overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;">
+    <div style="overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;padding:16px 20px 20px;">
       <div class="meta-grid" id="modal-meta-grid"></div>
       <div id="modal-drill-desc" style="margin:12px 0 0;padding:12px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.6;color:var(--text);display:none;"></div>
+      <div id="modal-add-section"></div>
     </div>
-    <div id="modal-add-section" style="padding-top:12px;border-top:1px solid var(--border);margin-top:12px;flex-shrink:0;"></div>
   </div>
 </div>
 
@@ -1799,6 +1799,17 @@ function savePlan() {
   toast('✓ Plan gespeichert');
 }
 
+function autoSave() {
+  if (!currentPlan) return;
+  if (!currentPlan.name) currentPlan.name = 'Training ' + currentPlan.date;
+  const idx = savedPlans.findIndex(p => p.id === currentPlan.id);
+  if (idx >= 0) savedPlans[idx] = JSON.parse(JSON.stringify(currentPlan));
+  else savedPlans.unshift(JSON.parse(JSON.stringify(currentPlan)));
+  saveToStorage();
+  renderSavedPlansList();
+  renderNavSavedPlans();
+}
+
 function loadPlan(planId) {
   const plan = savedPlans.find(p => p.id === planId);
   if (!plan) return;
@@ -1931,12 +1942,11 @@ function renderSlotHTML(slot, idx) {
 
 function addSlot() {
   if (!currentPlan) return;
-  const phases = ['warmup', 'hauptteil', 'abschluss'];
-  const labels = { warmup: 'Warmup', hauptteil: 'Hauptteil', abschluss: 'Abschluss' };
   const id = 's' + Date.now();
   currentPlan.slots.push({ id, label: 'Hauptteil', phase: 'hauptteil', durationMin: 15, drills: [] });
   renderSlots();
   updateTimeSummary();
+  autoSave();
 }
 
 function removeSlot(slotId) {
@@ -1946,6 +1956,7 @@ function removeSlot(slotId) {
   currentPlan.slots = currentPlan.slots.filter(s => s.id !== slotId);
   renderSlots();
   updateTimeSummary();
+  autoSave();
 }
 
 function moveSlot(slotId, dir) {
@@ -1956,12 +1967,14 @@ function moveSlot(slotId, dir) {
   currentPlan.slots[idx] = currentPlan.slots[newIdx];
   currentPlan.slots[newIdx] = tmp;
   renderSlots();
+  autoSave();
 }
 
 function updateSlotTime(slotId, val) {
   const slot = currentPlan.slots.find(s => s.id === slotId);
   if (slot) slot.durationMin = parseInt(val) || 15;
   updateTimeSummary();
+  autoSave();
 }
 
 function updateTimeSummary() {
@@ -1989,12 +2002,13 @@ function updateDrillMins(slotId, drillIdx, val) {
     slot.drills[drillIdx].mins = parseInt(val) || 5;
     renderSlots();
     updateTimeSummary();
+    autoSave();
   }
 }
 
 function removeDrillFromSlot(slotId, drillIdx) {
   const slot = currentPlan.slots.find(s => s.id === slotId);
-  if (slot) { slot.drills.splice(drillIdx, 1); renderSlots(); updateTimeSummary(); }
+  if (slot) { slot.drills.splice(drillIdx, 1); renderSlots(); updateTimeSummary(); autoSave(); }
 }
 
 function quickAddDrill(drillId) {
@@ -2019,6 +2033,7 @@ function quickAddDrill(drillId) {
   targetSlot.drills.push({ drillId, mins: defaultMins });
   renderSlots();
   updateTimeSummary();
+  autoSave();
   showPage('planung');
   toast('+ ' + drill.name + ' → ' + targetSlot.label);
 }
@@ -2083,6 +2098,7 @@ function addDrillToSlot(drillId) {
   slot.drills.push({ drillId, mins: defaultMins });
   renderSlots();
   updateTimeSummary();
+  autoSave();
   document.getElementById('picker-modal').classList.add('hidden');
   toast('+ ' + DRILLS.find(d => d.id === drillId)?.name);
 }
