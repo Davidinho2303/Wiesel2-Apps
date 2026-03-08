@@ -885,6 +885,7 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
     }
+    #drill-modal > div { max-width: 100% !important; }
     .drill-picker-list { max-height: 45dvh; }
     .drill-picker-item { padding: 14px 12px; min-height: 52px; }
     .drill-picker-name { font-size: 14px; }
@@ -1281,17 +1282,22 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
 
 <!-- DRILL DETAIL MODAL -->
 <div class="modal-overlay hidden" id="drill-modal" onclick="closeDrillModal(event)">
-  <div class="modal" id="drill-modal-content">
-    <div class="modal-header">
-      <div>
-        <div class="modal-title" id="modal-drill-name"></div>
-        <div style="margin-top:4px;" id="modal-drill-cat"></div>
+  <div style="width:100%;max-width:560px;display:flex;flex-direction:column;max-height:85dvh;background:var(--surface);border-radius:16px 16px 0 0;overflow:hidden;">
+    <!-- Scrollbarer Inhalt -->
+    <div class="modal" id="drill-modal-content" style="overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;border-radius:0;margin:0;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="modal-drill-name"></div>
+          <div style="margin-top:4px;" id="modal-drill-cat"></div>
+        </div>
+        <button class="modal-close" onclick="closeDrillModal()">×</button>
       </div>
-      <button class="modal-close" onclick="closeDrillModal()">×</button>
+      <div class="meta-grid" id="modal-meta-grid"></div>
+      <div id="modal-drill-desc" style="margin:12px 0 0;padding:12px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.6;color:var(--text);display:none;"></div>
+      <div id="modal-note-section"></div>
     </div>
-    <div class="meta-grid" id="modal-meta-grid"></div>
-    <div id="modal-drill-desc" style="margin:12px 0 0;padding:12px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.6;color:var(--text);display:none;"></div>
-    <div id="modal-add-section"></div>
+    <!-- Fixer Button-Bereich unten -->
+    <div id="modal-add-section" style="flex-shrink:0;padding:12px 20px 20px;border-top:1px solid var(--border);background:var(--surface);"></div>
   </div>
 </div>
 
@@ -1676,14 +1682,16 @@ function openDrillModal(drillId, fromPicker) {
     descEl.style.display = 'none';
   }
 
+  let noteSection = '';
+  if (d.note) noteSection += `<div class="inline-note">📌 ${d.note}</div>`;
+  document.getElementById('modal-note-section').innerHTML = noteSection;
+
   let addSection = '';
-  if (d.note) addSection += `<div class="inline-note">📌 ${d.note}</div>`;
   if (!fromPicker) {
-    addSection += `<div style="margin-top:12px;display:flex;gap:8px;">
-      <button class="btn btn-primary" onclick="closeDrillModal();showPage('planung');quickAddDrill('${d.id}')">+ Zu Trainingsplan</button>
-    </div>`;
+    addSection = `<button class="btn btn-primary" style="width:100%;" onclick="closeDrillModal();showPage('planung');quickAddDrill('${d.id}')">+ Zu Trainingsplan hinzufügen</button>`;
   }
   document.getElementById('modal-add-section').innerHTML = addSection;
+  document.getElementById('modal-add-section').style.display = fromPicker ? 'none' : 'block';
   document.getElementById('drill-modal').classList.remove('hidden');
 }
 
