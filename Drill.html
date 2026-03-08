@@ -1158,10 +1158,11 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
           <div class="panel">
             <div class="panel-title">Export</div>
             <div class="export-buttons">
-              <button class="export-btn" onclick="exportDOCX()"><span class="export-icon">📄</span> Aktueller Plan als Word (.htm)</button>
-              <button class="export-btn" onclick="exportPDF()"><span class="export-icon">🖨</span> Aktueller Plan drucken / PDF</button>
-              <button class="export-btn" onclick="exportJSON()"><span class="export-icon">⚙️</span> Aktueller Plan als JSON</button>
-              <button class="export-btn" onclick="showPage('import-export')"><span class="export-icon">📋</span> Alle Pläne → Übersicht & Druck</button>
+              <button class="export-btn" onclick="exportWordPro()"><span class="export-icon">📄</span> Word-Dokument (.htm)</button>
+              <button class="export-btn" onclick="exportWhatsApp()"><span class="export-icon">💬</span> WhatsApp-Text kopieren</button>
+              <button class="export-btn" onclick="exportPDF()"><span class="export-icon">🖨</span> Drucken / PDF</button>
+              <button class="export-btn" onclick="exportJSON()"><span class="export-icon">⚙️</span> JSON (Backup)</button>
+              <button class="export-btn" onclick="showPage('import-export')"><span class="export-icon">📋</span> Alle Pläne → Übersicht</button>
             </div>
           </div>
           <div class="panel">
@@ -2108,10 +2109,147 @@ function addDrillToSlot(drillId) {
 // ============================================================
 function exportDOCX() {
   if (!currentPlan) return;
-  // Word öffnet .htm-Dateien nativ — kein Binary, kein Security-Block
   const html = buildWordHTML(currentPlan);
   downloadText(html, sanitizeFilename(currentPlan.name || 'Trainingsplan') + '.htm');
-  toast('📄 Word-Datei exportiert (.htm → in Word öffnen)');
+  toast('📄 Word-Datei exportiert');
+}
+
+function exportWordPro() {
+  if (!currentPlan) { toast('Kein Plan aktiv'); return; }
+  const html = buildWordHTMLPro(currentPlan);
+  downloadText(html, sanitizeFilename(currentPlan.name || 'Trainingsplan') + '.htm');
+  toast('📄 Word-Dokument exportiert — in Word öffnen');
+}
+
+function buildWordHTMLPro(plan) {
+  const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const drillTotal = (plan.slots||[]).reduce((a,s) =>
+    a + (s.drills||[]).reduce((b,sd) => b+(parseInt(sd.mins)||0),0), 0);
+
+  const phaseColors = { warmup: '#d4a017', hauptteil: '#2b4bb5', abschluss: '#1a6b3a' };
+
+  const slotsHTML = (plan.slots||[]).map(slot => {
+    const slotMins = (slot.drills||[]).reduce((a,sd) => a+(parseInt(sd.mins)||0),0);
+    const color = phaseColors[slot.phase] || '#1a1916';
+    if (!slot.drills || slot.drills.length === 0) return `
+      <tr><td colspan="5" style="padding:6pt 10pt;background:#f9f9f7;border-left:4pt solid ${color};font-style:italic;color:#999;">${esc(slot.label)} — keine Drills</td></tr>
+      <tr><td colspan="5" style="height:4pt;"></td></tr>`;
+
+    const header = `<tr>
+      <td colspan="5" style="padding:6pt 10pt;background:#f0efe9;border-left:4pt solid ${color};font-weight:bold;font-size:11pt;">
+        ${esc(slot.label)} &mdash; ${slotMins} min
+      </td>
+    </tr>
+    <tr style="background:#1a1916;color:#fff;font-size:9pt;">
+      <th style="padding:4pt 8pt;text-align:left;width:40%;">Drill</th>
+      <th style="padding:4pt 8pt;text-align:left;width:8%;">Min</th>
+      <th style="padding:4pt 8pt;text-align:left;width:14%;">Kategorie</th>
+      <th style="padding:4pt 8pt;text-align:left;width:10%;">Intensität</th>
+      <th style="padding:4pt 8pt;text-align:left;">Details</th>
+    </tr>`;
+
+    const rows = slot.drills.map((sd, i) => {
+      const d = DRILLS.find(x => x.id === sd.drillId);
+      const bg = i % 2 === 0 ? '#ffffff' : '#f7f6f3';
+      const details = d ? `${d.minSpieler}+ Sp · ${d.feld}${d.material !== 'keine' ? ' · ' + d.material.split(',')[0] : ''}` : '';
+      return `<tr style="background:${bg};font-size:9.5pt;">
+        <td style="padding:4pt 8pt;border-bottom:1pt solid #eee;font-weight:600;">${esc(d ? d.name : sd.drillId)}</td>
+        <td style="padding:4pt 8pt;border-bottom:1pt solid #eee;">${sd.mins}'</td>
+        <td style="padding:4pt 8pt;border-bottom:1pt solid #eee;">${esc(d ? d.kat : '')}</td>
+        <td style="padding:4pt 8pt;border-bottom:1pt solid #eee;">${esc(d ? d.intensity : '')}</td>
+        <td style="padding:4pt 8pt;border-bottom:1pt solid #eee;color:#555;">${esc(details)}</td>
+      </tr>`;
+    }).join('');
+
+    return header + rows + `<tr><td colspan="5" style="height:8pt;"></td></tr>`;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${esc(plan.name || 'Trainingsplan')}</title>
+<style>
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 2cm 2.5cm; color: #1a1916; }
+  h1 { font-size: 22pt; font-weight: 700; margin: 0 0 2pt 0; letter-spacing: -0.5pt; }
+  .meta { font-size: 10pt; color: #666; margin-bottom: 6pt; }
+  .divider { border: none; border-top: 2pt solid #1a1916; margin: 10pt 0 14pt 0; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 4pt; }
+  .summary { display: inline-block; background: #f0efe9; border-radius: 4pt; padding: 4pt 10pt; font-size: 10pt; margin-bottom: 14pt; }
+  .notes { background:#f5f4f1; border-left:3pt solid #999; padding:6pt 10pt; font-size:9.5pt; margin-top:14pt; color:#444; }
+  .footer { margin-top:18pt; font-size:8pt; color:#aaa; border-top:1pt solid #eee; padding-top:5pt; }
+</style>
+</head>
+<body>
+<h1>${esc(plan.name || 'Trainingsplan')}</h1>
+<div class="meta">${esc(plan.date||'')}${plan.theme ? ' &middot; <em>'+esc(plan.theme)+'</em>' : ''}</div>
+<hr class="divider">
+<div class="summary">⏱ ${drillTotal} min Drillzeit gesamt &nbsp;&nbsp;·&nbsp;&nbsp; ${(plan.slots||[]).reduce((a,s)=>a+(s.drills||[]).length,0)} Drills</div>
+<table>
+${slotsHTML}
+</table>
+${plan.notes ? `<div class="notes"><strong>📌 Notizen:</strong><br>${esc(plan.notes).replace(/\n/g,'<br>')}</div>` : ''}
+<div class="footer">Weddinger Wiesel 2 &middot; Saison 2025/2026 &middot; ${new Date().toLocaleDateString('de-DE')}</div>
+</body>
+</html>`;
+}
+
+function exportWhatsApp() {
+  if (!currentPlan) { toast('Kein Plan aktiv'); return; }
+  const text = buildWhatsAppText(currentPlan);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      toast('💬 In Zwischenablage kopiert — in WhatsApp einfügen!');
+    }).catch(() => {
+      showWhatsAppFallback(text);
+    });
+  } else {
+    showWhatsAppFallback(text);
+  }
+}
+
+function buildWhatsAppText(plan) {
+  const drillTotal = (plan.slots||[]).reduce((a,s) =>
+    a + (s.drills||[]).reduce((b,sd) => b+(parseInt(sd.mins)||0),0), 0);
+
+  const phaseEmoji = { warmup: '🔆', hauptteil: '⚡', abschluss: '✅' };
+
+  let txt = `🏀 *${plan.name || 'Trainingsplan'}*\n`;
+  if (plan.date) txt += `📅 ${plan.date}`;
+  if (plan.theme) txt += ` · ${plan.theme}`;
+  txt += `\n⏱ ${drillTotal} min Drillzeit gesamt\n`;
+  txt += `${'─'.repeat(28)}\n`;
+
+  (plan.slots||[]).forEach(slot => {
+    if (!slot.drills || slot.drills.length === 0) return;
+    const slotMins = slot.drills.reduce((a,sd) => a+(parseInt(sd.mins)||0),0);
+    const emoji = phaseEmoji[slot.phase] || '▶';
+    txt += `\n${emoji} *${slot.label}* (${slotMins} min)\n`;
+    slot.drills.forEach(sd => {
+      const d = DRILLS.find(x => x.id === sd.drillId);
+      txt += `  • ${d ? d.name : sd.drillId} — ${sd.mins} min\n`;
+    });
+  });
+
+  if (plan.notes) {
+    txt += `\n📌 *Notizen:*\n${plan.notes}\n`;
+  }
+
+  txt += `\n_Weddinger Wiesel 2 · Saison 2025/2026_`;
+  return txt;
+}
+
+function showWhatsAppFallback(text) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:560px;max-height:70vh;display:flex;flex-direction:column;gap:10px;">
+      <div style="font-weight:600;font-size:14px;">💬 WhatsApp-Text — alles markieren & kopieren</div>
+      <textarea readonly style="flex:1;min-height:200px;font-family:monospace;font-size:12px;padding:10px;border:1px solid #ddd;border-radius:8px;resize:none;">${text}</textarea>
+      <button onclick="this.closest('div').parentElement.remove()" style="padding:12px;background:#1a1916;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Schließen</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('textarea').select();
 }
 
 function buildWordHTML(plan) {
