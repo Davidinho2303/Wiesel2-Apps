@@ -1017,10 +1017,22 @@ const db = getFirestore(app);
 const PLANS_DOC = doc(db, 'teams', 'wiesel2', 'data', 'plans');
 
 let isSyncing = false;
+window._appReady = false;
+window.pendingCloudPlans = null;
 
 const setStatus = (text, color) => {
   const el = document.getElementById('sync-status');
   if (el) { el.textContent = text; el.style.color = color; }
+};
+
+window.applyCloudPlans = function(plans) {
+  if (isSyncing) return;
+  savedPlans = plans;
+  try { renderSavedPlansList(); } catch(e) {}
+  try { renderNavSavedPlans(); } catch(e) {}
+  try { renderPlanOverview(); } catch(e) {}
+  setStatus('☁ Synced', 'var(--green)');
+  setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
 };
 
 // Anonym einloggen, dann Listener starten
@@ -1032,13 +1044,12 @@ signInAnonymously(auth).then(() => {
     if (!snap.exists()) return;
     const data = snap.data();
     if (!Array.isArray(data.plans)) return;
-    if (isSyncing) return;
-    savedPlans = data.plans;
-    try { renderSavedPlansList(); } catch(e) {}
-    try { renderNavSavedPlans(); } catch(e) {}
-    try { renderPlanOverview(); } catch(e) {}
-    setStatus('☁ Synced', 'var(--green)');
-    setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
+    if (window._appReady) {
+      window.applyCloudPlans(data.plans);
+    } else {
+      window.pendingCloudPlans = data.plans;
+      setStatus('☁ Cloud', 'var(--text-subtle)');
+    }
   }, (err) => {
     console.warn('Snapshot error:', err.message);
     setStatus('⚠ Offline', 'var(--orange)');
@@ -3856,6 +3867,13 @@ newPlan();
 renderNavSavedPlans();
 // Set today's date
 document.getElementById('plan-date').value = new Date().toISOString().split('T')[0];
+
+// Signal that app is fully ready — apply any cloud data that arrived early
+window._appReady = true;
+if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
+  window.applyCloudPlans(window.pendingCloudPlans);
+  window.pendingCloudPlans = null;
+}
 </script>
 </body>
 </html>
