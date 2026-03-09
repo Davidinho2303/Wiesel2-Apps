@@ -2125,7 +2125,11 @@ function getNextWeekday(weekday) {
 }
 
 function formatDate(date) {
-  return date.toISOString().split('T')[0];
+  // Use local date to avoid UTC timezone offset bug
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function formatDateDE(date) {
@@ -2169,7 +2173,7 @@ function newPlan() {
   currentPlan = {
     id: 'plan_' + Date.now(),
     name: '',
-    date: new Date().toISOString().split('T')[0],
+    date: formatDate(new Date()),
     theme: '',
     notes: '',
     totalTime: 90,
@@ -2192,8 +2196,18 @@ function newPlan() {
 
 function updatePlanMeta() {
   if (!currentPlan) return;
+  const newDate = document.getElementById('plan-date').value;
+  // If title contains old date in DE format, update it automatically
+  if (newDate && currentPlan.date && newDate !== currentPlan.date) {
+    const oldDE = new Date(currentPlan.date + 'T12:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const newDE = new Date(newDate + 'T12:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const nameEl = document.getElementById('plan-name');
+    if (nameEl.value.includes(oldDE)) {
+      nameEl.value = nameEl.value.replace(oldDE, newDE);
+    }
+  }
   currentPlan.name = document.getElementById('plan-name').value;
-  currentPlan.date = document.getElementById('plan-date').value;
+  currentPlan.date = newDate;
   currentPlan.theme = document.getElementById('plan-theme').value;
   currentPlan.notes = document.getElementById('plan-notes').value;
   currentPlan.totalTime = parseInt(document.getElementById('plan-total-time').value) || 90;
@@ -3892,7 +3906,7 @@ document.getElementById('nav-count-bib').textContent = DRILLS.length;
 newPlan();
 renderNavSavedPlans();
 // Set today's date
-document.getElementById('plan-date').value = new Date().toISOString().split('T')[0];
+document.getElementById('plan-date').value = formatDate(new Date());
 
 // App fully ready — apply any cloud data that arrived before init
 window._appReady = true;
