@@ -1028,9 +1028,9 @@ const setStatus = (text, color) => {
 window.applyCloudPlans = function(plans) {
   if (isSyncing) return;
   savedPlans = plans;
-  try { renderSavedPlansList(); } catch(e) {}
-  try { renderNavSavedPlans(); } catch(e) {}
-  try { renderPlanOverview(); } catch(e) {}
+  try { renderSavedPlansList(); } catch(e) { console.warn('renderSavedPlansList err', e); }
+  try { renderNavSavedPlans(); } catch(e) { console.warn('renderNavSavedPlans err', e); }
+  try { renderPlanOverview(); } catch(e) { console.warn('renderPlanOverview err', e); }
   setStatus('☁ Synced', 'var(--green)');
   setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
 };
@@ -1041,8 +1041,10 @@ signInAnonymously(auth).then(() => {
   setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
 
   onSnapshot(PLANS_DOC, (snap) => {
+    console.log('[FB] snapshot, exists:', snap.exists(), '_appReady:', window._appReady, 'isSyncing:', isSyncing);
     if (!snap.exists()) return;
     const data = snap.data();
+    console.log('[FB] plans array:', Array.isArray(data.plans), 'length:', data.plans?.length);
     if (!Array.isArray(data.plans)) return;
     if (window._appReady) {
       window.applyCloudPlans(data.plans);
@@ -3868,9 +3870,10 @@ renderNavSavedPlans();
 // Set today's date
 document.getElementById('plan-date').value = new Date().toISOString().split('T')[0];
 
-// Signal that app is fully ready — apply any cloud data that arrived early
+// App fully ready — apply any cloud data that arrived before init
 window._appReady = true;
 if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
+  console.log('[APP] applying pending cloud plans, count:', window.pendingCloudPlans.length);
   window.applyCloudPlans(window.pendingCloudPlans);
   window.pendingCloudPlans = null;
 }
