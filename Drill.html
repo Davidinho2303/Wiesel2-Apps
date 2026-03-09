@@ -550,6 +550,7 @@
     transition: box-shadow 0.15s, opacity 0.15s;
   }
   .slot-drill-item:active { cursor: grabbing; }
+  .slot-drill-item { -webkit-user-select: none; user-select: none; }
   .slot-drill-item.dragging { opacity: 0.4; box-shadow: none; }
   .slot-drill-item.drag-over { border-color: var(--text); box-shadow: 0 0 0 2px var(--text); }
   .drag-handle { color: var(--text-subtle); font-size: 12px; cursor: grab; flex-shrink: 0; padding: 0 2px; }
@@ -3374,7 +3375,7 @@ function onDrillTouchStart(e) {
     `;
     document.body.appendChild(touchClone);
     item.style.opacity = '0.3';
-  }, 600);
+  }, 400);
 }
 
 function onDrillTouchMove(e) {
