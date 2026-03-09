@@ -3338,38 +3338,51 @@ function getTouchDrillItem(el) {
   return el;
 }
 
+let touchLongPressTimer = null;
+let touchDragActive = false;
+
 function onDrillTouchStart(e) {
   const item = getTouchDrillItem(e.target);
   if (!item) return;
-  // Don't intercept taps on buttons/inputs
   if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
 
-  touchDragSrc = { slotId: item.dataset.slot, idx: parseInt(item.dataset.idx), el: item };
+  const startTouch = e.touches[0];
 
-  // Create floating clone
-  const rect = item.getBoundingClientRect();
-  touchClone = item.cloneNode(true);
-  touchClone.style.cssText = `
-    position: fixed;
-    left: ${rect.left}px;
-    top: ${rect.top}px;
-    width: ${rect.width}px;
-    opacity: 0.85;
-    pointer-events: none;
-    z-index: 9999;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-    border-radius: 6px;
-    background: var(--bg);
-    border: 2px solid var(--text);
-    transition: none;
-  `;
-  document.body.appendChild(touchClone);
-  item.style.opacity = '0.3';
+  // Only start drag after 300ms long press
+  touchLongPressTimer = setTimeout(() => {
+    touchDragActive = true;
+    touchDragSrc = { slotId: item.dataset.slot, idx: parseInt(item.dataset.idx), el: item };
 
-  e.preventDefault();
+    // Haptic feedback if available
+    if (navigator.vibrate) navigator.vibrate(40);
+
+    const rect = item.getBoundingClientRect();
+    touchClone = item.cloneNode(true);
+    touchClone.style.cssText = `
+      position: fixed;
+      left: ${rect.left}px;
+      top: ${rect.top}px;
+      width: ${rect.width}px;
+      opacity: 0.85;
+      pointer-events: none;
+      z-index: 9999;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      border-radius: 6px;
+      background: var(--bg);
+      border: 2px solid var(--text);
+      transition: none;
+    `;
+    document.body.appendChild(touchClone);
+    item.style.opacity = '0.3';
+  }, 300);
 }
 
 function onDrillTouchMove(e) {
+  if (!touchDragActive) {
+    // Cancel long press if finger moved before 300ms
+    if (touchLongPressTimer) { clearTimeout(touchLongPressTimer); touchLongPressTimer = null; }
+    return;
+  }
   if (!touchDragSrc || !touchClone) return;
   e.preventDefault();
 
@@ -3398,7 +3411,10 @@ function onDrillTouchMove(e) {
 }
 
 function onDrillTouchEnd(e) {
-  if (!touchDragSrc || !touchClone) return;
+  // Cancel long press timer if finger lifted early
+  if (touchLongPressTimer) { clearTimeout(touchLongPressTimer); touchLongPressTimer = null; }
+  if (!touchDragActive || !touchDragSrc || !touchClone) { touchDragActive = false; return; }
+  touchDragActive = false;
 
   const touch = e.changedTouches[0];
 
