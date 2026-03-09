@@ -1046,12 +1046,13 @@ signInAnonymously(auth).then(() => {
     const data = snap.data();
     console.log('[FB] plans array:', Array.isArray(data.plans), 'length:', data.plans?.length);
     if (!Array.isArray(data.plans)) return;
-    if (window._appReady) {
-      window.applyCloudPlans(data.plans);
-    } else {
-      window.pendingCloudPlans = data.plans;
-      setStatus('☁ Cloud', 'var(--text-subtle)');
-    }
+    // Always apply directly — avoid closure/timing issues
+    savedPlans = data.plans;
+    try { renderSavedPlansList(); } catch(e) {}
+    try { renderNavSavedPlans(); } catch(e) {}
+    try { renderPlanOverview(); } catch(e) {}
+    setStatus('☁ Synced', 'var(--green)');
+    setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
   }, (err) => {
     console.warn('Snapshot error:', err.message);
     setStatus('⚠ Offline', 'var(--orange)');
