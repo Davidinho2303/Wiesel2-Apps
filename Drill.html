@@ -958,7 +958,7 @@
     .plan-sidebar-panel { position: static; }
     .slot-drill-item { padding: 10px 12px; }
     .slot-drill-name { font-size: 14px; }
-    .slot-drill-mins input { width: 44px; font-size: 16px; padding: 4px 6px; }
+    .slot-drill-mins input { width: 42px; font-size: 14px; padding: 6px 4px; min-height: 36px; border-radius: 5px; }
     .slot-add-btn { padding: 10px; font-size: 13px; }
     .slot-time-input { font-size: 16px; width: 56px; padding: 4px 6px; }
     .modal-overlay { padding: 16px; align-items: center; }
@@ -1049,6 +1049,7 @@ signInAnonymously(auth).then(() => {
     if (!Array.isArray(data.plans)) return;
     // Always apply directly — avoid closure/timing issues
     savedPlans = data.plans;
+    if (data.drillMins && typeof data.drillMins === 'object') drillMins = data.drillMins;
     try { renderSavedPlansList(); } catch(e) {}
     try { renderNavSavedPlans(); } catch(e) {}
     try { renderPlanOverview(); } catch(e) {}
@@ -1064,9 +1065,9 @@ signInAnonymously(auth).then(() => {
   setStatus('⚠ Offline', 'var(--orange)');
 });
 
-window.fbSavePlans = async (plans) => {
+window.fbSavePlans = async (plans, mins) => {
   try {
-    await setDoc(PLANS_DOC, { plans, updatedAt: Date.now() });
+    await setDoc(PLANS_DOC, { plans, drillMins: mins || {}, updatedAt: Date.now() });
   } catch(e) {
     console.warn('Firebase save:', e.message);
     setStatus(currentLang==="en"?'⚠ Save failed':'⚠ Speichern fehlgeschlagen', 'var(--red)');
@@ -1930,6 +1931,7 @@ function removeConstraint(slotId, drillIdx, label, e) {
 // ============================================================
 let currentPlan = null;
 let savedPlans = [];
+let drillMins = {}; // learned default times per drill
 let pickerTargetSlotId = null;
 let pickerTargetPhase = null;
 
@@ -1941,15 +1943,28 @@ function loadFromStorage() {
     const stored = localStorage.getItem('wiesel2_plans');
     if (stored) savedPlans = JSON.parse(stored);
   } catch(e) { savedPlans = []; }
+  try {
+    const mins = localStorage.getItem('wiesel2_drillMins');
+    if (mins) drillMins = JSON.parse(mins);
+  } catch(e) { drillMins = {}; }
 }
 
 function saveToStorage() {
+  // Learn drill times from all saved plans
+  savedPlans.forEach(plan => {
+    (plan.slots || []).forEach(slot => {
+      (slot.drills || []).forEach(sd => {
+        if (sd.drillId && sd.mins) drillMins[sd.drillId] = parseInt(sd.mins);
+      });
+    });
+  });
   try { localStorage.setItem('wiesel2_plans', JSON.stringify(savedPlans)); } catch(e) {}
+  try { localStorage.setItem('wiesel2_drillMins', JSON.stringify(drillMins)); } catch(e) {}
   if (typeof fbSavePlans === 'function') {
     if (typeof fbSetSyncing === 'function') fbSetSyncing(true);
     const el = document.getElementById('sync-status');
     if (el) { el.textContent = currentLang==="en"?'☁ Saving…':'☁ Speichern…'; el.style.color = 'var(--text-muted)'; }
-    fbSavePlans(savedPlans).then(() => {
+    fbSavePlans(savedPlans, drillMins).then(() => {
       if (el) { el.textContent = currentLang==="en"?'☁ Saved':'☁ Gespeichert'; el.style.color = 'var(--green)'; }
       setTimeout(() => {
         if (el) { el.textContent = '☁ Cloud'; el.style.color = 'var(--text-subtle)'; }
@@ -2348,12 +2363,13 @@ function renderSlotHTML(slot, idx) {
             <span class="drag-handle" title="Verschieben">⠿</span>
             <span class="drill-cat-badge ${d ? CAT_CLASS[d.kat] : ''}" style="font-size:8px;">${d ? d.kat : '?'}</span>
             <span class="slot-drill-name">${d ? getDrillName(d) : sd.drillId}</span>
-            ${d ? `<button class="info-btn" onclick="event.stopPropagation();openDrillModal('${d.id}')" title="Details">ℹ</button>` : ''}
+            ${d ? `<button class="info-btn" onclick="event.stopPropagation();openDrillModal('${d.id}')" title="Details" style="padding:4px 7px;font-size:13px;min-width:28px;min-height:28px;display:inline-flex;align-items:center;justify-content:center;">ℹ</button>` : ''}
             <span class="slot-drill-mins">
               <input type="number" value="${sd.mins}" min="1" max="120"
                 ondragstart="event.stopPropagation()"
+                onclick="event.stopPropagation();this.select()"
                 onchange="updateDrillMins('${slot.id}',${di},this.value)"
-                style="width:36px;padding:1px 4px;border:1px solid var(--border);border-radius:3px;font-family:DM Mono,monospace;font-size:11px;text-align:center;background:var(--surface);color:var(--text);">
+                style="width:38px;padding:3px 4px;border:1px solid var(--border);border-radius:5px;font-family:DM Mono,monospace;font-size:12px;text-align:center;background:var(--surface);color:var(--text);touch-action:manipulation;-webkit-appearance:none;">
               min
             </span>
             <button onclick="removeDrillFromSlot('${slot.id}',${di})" style="background:none;border:none;cursor:pointer;color:var(--text-subtle);font-size:14px;padding:0 2px;">✕</button>
@@ -2482,7 +2498,7 @@ function quickAddDrill(drillId) {
   if (!targetSlot) targetSlot = currentPlan.slots.find(s => !s.fixed) || currentPlan.slots[0];
   if (!targetSlot) return;
 
-  const defaultMins = targetSlot.phase === 'warmup' ? 10 : 15;
+  const defaultMins = drillMins[drillId] || (targetSlot.phase === 'warmup' ? 10 : 15);
   targetSlot.drills.push({ drillId, mins: defaultMins });
   renderSlots();
   updateTimeSummary();
@@ -2548,7 +2564,7 @@ function addDrillToSlot(drillId) {
   if (!currentPlan || !pickerTargetSlotId) return;
   const slot = currentPlan.slots.find(s => s.id === pickerTargetSlotId);
   if (!slot) return;
-  const defaultMins = slot.phase === 'warmup' ? 10 : 15;
+  const defaultMins = drillMins[drillId] || (slot.phase === 'warmup' ? 10 : 15);
   slot.drills.push({ drillId, mins: defaultMins });
   renderSlots();
   updateTimeSummary();
