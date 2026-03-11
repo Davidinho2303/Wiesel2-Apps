@@ -1000,7 +1000,8 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signInAnonymously }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot }
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+         doc, setDoc, getDoc, getDocFromServer, onSnapshot }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
@@ -1016,7 +1017,16 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+let db;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+} catch(e) {
+  // Fallback falls bereits initialisiert
+  const { getFirestore } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+  db = getFirestore(app);
+}
 const storage = getStorage(app);
 
 // Upload file to Firebase Storage, returns download URL
@@ -1117,19 +1127,20 @@ signInAnonymously(auth).then(async () => {
   setStatus('☁ ' + ((window.currentLang||"de")==="en"?"Connected":"Verbunden"), 'var(--green)');
   setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
 
-  // Migration & Drill-Load
-  await migrateIfNeeded();
-  const loaded = await loadDrillsFromFirestore();
-  if (!loaded && window.DRILLS_SEED) {
-    window.DRILLS = window.DRILLS_SEED;
-    try { renderBibliothek(window.DRILLS); } catch(e) {}
-    const navCount = document.getElementById('nav-count-bib');
-    if (navCount) navCount.textContent = window.DRILLS.length;
-  }
+  // Migration & Drill-Load (fire-and-forget, blockiert Plan-Load nicht)
+  migrateIfNeeded().catch(e => console.warn('migrate:', e.message));
+  loadDrillsFromFirestore().then(loaded => {
+    if (!loaded && window.DRILLS_SEED) {
+      window.DRILLS = window.DRILLS_SEED;
+      try { renderBibliothek(window.DRILLS); } catch(e) {}
+      const navCount = document.getElementById('nav-count-bib');
+      if (navCount) navCount.textContent = window.DRILLS.length;
+    }
+  });
 
   // Plans: erst direkt laden, dann live-listener
   try {
-    const initSnap = await getDoc(PLANS_DOC);
+    const initSnap = await getDocFromServer(PLANS_DOC);
     if (initSnap.exists()) {
       const data = initSnap.data();
       if (Array.isArray(data.plans) && data.plans.length > 0) {
