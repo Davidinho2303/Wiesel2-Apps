@@ -1381,19 +1381,19 @@ signInAnonymously(auth).then(async () => {
 
     <!-- PAGE: TRACKING -->
     <div class="page" id="page-tracking">
-      <div class="page-header">
+      <div class="page-header" style="flex-wrap:wrap;gap:10px;">
         <div>
           <div class="page-title">Drill-Statistiken</div>
           <div class="page-subtitle">Wie oft wurde welcher Drill in gespeicherten Plänen eingesetzt?</div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <select class="filter-select" id="tracking-sort" onchange="renderTracking()" style="min-width:130px;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select class="filter-select" id="tracking-sort" onchange="renderTracking()">
             <option value="count-desc">Meist genutzt</option>
             <option value="count-asc">Selten genutzt</option>
             <option value="mins-desc">Meiste Minuten</option>
             <option value="name-asc">A–Z</option>
           </select>
-          <select class="filter-select" id="tracking-kat" onchange="renderTracking()" style="min-width:120px;">
+          <select class="filter-select" id="tracking-kat" onchange="renderTracking()">
             <option value="">Alle Kategorien</option>
             <option value="Passing">Passing</option>
             <option value="Ballhandling">Ballhandling</option>
@@ -1407,12 +1407,11 @@ signInAnonymously(auth).then(async () => {
             <option value="Plays">Plays</option>
           </select>
           <div style="display:flex;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
-            <input type="date" id="tracking-from" onchange="renderTracking()" style="border:none;background:transparent;padding:6px 8px;font-size:13px;color:var(--text);outline:none;min-width:0;">
-            <span style="color:var(--text-subtle);font-size:12px;padding:0 4px;flex-shrink:0;">→</span>
-            <input type="date" id="tracking-to" onchange="renderTracking()" style="border:none;background:transparent;padding:6px 8px;font-size:13px;color:var(--text);outline:none;min-width:0;">
+            <input type="date" id="tracking-from" onchange="renderTracking()" style="border:none;background:transparent;padding:6px 8px;font-size:16px;color:var(--text);outline:none;min-width:0;max-width:140px;">
+            <span style="color:var(--text-subtle);font-size:12px;padding:0 2px;flex-shrink:0;">→</span>
+            <input type="date" id="tracking-to" onchange="renderTracking()" style="border:none;background:transparent;padding:6px 8px;font-size:16px;color:var(--text);outline:none;min-width:0;max-width:140px;">
             <button onclick="document.getElementById('tracking-from').value='';document.getElementById('tracking-to').value='';renderTracking();" style="border:none;background:transparent;padding:6px 8px;color:var(--text-subtle);cursor:pointer;font-size:13px;" title="Zurücksetzen">×</button>
           </div>
-          <button class="btn btn-ghost btn-sm" onclick="renderTracking()">🔄 Refresh</button>
         </div>
       </div>
       <div id="tracking-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;"></div>
@@ -2342,8 +2341,9 @@ const CAT_CLASS = {
 
 function canEditDrill(d) {
   if (!d) return false;
-  if (d.createdBy === 'seed') return false;
+  if (!d.createdAt) return false;
   if (d.createdAt === 764380800000) return false;
+  if (d.createdBy === 'seed') return false;
   return true;
 }
 
@@ -3902,15 +3902,15 @@ function renderTracking() {
   document.getElementById('tracking-grid').innerHTML = rows.map(r => {
     const barW = Math.round((r.count / globalMax) * 100);
     const avgMins = r.count > 0 ? Math.round(r.totalMins / r.count) : 0;
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 14px;display:flex;align-items:center;gap:12px;">
-      <span class="drill-cat-badge ${CAT_CLASS[r.drill.kat] || ''}" style="font-size:8px;flex-shrink:0;width:70px;text-align:center;">${tCat(r.drill.kat)}</span>
-      <span style="font-size:13px;font-weight:${r.count > 0 ? 600 : 400};flex:1;min-width:0;color:${r.count === 0 ? 'var(--text-subtle)' : 'var(--text)'};cursor:pointer;text-decoration:underline dotted;" onclick="openDrillModal('${r.drill.id}')">${getDrillName(r.drill)}</span>
-      <div style="flex:0 0 160px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span class="drill-cat-badge ${CAT_CLASS[r.drill.kat] || ''}" style="font-size:8px;flex-shrink:0;width:64px;text-align:center;">${tCat(r.drill.kat)}</span>
+      <span style="font-size:13px;font-weight:${r.count > 0 ? 600 : 400};flex:1;min-width:120px;color:${r.count === 0 ? 'var(--text-subtle)' : 'var(--text)'};cursor:pointer;text-decoration:underline dotted;" onclick="openDrillModal('${r.drill.id}')">${getDrillName(r.drill)}</span>
+      <div style="flex:0 0 100px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
         <div style="height:100%;width:${barW}%;background:${r.count === 0 ? 'var(--border)' : 'var(--text)'};border-radius:3px;"></div>
       </div>
       <span style="font-family:DM Mono,monospace;font-size:12px;font-weight:500;width:28px;text-align:right;color:${r.count === 0 ? 'var(--text-subtle)' : 'var(--text)'};">${r.count}×</span>
-      <span style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-muted);width:60px;text-align:right;">${r.totalMins > 0 ? r.totalMins + ' min' : '—'}</span>
-      <span style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);width:60px;text-align:right;">${avgMins > 0 ? '⌀ ' + avgMins + ' min' : ''}</span>
+      <span style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-muted);width:52px;text-align:right;">${r.totalMins > 0 ? r.totalMins + ' min' : '—'}</span>
+      <span style="font-family:DM Mono,monospace;font-size:10px;color:var(--text-subtle);width:52px;text-align:right;">${avgMins > 0 ? '⌀ ' + avgMins + 'm' : ''}</span>
     </div>`;
   }).join('');
 }
