@@ -2322,6 +2322,8 @@ function saveToStorage() {
         if (el) { el.textContent = '☁ Cloud'; el.style.color = 'var(--text-subtle)'; }
         if (typeof fbSetSyncing === 'function') fbSetSyncing(false);
       }, 1500);
+    }).catch(() => {
+      if (typeof fbSetSyncing === 'function') fbSetSyncing(false);
     });
   }
 }
