@@ -1133,7 +1133,8 @@ signInAnonymously(auth).then(async () => {
     if (initSnap.exists()) {
       const data = initSnap.data();
       if (Array.isArray(data.plans) && data.plans.length > 0) {
-        savedPlans = data.plans;
+        window.savedPlans = data.plans;
+        savedPlans = window.savedPlans;
         if (data.drillMins) drillMins = data.drillMins;
         try { renderSavedPlansList(); } catch(e) {}
         try { renderNavSavedPlans(); } catch(e) {}
@@ -1147,9 +1148,9 @@ signInAnonymously(auth).then(async () => {
     if (!snap.exists()) return;
     const data = snap.data();
     if (!Array.isArray(data.plans)) return;
-    // Only apply cloud data if it's newer than our last local save
     if (data.updatedAt && window._lastLocalSave && data.updatedAt < window._lastLocalSave) return;
-    savedPlans = data.plans;
+    window.savedPlans = data.plans;
+    savedPlans = window.savedPlans;
     if (data.drillMins && typeof data.drillMins === 'object') drillMins = data.drillMins;
     try { renderSavedPlansList(); } catch(e) {}
     try { renderNavSavedPlans(); } catch(e) {}
@@ -2284,6 +2285,12 @@ function removeConstraint(slotId, drillIdx, label, e) {
 // ============================================================
 let currentPlan = null;
 let savedPlans = [];
+window.savedPlans = savedPlans;
+// Keep local savedPlans in sync with window.savedPlans
+Object.defineProperty(window, 'savedPlans', {
+  get: function() { return savedPlans; },
+  set: function(v) { savedPlans = v; }
+});
 let drillMins = {}; // learned default times per drill
 let pickerTargetSlotId = null;
 let pickerTargetPhase = null;
