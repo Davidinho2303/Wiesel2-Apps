@@ -1134,11 +1134,10 @@ signInAnonymously(auth).then(async () => {
       const data = initSnap.data();
       if (Array.isArray(data.plans) && data.plans.length > 0) {
         window.savedPlans = data.plans;
-        savedPlans = window.savedPlans;
-        if (data.drillMins) drillMins = data.drillMins;
-        try { renderSavedPlansList(); } catch(e) {}
-        try { renderNavSavedPlans(); } catch(e) {}
-        try { renderPlanOverview(); } catch(e) {}
+        if (data.drillMins) window.drillMins = data.drillMins;
+        if (typeof window.renderSavedPlansList === 'function') window.renderSavedPlansList();
+        if (typeof window.renderNavSavedPlans === 'function') window.renderNavSavedPlans();
+        if (typeof window.renderPlanOverview === 'function') window.renderPlanOverview();
       }
     }
   } catch(e) { console.warn('Plans initial load:', e.message); }
@@ -1150,11 +1149,10 @@ signInAnonymously(auth).then(async () => {
     if (!Array.isArray(data.plans)) return;
     if (data.updatedAt && window._lastLocalSave && data.updatedAt < window._lastLocalSave) return;
     window.savedPlans = data.plans;
-    savedPlans = window.savedPlans;
-    if (data.drillMins && typeof data.drillMins === 'object') drillMins = data.drillMins;
-    try { renderSavedPlansList(); } catch(e) {}
-    try { renderNavSavedPlans(); } catch(e) {}
-    try { renderPlanOverview(); } catch(e) {}
+    if (data.drillMins && typeof data.drillMins === 'object') window.drillMins = data.drillMins;
+    if (typeof window.renderSavedPlansList === 'function') window.renderSavedPlansList();
+    if (typeof window.renderNavSavedPlans === 'function') window.renderNavSavedPlans();
+    if (typeof window.renderPlanOverview === 'function') window.renderPlanOverview();
     setStatus('☁ Synced', 'var(--green)');
     setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
   }, (err) => {
@@ -2292,6 +2290,10 @@ Object.defineProperty(window, 'savedPlans', {
   set: function(v) { savedPlans = v; }
 });
 let drillMins = {}; // learned default times per drill
+Object.defineProperty(window, 'drillMins', {
+  get: function() { return drillMins; },
+  set: function(v) { drillMins = v; }
+});
 let pickerTargetSlotId = null;
 let pickerTargetPhase = null;
 
@@ -4696,6 +4698,12 @@ if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
   setTimeout(() => { const el2 = document.getElementById('sync-status'); if (el2) { el2.textContent = '☁ Cloud'; el2.style.color = 'var(--text-subtle)'; }}, 2000);
   console.log('[APP] pending plans applied:', plans.length);
 }
+
+// Expose functions for module script (Firebase onSnapshot)
+window.renderSavedPlansList = renderSavedPlansList;
+window.renderNavSavedPlans  = renderNavSavedPlans;
+window.renderPlanOverview   = renderPlanOverview;
+window.drillMins            = drillMins;
 </script>
 
   <!-- DRILL JSON IMPORT MODAL -->
