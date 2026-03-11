@@ -1147,7 +1147,7 @@ signInAnonymously(auth).then(async () => {
     if (!snap.exists()) return;
     const data = snap.data();
     if (!Array.isArray(data.plans)) return;
-    if (data.updatedAt && window._lastLocalSave && data.updatedAt < window._lastLocalSave) return;
+    if (isSyncing) return;
     window.savedPlans = data.plans;
     if (data.drillMins && typeof data.drillMins === 'object') window.drillMins = data.drillMins;
     if (typeof window.renderSavedPlansList === 'function') window.renderSavedPlansList();
@@ -2322,7 +2322,6 @@ function saveToStorage() {
   try { localStorage.setItem('wiesel2_plans', JSON.stringify(savedPlans)); } catch(e) {}
   try { localStorage.setItem('wiesel2_drillMins', JSON.stringify(drillMins)); } catch(e) {}
   if (typeof fbSavePlans === 'function') {
-    window._lastLocalSave = Date.now();
     if (typeof fbSetSyncing === 'function') fbSetSyncing(true);
     const el = document.getElementById('sync-status');
     if (el) { el.textContent = currentLang==="en"?'☁ Saving…':'☁ Speichern…'; el.style.color = 'var(--text-muted)'; }
