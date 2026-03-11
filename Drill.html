@@ -2283,7 +2283,6 @@ function removeConstraint(slotId, drillIdx, label, e) {
 // ============================================================
 let currentPlan = null;
 let savedPlans = [];
-window.savedPlans = savedPlans;
 // Keep local savedPlans in sync with window.savedPlans
 Object.defineProperty(window, 'savedPlans', {
   get: function() { return savedPlans; },
@@ -4703,7 +4702,6 @@ if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
 window.renderSavedPlansList = renderSavedPlansList;
 window.renderNavSavedPlans  = renderNavSavedPlans;
 window.renderPlanOverview   = renderPlanOverview;
-window.drillMins            = drillMins;
 </script>
 
   <!-- DRILL JSON IMPORT MODAL -->
