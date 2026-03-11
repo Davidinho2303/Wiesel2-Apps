@@ -2385,14 +2385,79 @@ function renderBibliothek(drills) {
 // ============================================================
 // DRILL JSON IMPORT
 // ============================================================
+let _importParsed = null;
+
 function openDrillImportModal() {
-  document.getElementById('drill-import-json').value = '';
-  document.getElementById('drill-import-status').textContent = '';
+  _importParsed = null;
+  const fi = document.getElementById('drill-import-file');
+  if (fi) fi.value = '';
+  const st = document.getElementById('drill-import-status');
+  if (st) { st.textContent = ''; st.style.color = 'var(--text-subtle)'; }
+  const btn = document.getElementById('drill-import-btn');
+  if (btn) btn.style.display = 'none';
   document.getElementById('drill-import-modal').style.display = 'flex';
 }
 
 function closeDrillImportModal() {
   document.getElementById('drill-import-modal').style.display = 'none';
+}
+
+function handleDrillImportFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('drill-import-status');
+  const btn = document.getElementById('drill-import-btn');
+  statusEl.textContent = '⏳ Lese Datei...';
+  statusEl.style.color = 'var(--text-subtle)';
+  btn.style.display = 'none';
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const raw = e.target.result;
+    try {
+      if (file.name.endsWith('.csv')) {
+        _importParsed = parseDrillCSV(raw);
+      } else {
+        _importParsed = JSON.parse(raw);
+        if (!Array.isArray(_importParsed)) throw new Error('Erwartet JSON-Array');
+      }
+      statusEl.textContent = '✓ ' + _importParsed.length + ' Drills gelesen — bereit zum Importieren';
+      statusEl.style.color = 'var(--text)';
+      btn.style.display = 'inline-flex';
+    } catch(err) {
+      statusEl.textContent = '❌ ' + err.message;
+      statusEl.style.color = 'var(--red)';
+      _importParsed = null;
+    }
+  };
+  reader.readAsText(file);
+}
+
+function parseDrillCSV(raw) {
+  const lines = raw.trim().split(/\r?\n/);
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+  return lines.slice(1).filter(l => l.trim()).map(line => {
+    const vals = [];
+    let cur = '', inQ = false;
+    for (const ch of line + ',') {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    const obj = {};
+    headers.forEach((h, i) => {
+      let v = (vals[i] || '').replace(/^"|"$/g,'').trim();
+      if (h === 'phase' || h === 'spielphase') {
+        try { obj[h] = JSON.parse(v); } catch { obj[h] = v.split(';').map(s=>s.trim()).filter(Boolean); }
+      } else if (h === 'minSpieler') {
+        obj[h] = parseInt(v) || 1;
+      } else if (h === 'gamelike' || h === 'abschluss') {
+        obj[h] = v === 'true' || v === '1';
+      } else {
+        obj[h] = v;
+      }
+    });
+    return obj;
+  });
 }
 
 function executeDrillImport() {
