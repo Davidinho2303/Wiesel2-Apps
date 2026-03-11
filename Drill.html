@@ -2397,20 +2397,12 @@ function closeDrillImportModal() {
 
 function executeDrillImport() {
   const statusEl = document.getElementById('drill-import-status');
-  const raw = document.getElementById('drill-import-json').value.trim();
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch(e) {
-    statusEl.textContent = '❌ Ungültiges JSON: ' + e.message;
+  if (!_importParsed || !_importParsed.length) {
+    statusEl.textContent = '❌ Keine Datei geladen';
     statusEl.style.color = 'var(--red)';
     return;
   }
-  if (!Array.isArray(parsed)) {
-    statusEl.textContent = '❌ Erwartet ein JSON-Array [ {...}, {...} ]';
-    statusEl.style.color = 'var(--red)';
-    return;
-  }
+  const parsed = _importParsed;
 
   const REQUIRED = ['id','name','kat','phase','spielphase','intensity','minSpieler','feld'];
   const DEFAULTS = { bälle:'1', material:'keine', defense:'nein', competitive:'nein', gamelike:false, abschluss:false, beschreibung:'', variationen:'', coachingPunkte:'', note:'', bildUrl:'', videoUrl:'', externerLink:'', scope:'team' };
@@ -3324,25 +3316,6 @@ ${slotsHTML}
 </table>
 ${plan.notes ? `<div class="notes"><strong>📌 Notizen:</strong><br>${esc(plan.notes).replace(/\n/g,'<br>')}</div>` : ''}
 <div class="footer">Weddinger Wiesel 2 &middot; Saison 2025/2026 &middot; ${new Date().toLocaleDateString('de-DE')}</div>
-
-  <!-- DRILL JSON IMPORT MODAL -->
-  <div class="modal-overlay" id="drill-import-modal" style="display:none;" onclick="if(event.target===this)closeDrillImportModal()">
-    <div class="modal-box" style="max-width:520px;">
-      <div class="modal-header">
-        <div class="modal-title">📥 Drills importieren (JSON)</div>
-        <button class="modal-close" onclick="closeDrillImportModal()">✕</button>
-      </div>
-      <div style="padding:16px;display:flex;flex-direction:column;gap:12px;">
-        <div style="font-size:13px;color:var(--text-subtle);">JSON-Array mit Drill-Objekten. Pflichtfelder: <code>id, name, kat, phase, spielphase, intensity, minSpieler, feld</code>. Vorhandene IDs werden übersprungen.</div>
-        <textarea id="drill-import-json" style="font-family:DM Mono,monospace;font-size:12px;min-height:200px;width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);resize:vertical;" placeholder='[{"id":"mein-drill","name":"Mein Drill","kat":"Shooting","phase":["Hauptteil"],"spielphase":["Technik"],"intensity":"mittel","minSpieler":4,"feld":"Halbfeld",...}]'></textarea>
-        <div id="drill-import-status" style="font-size:12px;color:var(--text-subtle);min-height:18px;"></div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;">
-          <button class="btn btn-ghost btn-sm" onclick="closeDrillImportModal()">Abbrechen</button>
-          <button class="btn btn-primary btn-sm" onclick="executeDrillImport()">Importieren</button>
-        </div>
-      </div>
-    </div>
-  </div>
 </body>
 </html>`;
 }
@@ -4633,5 +4606,24 @@ if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
   console.log('[APP] pending plans applied:', plans.length);
 }
 </script>
+
+  <!-- DRILL JSON IMPORT MODAL -->
+  <div class="modal-overlay" id="drill-import-modal" style="display:none;" onclick="if(event.target===this)closeDrillImportModal()">
+    <div class="modal-box" style="max-width:520px;">
+      <div class="modal-header">
+        <div class="modal-title">&#128229; Drills importieren (JSON)</div>
+        <button class="modal-close" onclick="closeDrillImportModal()">&#10005;</button>
+      </div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+        <div style="font-size:13px;color:var(--text-subtle);">JSON-Array mit Drill-Objekten. Pflichtfelder: <code>id, name, kat, phase, spielphase, intensity, minSpieler, feld</code>. Vorhandene IDs werden &#252;bersprungen.</div>
+        <textarea id="drill-import-json" style="font-family:DM Mono,monospace;font-size:12px;min-height:200px;width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);resize:vertical;" placeholder="JSON-Array hier einf&#252;gen..."></textarea>
+        <div id="drill-import-status" style="font-size:12px;color:var(--text-subtle);min-height:18px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn btn-ghost btn-sm" onclick="closeDrillImportModal()">Abbrechen</button>
+          <button class="btn btn-primary btn-sm" onclick="executeDrillImport()">Importieren</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
