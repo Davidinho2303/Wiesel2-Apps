@@ -1000,8 +1000,10 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signInAnonymously }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, onSnapshot }
+import { getFirestore, doc, setDoc, getDoc, onSnapshot }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCySvMOiRgKSkclyZViGC_bEpCu4AZ0a8k",
@@ -1015,39 +1017,122 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const PLANS_DOC = doc(db, 'teams', 'wiesel2', 'data', 'plans');
+const storage = getStorage(app);
+
+// Upload file to Firebase Storage, returns download URL
+window.fbUploadFile = async (file, path, onProgress) => {
+  const fileRef = storageRef(storage, path);
+  return new Promise((resolve, reject) => {
+    const task = uploadBytesResumable(fileRef, file);
+    task.on('state_changed',
+      snap => { if (onProgress) onProgress(Math.round(snap.bytesTransferred / snap.totalBytes * 100)); },
+      err  => reject(err),
+      async () => resolve(await getDownloadURL(task.snapshot.ref))
+    );
+  });
+};
+const PLANS_DOC  = doc(db, 'teams', 'wiesel2', 'data', 'plans');
+const DRILLS_DOC = doc(db, 'teams', 'wiesel2', 'data', 'drills');
+const META_DOC   = doc(db, 'teams', 'wiesel2', 'data', 'meta');
 
 let isSyncing = false;
-window._appReady = false;
-window.pendingCloudPlans = null;
 
 const setStatus = (text, color) => {
   const el = document.getElementById('sync-status');
   if (el) { el.textContent = text; el.style.color = color; }
 };
 
-window.applyCloudPlans = function(plans) {
-  if (isSyncing) return;
-  savedPlans = plans;
-  try { renderSavedPlansList(); } catch(e) { console.warn('renderSavedPlansList err', e); }
-  try { renderNavSavedPlans(); } catch(e) { console.warn('renderNavSavedPlans err', e); }
-  try { renderPlanOverview(); } catch(e) { console.warn('renderPlanOverview err', e); }
-  setStatus('☁ Synced', 'var(--green)');
-  setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
+// ---- Drills aus Firestore laden
+async function loadDrillsFromFirestore() {
+  try {
+    const snap = await getDoc(DRILLS_DOC);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (Array.isArray(data.drills) && data.drills.length > 0) {
+        window.DRILLS = data.drills;
+        try { renderBibliothek(window.DRILLS); } catch(e) {}
+        const navCount = document.getElementById('nav-count-bib');
+        if (navCount) navCount.textContent = window.DRILLS.length;
+        return true;
+      }
+    }
+    return false;
+  } catch(e) {
+    console.warn('Drills load error:', e.message);
+    return false;
+  }
+}
+
+// ---- Einmalige Migration: hardcoded Seed → Firestore
+async function migrateIfNeeded() {
+  try {
+    const metaSnap = await getDoc(META_DOC);
+    if (metaSnap.exists() && metaSnap.data().drillsMigrated) {
+      // Check if already-migrated drills have createdAt — if not, re-migrate
+      const drillsSnap = await getDoc(DRILLS_DOC);
+      if (drillsSnap.exists()) {
+        const existing = drillsSnap.data().drills || [];
+        if (existing.length > 0 && existing[0].createdAt) return; // already has timestamps
+        // Otherwise fall through to re-migrate
+      } else {
+        return;
+      }
+    }
+    if (!window.DRILLS_SEED || window.DRILLS_SEED.length === 0) return;
+
+    setStatus('⏳ Migriere Drills...', 'var(--orange)');
+    await setDoc(DRILLS_DOC, { drills: window.DRILLS_SEED, updatedAt: Date.now() });
+    await setDoc(META_DOC, { drillsMigrated: true, migratedAt: Date.now() }, { merge: true });
+    setStatus('Migration fertig', 'var(--green)');
+    setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
+  } catch(e) {
+    console.warn('Migration error:', e.message);
+  }
+}
+
+// ---- Drills in Firestore speichern
+window.fbSaveDrills = async (drills) => {
+  try {
+    await setDoc(DRILLS_DOC, { drills, updatedAt: Date.now() });
+  } catch(e) {
+    console.warn('Drills save error:', e.message);
+    setStatus('⚠ Drill-Speichern fehlgeschlagen', 'var(--red)');
+  }
 };
 
-// Anonym einloggen, dann Listener starten
-signInAnonymously(auth).then(() => {
-  setStatus('☁ ' + (currentLang==="en"?"Connected":"Verbunden"), 'var(--green)');
+// ---- Plans speichern
+window.fbSavePlans = async (plans, mins) => {
+  try {
+    await setDoc(PLANS_DOC, { plans, drillMins: mins || {}, updatedAt: Date.now() });
+  } catch(e) {
+    console.warn('Firebase save:', e.message);
+    setStatus((window.currentLang||"de")==="en"?'⚠ Save failed':'⚠ Speichern fehlgeschlagen', 'var(--red)');
+  }
+};
+
+window.fbSetSyncing = (v) => { isSyncing = v; };
+
+// ---- Anonym einloggen
+signInAnonymously(auth).then(async () => {
+  setStatus('☁ ' + ((window.currentLang||"de")==="en"?"Connected":"Verbunden"), 'var(--green)');
   setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
 
+  // Migration & Drill-Load
+  await migrateIfNeeded();
+  const loaded = await loadDrillsFromFirestore();
+  if (!loaded && window.DRILLS_SEED) {
+    window.DRILLS = window.DRILLS_SEED;
+    try { renderBibliothek(window.DRILLS); } catch(e) {}
+    const navCount = document.getElementById('nav-count-bib');
+    if (navCount) navCount.textContent = window.DRILLS.length;
+  }
+
+  // Plans live-listener
   onSnapshot(PLANS_DOC, (snap) => {
-    console.log('[FB] snapshot, exists:', snap.exists(), '_appReady:', window._appReady, 'isSyncing:', isSyncing);
     if (!snap.exists()) return;
     const data = snap.data();
-    console.log('[FB] plans array:', Array.isArray(data.plans), 'length:', data.plans?.length);
     if (!Array.isArray(data.plans)) return;
-    // Always apply directly — avoid closure/timing issues
+    if (isSyncing) return;
     savedPlans = data.plans;
     if (data.drillMins && typeof data.drillMins === 'object') drillMins = data.drillMins;
     try { renderSavedPlansList(); } catch(e) {}
@@ -1060,21 +1145,27 @@ signInAnonymously(auth).then(() => {
     setStatus('⚠ Offline', 'var(--orange)');
   });
 
+  // Drills live-listener (Aenderungen von anderen Geraeten)
+  onSnapshot(DRILLS_DOC, (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    if (!Array.isArray(data.drills)) return;
+    window.DRILLS = data.drills;
+    try { renderBibliothek(window.DRILLS); } catch(e) {}
+    const navCount = document.getElementById('nav-count-bib');
+    if (navCount) navCount.textContent = window.DRILLS.length;
+  }, err => console.warn('Drills snapshot error:', err.message));
+
 }).catch((err) => {
   console.warn('Auth error:', err.message);
   setStatus('⚠ Offline', 'var(--orange)');
-});
-
-window.fbSavePlans = async (plans, mins) => {
-  try {
-    await setDoc(PLANS_DOC, { plans, drillMins: mins || {}, updatedAt: Date.now() });
-  } catch(e) {
-    console.warn('Firebase save:', e.message);
-    setStatus(currentLang==="en"?'⚠ Save failed':'⚠ Speichern fehlgeschlagen', 'var(--red)');
+  if (window.DRILLS_SEED) {
+    window.DRILLS = window.DRILLS_SEED;
+    try { renderBibliothek(window.DRILLS); } catch(e) {}
+    const navCount = document.getElementById('nav-count-bib');
+    if (navCount) navCount.textContent = window.DRILLS.length;
   }
-};
-
-window.fbSetSyncing = (v) => { isSyncing = v; };
+});
 </script>
 </head>
 <body>
@@ -1144,6 +1235,7 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
           <div class="page-title">Drill-Bibliothek</div>
           <div class="page-subtitle">Alle Drills — filterbar, durchsuchbar, klickbar für Details</div>
         </div>
+        <button class="btn btn-primary btn-sm" onclick="openDrillEditModal(null)">+ Neuer Drill</button>
       </div>
 
       <div class="filter-bar" id="bib-filters">
@@ -1314,6 +1406,12 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
             <option value="Kondition">Kondition</option>
             <option value="Plays">Plays</option>
           </select>
+          <div style="display:flex;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+            <input type="date" id="tracking-from" onchange="renderTracking()" style="border:none;background:transparent;padding:6px 8px;font-size:13px;color:var(--text);outline:none;min-width:0;">
+            <span style="color:var(--text-subtle);font-size:12px;padding:0 4px;flex-shrink:0;">→</span>
+            <input type="date" id="tracking-to" onchange="renderTracking()" style="border:none;background:transparent;padding:6px 8px;font-size:13px;color:var(--text);outline:none;min-width:0;">
+            <button onclick="document.getElementById('tracking-from').value='';document.getElementById('tracking-to').value='';renderTracking();" style="border:none;background:transparent;padding:6px 8px;color:var(--text-subtle);cursor:pointer;font-size:13px;" title="Zurücksetzen">×</button>
+          </div>
           <button class="btn btn-ghost btn-sm" onclick="renderTracking()">🔄 Refresh</button>
         </div>
       </div>
@@ -1396,6 +1494,7 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
     </div>
     <div class="meta-grid" id="modal-meta-grid"></div>
     <div id="modal-drill-desc" style="margin:12px 0 0;padding:12px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.6;color:var(--text);display:none;"></div>
+    <div id="modal-drill-extra"></div>
     <div id="modal-note-section"></div>
     <div id="modal-add-section"></div>
   </div>
@@ -1481,6 +1580,172 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
   </div>
 </div>
 
+<!-- DRILL ERSTELLEN / BEARBEITEN MODAL -->
+<div class="modal-overlay hidden" id="drill-edit-modal" onclick="if(event.target===this)closeDrillEditModal()">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-header">
+      <div class="modal-title" id="drill-edit-modal-title">Neuer Drill</div>
+      <button class="modal-close" onclick="closeDrillEditModal()">×</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div class="form-group" style="grid-column:1/-1;">
+        <label class="form-label">Name *</label>
+        <input type="text" id="de-name" class="form-input" placeholder="z.B. Doppelpässe">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Kategorie *</label>
+        <select id="de-kat" class="form-select">
+          <option value="Passing">Passing</option>
+          <option value="Ballhandling">Ballhandling</option>
+          <option value="Shooting">Shooting</option>
+          <option value="Transition">Transition</option>
+          <option value="Defense">Defense</option>
+          <option value="Rebounding">Rebounding</option>
+          <option value="Offense">Offense</option>
+          <option value="Post">Post</option>
+          <option value="Kondition">Kondition</option>
+          <option value="Plays">Plays</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Intensität</label>
+        <select id="de-intensity" class="form-select">
+          <option value="niedrig">niedrig</option>
+          <option value="mittel">mittel</option>
+          <option value="hoch">hoch</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phase</label>
+        <div style="display:flex;gap:8px;padding-top:4px;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;">
+            <input type="checkbox" id="de-phase-warmup" value="Warmup"> Warmup
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;">
+            <input type="checkbox" id="de-phase-haupt" value="Hauptteil"> Hauptteil
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Spielphase (mehrere wählbar)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;padding-top:4px;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="de-sp-technik" value="Technik"> Technik</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="de-sp-so" value="SO"> SO</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="de-sp-ot" value="OT"> OT</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="de-sp-dt" value="DT"> DT</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="de-sp-sd" value="SD"> SD</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Min. Spieler</label>
+        <input type="number" id="de-spieler" class="form-input" min="1" max="20" value="4">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Feldgröße</label>
+        <select id="de-feld" class="form-select">
+          <option value="Halbfeld">Halbfeld</option>
+          <option value="Ganzfeld">Ganzfeld</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Bälle</label>
+        <input type="text" id="de-baelle" class="form-input" placeholder="z.B. 1, 2+, variabel">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Material</label>
+        <input type="text" id="de-material" class="form-input" placeholder="z.B. Hütchen, Leiter, keine">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Defense</label>
+        <select id="de-defense" class="form-select">
+          <option value="nein">nein</option>
+          <option value="ja (live)">ja (live)</option>
+          <option value="ja (eingeschränkt)">ja (eingeschränkt)</option>
+          <option value="eingeschränkt">eingeschränkt</option>
+          <option value="optional">optional</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Competitive</label>
+        <select id="de-competitive" class="form-select">
+          <option value="nein">nein</option>
+          <option value="ja">ja</option>
+          <option value="optional">optional</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1;display:flex;gap:20px;padding-top:4px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="de-gamelike"> Gamelike
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="de-abschluss"> Abschluss
+        </label>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
+      <div class="form-group">
+        <label class="form-label">Beschreibung</label>
+        <textarea id="de-beschreibung" class="form-input" rows="3" style="resize:vertical;font-family:DM Sans,sans-serif;" placeholder="Ablauf des Drills…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Variationen</label>
+        <textarea id="de-variationen" class="form-input" rows="2" style="resize:vertical;font-family:DM Sans,sans-serif;" placeholder="Optionale Varianten…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Coaching-Punkte</label>
+        <textarea id="de-coaching" class="form-input" rows="2" style="resize:vertical;font-family:DM Sans,sans-serif;" placeholder="Schwerpunkte für den Coach…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notiz</label>
+        <input type="text" id="de-note" class="form-input" placeholder="z.B. Auch als Constraint verwendbar">
+      </div>
+      <!-- BILD -->
+      <div class="form-group">
+        <label class="form-label">Bild (URL oder Upload)</label>
+        <input type="text" id="de-bild" class="form-input" placeholder="https://… oder Datei unten wählen" oninput="dePreviewBild()">
+        <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0;">
+            📁 Datei wählen
+            <input type="file" id="de-bild-file" accept="image/*" style="display:none" onchange="deBildFileChosen(this)">
+          </label>
+          <span id="de-bild-filename" style="font-size:12px;color:var(--text-subtle);"></span>
+          <div id="de-bild-progress" style="display:none;font-size:12px;color:var(--blue);">⏳ 0%</div>
+        </div>
+        <div id="de-bild-preview" style="margin-top:8px;display:none;">
+          <img id="de-bild-img" src="" style="max-width:100%;max-height:160px;border-radius:6px;object-fit:cover;">
+        </div>
+      </div>
+      <!-- VIDEO -->
+      <div class="form-group">
+        <label class="form-label">Video (URL oder Upload)</label>
+        <input type="text" id="de-video" class="form-input" placeholder="https://youtube.com/… oder Datei unten wählen" oninput="dePreviewVideo()">
+        <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0;">
+            📁 Datei wählen
+            <input type="file" id="de-video-file" accept="video/*" style="display:none" onchange="deVideoFileChosen(this)">
+          </label>
+          <span id="de-video-filename" style="font-size:12px;color:var(--text-subtle);"></span>
+          <div id="de-video-progress" style="display:none;font-size:12px;color:var(--blue);">⏳ 0%</div>
+        </div>
+        <div id="de-video-preview" style="margin-top:8px;display:none;">
+          <video id="de-video-player" src="" controls style="max-width:100%;max-height:160px;border-radius:6px;"></video>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Externer Link (optional)</label>
+        <input type="text" id="de-link" class="form-input" placeholder="https://playbasketball.de/…">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" onclick="closeDrillEditModal()">Abbrechen</button>
+      <button class="btn btn-primary btn-sm" onclick="saveDrillFromModal()">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST CONTAINER -->
 <div class="toast-container" id="toast-container"></div>
 
@@ -1488,87 +1753,159 @@ window.fbSetSyncing = (v) => { isSyncing = v; };
 // ============================================================
 // DATA — DRILL DATABASE
 // ============================================================
-const DRILLS = [
+window.DRILLS_SEED = [
   // PASSING
-  { id: "doppelpaesse", name: "Doppelpässe", kat: "Passing", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 4, feld: "Ganzfeld", bälle: "2+", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false },
-  { id: "extraball", name: "Extraball Passdrill (4+1)", kat: "Passing", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 4, feld: "Halbfeld", bälle: "5", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false },
-  { id: "spielen-ohne-dribbling", name: "Spielen ohne Dribbling", kat: "Passing", phase: ["Warmup"], spielphase: ["SO","OT","DT","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar" },
-  { id: "10pass", name: "10 Pass Drill / 5-0 Motion", kat: "Passing", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "eingeschränkt", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "7er10er", name: "7er / 10er Passen in Motion", kat: "Passing", phase: ["Warmup","Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "eingeschränkt", competitive: "ja", gamelike: true, abschluss: true },
+  { id: "doppelpaesse", name: "Doppelpässe", kat: "Passing", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 4, feld: "Ganzfeld", bälle: "2+", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "extraball", name: "Extraball Passdrill (4+1)", kat: "Passing", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 4, feld: "Halbfeld", bälle: "5", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "spielen-ohne-dribbling", name: "Spielen ohne Dribbling", kat: "Passing", phase: ["Warmup"], spielphase: ["SO","OT","DT","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar", createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "10pass", name: "10 Pass Drill / 5-0 Motion", kat: "Passing", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "eingeschränkt", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "7er10er", name: "7er / 10er Passen in Motion", kat: "Passing", phase: ["Warmup","Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "eingeschränkt", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
   // BALLHANDLING
-  { id: "kniekehlenfassen", name: "Kniekehlenfassen / Dribbling Progression", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "0/2", material: "Tennisball", defense: "nein", competitive: "nein", gamelike: false, abschluss: false },
-  { id: "shield", name: "Shield Drill (2-1 / into 1-1)", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 3, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "optional", gamelike: false, abschluss: false },
-  { id: "aufdrehen", name: "Aufdrehen Drill (Wing / Post)", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 4, feld: "Halbfeld", bälle: "2", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "aufdrehen-defense", name: "Aufdrehen mit Defense", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "2", material: "keine", defense: "ja (live)", competitive: "optional", gamelike: true, abschluss: true },
-  { id: "aufdrehen-pnr", name: "Aufdrehen Into PnR Warmup", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 4, feld: "Halbfeld", bälle: "2", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "leiter-dribbling", name: "Leiter into Dribbling", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 1, feld: "Halbfeld", bälle: "1", material: "Leiter", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "rausschlagen", name: "Dribbeln mit Rausschlagen", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "2", material: "keine", defense: "nein", competitive: "optional", gamelike: false, abschluss: false },
-  { id: "pressbreak", name: "Press Break Warmup", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["OT"], intensity: "mittel", minSpieler: 8, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "banana", name: "Banana Drill", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 8, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "dribbling-korridor", name: "Dribbling Korridor", kat: "Ballhandling", phase: ["Warmup","Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 1, feld: "Halbfeld", bälle: "1+", material: "Hütchen", defense: "optional", competitive: "nein", gamelike: true, abschluss: true },
-  { id: "bh-clinic", name: "Ballhandling Clinic", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 1, feld: "Halbfeld", bälle: "2", material: "Tennisball", defense: "nein", competitive: "nein", gamelike: false, abschluss: false },
+  { id: "kniekehlenfassen", name: "Kniekehlenfassen / Dribbling Progression", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "0/2", material: "Tennisball", defense: "nein", competitive: "nein", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "shield", name: "Shield Drill (2-1 / into 1-1)", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 3, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "optional", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "aufdrehen", name: "Aufdrehen Drill (Wing / Post)", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 4, feld: "Halbfeld", bälle: "2", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "aufdrehen-defense", name: "Aufdrehen mit Defense", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "2", material: "keine", defense: "ja (live)", competitive: "optional", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "aufdrehen-pnr", name: "Aufdrehen Into PnR Warmup", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 4, feld: "Halbfeld", bälle: "2", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "leiter-dribbling", name: "Leiter into Dribbling", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 1, feld: "Halbfeld", bälle: "1", material: "Leiter", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "rausschlagen", name: "Dribbeln mit Rausschlagen", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "2", material: "keine", defense: "nein", competitive: "optional", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "pressbreak", name: "Press Break Warmup", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["OT"], intensity: "mittel", minSpieler: 8, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "banana", name: "Banana Drill", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 8, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "dribbling-korridor", name: "Dribbling Korridor", kat: "Ballhandling", phase: ["Warmup","Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 1, feld: "Halbfeld", bälle: "1+", material: "Hütchen", defense: "optional", competitive: "nein", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "bh-clinic", name: "Ballhandling Clinic", kat: "Ballhandling", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 1, feld: "Halbfeld", bälle: "2", material: "Tennisball", defense: "nein", competitive: "nein", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
   // SHOOTING
-  { id: "issalo", name: "Issalo Shooting", kat: "Shooting", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "ucla", name: "UCLA Shooting Warmup Drill", kat: "Shooting", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "2", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "layup-run", name: "Layup Run Drill", kat: "Shooting", phase: ["Warmup","Hauptteil"], spielphase: ["OT"], intensity: "hoch", minSpieler: 6, feld: "Ganzfeld", bälle: "2", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "gegenbewegung", name: "Gegenbewegung Werfen", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "pendel", name: "Pendel Werfen", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "shooting-closeout", name: "Shooting Closeout", kat: "Shooting", phase: ["Warmup","Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (eingeschränkt)", competitive: "nein", gamelike: true, abschluss: true, note: "Shooting mit Boxout als Variante enthalten" },
-  { id: "shooting-mittellinie", name: "Shooting Mittellinie", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "maedn", name: "Mädn Shooting / KKW", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 8, feld: "Ganzfeld", bälle: "4", material: "Leiter, Hütchen, Tafel", defense: "nein", competitive: "ja", gamelike: false, abschluss: true },
-  { id: "onemore", name: "One More Shooting", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "ja", gamelike: false, abschluss: true },
-  { id: "aroundtheworld", name: "Around the World", kat: "Shooting", phase: ["Warmup","Hauptteil"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 6, feld: "Ganzfeld", bälle: "4", material: "keine", defense: "nein", competitive: "ja", gamelike: false, abschluss: true },
-  { id: "mos", name: "Mos Drill", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik","OT"], intensity: "hoch", minSpieler: 8, feld: "Ganzfeld", bälle: "5", material: "keine", defense: "nein", competitive: "nein", gamelike: true, abschluss: true },
-  { id: "guards-wing-11", name: "Guards Wing 1-1 Clinic", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "optional", gamelike: true, abschluss: true },
-  { id: "bigs-finishing", name: "Bigs Finishing Clinic", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "Hütchen ggf.", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
+  { id: "issalo", name: "Issalo Shooting", kat: "Shooting", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "ucla", name: "UCLA Shooting Warmup Drill", kat: "Shooting", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "2", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "layup-run", name: "Layup Run Drill", kat: "Shooting", phase: ["Warmup","Hauptteil"], spielphase: ["OT"], intensity: "hoch", minSpieler: 6, feld: "Ganzfeld", bälle: "2", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "gegenbewegung", name: "Gegenbewegung Werfen", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "pendel", name: "Pendel Werfen", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "shooting-closeout", name: "Shooting Closeout", kat: "Shooting", phase: ["Warmup","Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (eingeschränkt)", competitive: "nein", gamelike: true, abschluss: true, note: "Shooting mit Boxout als Variante enthalten", createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "shooting-mittellinie", name: "Shooting Mittellinie", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "maedn", name: "Mädn Shooting / KKW", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 8, feld: "Ganzfeld", bälle: "4", material: "Leiter, Hütchen, Tafel", defense: "nein", competitive: "ja", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "onemore", name: "One More Shooting", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "ja", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "aroundtheworld", name: "Around the World", kat: "Shooting", phase: ["Warmup","Hauptteil"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 6, feld: "Ganzfeld", bälle: "4", material: "keine", defense: "nein", competitive: "ja", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "mos", name: "Mos Drill", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["Technik","OT"], intensity: "hoch", minSpieler: 8, feld: "Ganzfeld", bälle: "5", material: "keine", defense: "nein", competitive: "nein", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "guards-wing-11", name: "Guards Wing 1-1 Clinic", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "optional", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "bigs-finishing", name: "Bigs Finishing Clinic", kat: "Shooting", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "Hütchen ggf.", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
   // TRANSITION
-  { id: "fastbreak-clinic", name: "Fastbreak Clinic (3/4/5 Man)", kat: "Transition", phase: ["Warmup"], spielphase: ["OT"], intensity: "hoch", minSpieler: 3, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: true, abschluss: true, note: "Enthält: 3/4/5 Man Fastbreak + Transition Cycles" },
-  { id: "53-transition", name: "5-3 / 5-4 Transition", kat: "Transition", phase: ["Hauptteil"], spielphase: ["OT","DT"], intensity: "hoch", minSpieler: 6, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "11man", name: "11 Man", kat: "Transition", phase: ["Warmup","Hauptteil"], spielphase: ["OT","DT"], intensity: "hoch", minSpieler: 11, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "zahlenspiel", name: "FW, 2-1, 3-2 … (Zahlenspiel)", kat: "Transition", phase: ["Hauptteil"], spielphase: ["OT","DT"], intensity: "hoch", minSpieler: 6, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
+  { id: "fastbreak-clinic", name: "Fastbreak Clinic (3/4/5 Man)", kat: "Transition", phase: ["Warmup"], spielphase: ["OT"], intensity: "hoch", minSpieler: 3, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: true, abschluss: true, note: "Enthält: 3/4/5 Man Fastbreak + Transition Cycles", createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "53-transition", name: "5-3 / 5-4 Transition", kat: "Transition", phase: ["Hauptteil"], spielphase: ["OT","DT"], intensity: "hoch", minSpieler: 6, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "11man", name: "11 Man", kat: "Transition", phase: ["Warmup","Hauptteil"], spielphase: ["OT","DT"], intensity: "hoch", minSpieler: 11, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "zahlenspiel", name: "FW, 2-1, 3-2 … (Zahlenspiel)", kat: "Transition", phase: ["Hauptteil"], spielphase: ["OT","DT"], intensity: "hoch", minSpieler: 6, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
   // DEFENSE
-  { id: "defense-korridor", name: "Defense Korridor", kat: "Defense", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 2, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true },
-  { id: "closeout-clinic", name: "Closeout Clinic", kat: "Defense", phase: ["Hauptteil"], spielphase: ["SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true, note: "Inkl. 2-2/3-3 Closeout + Closeout into Boxout" },
-  { id: "shell", name: "Shell Drill", kat: "Defense", phase: ["Hauptteil"], spielphase: ["SD"], intensity: "mittel", minSpieler: 8, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (eingeschränkt)", competitive: "nein", gamelike: false, abschluss: false },
-  { id: "press-22", name: "2-2 Fullcourt Press Drill", kat: "Defense", phase: ["Hauptteil"], spielphase: ["DT","SD"], intensity: "hoch", minSpieler: 4, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true },
-  { id: "press-55", name: "5-5 Fullcourt Press Drill", kat: "Defense", phase: ["Hauptteil"], spielphase: ["DT","SD"], intensity: "hoch", minSpieler: 10, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "helpside", name: "5-5 Helpside Drill", kat: "Defense", phase: ["Hauptteil"], spielphase: ["SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "Hütchen ggf.", defense: "ja (eingeschränkt)", competitive: "nein", gamelike: true, abschluss: true, note: "Inkl. Small Sided Games Help the Helper + 3-3 Help-Rotate" },
-  { id: "quivern", name: "Quivern Defense", kat: "Defense", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "hoch", minSpieler: 1, feld: "Ganzfeld", bälle: "0", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false },
+  { id: "defense-korridor", name: "Defense Korridor", kat: "Defense", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 2, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "closeout-clinic", name: "Closeout Clinic", kat: "Defense", phase: ["Hauptteil"], spielphase: ["SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true, note: "Inkl. 2-2/3-3 Closeout + Closeout into Boxout", createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "shell", name: "Shell Drill", kat: "Defense", phase: ["Hauptteil"], spielphase: ["SD"], intensity: "mittel", minSpieler: 8, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (eingeschränkt)", competitive: "nein", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "press-22", name: "2-2 Fullcourt Press Drill", kat: "Defense", phase: ["Hauptteil"], spielphase: ["DT","SD"], intensity: "hoch", minSpieler: 4, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "press-55", name: "5-5 Fullcourt Press Drill", kat: "Defense", phase: ["Hauptteil"], spielphase: ["DT","SD"], intensity: "hoch", minSpieler: 10, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "helpside", name: "5-5 Helpside Drill", kat: "Defense", phase: ["Hauptteil"], spielphase: ["SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "Hütchen ggf.", defense: "ja (eingeschränkt)", competitive: "nein", gamelike: true, abschluss: true, note: "Inkl. Small Sided Games Help the Helper + 3-3 Help-Rotate", createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "quivern", name: "Quivern Defense", kat: "Defense", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "hoch", minSpieler: 1, feld: "Ganzfeld", bälle: "0", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
   // REBOUNDING
-  { id: "boxout", name: "Boxout Drill (1-1 / 3-3 / 4-4 / 5-5)", kat: "Rebounding", phase: ["Warmup","Hauptteil"], spielphase: ["SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Zusammenführung: 5-5/3-3/1-1 Boxout + Ringelpiez" },
+  { id: "boxout", name: "Boxout Drill (1-1 / 3-3 / 4-4 / 5-5)", kat: "Rebounding", phase: ["Warmup","Hauptteil"], spielphase: ["SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Zusammenführung: 5-5/3-3/1-1 Boxout + Ringelpiez", createdAt: 764380800000, createdBy: "seed"},
+
   // OFFENSE
-  { id: "entry-clinic", name: "Entry Clinic (PnR / Post / DHO)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 6, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live/eingeschränkt)", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "orbit", name: "Orbit Drill", kat: "Offense", phase: ["Warmup","Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 3, feld: "Halbfeld", bälle: "1", material: "keine", defense: "optional", competitive: "optional", gamelike: true, abschluss: true },
-  { id: "pnr-22", name: "PnR 2-2 Side Drill (2 Bälle)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "2", material: "keine", defense: "ja (eingeschränkt)", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "33-seite", name: "3-3 auf einer Seite", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "ueberzahl", name: "Überzahl (4-3, 5-4 etc.)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 7, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "5-0-motion", name: "5-0 Motion", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false },
-  { id: "backdoor", name: "Backdoor Cut Drill", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "Hütchen", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "spielen", name: "Spielen (Mann / Zone)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 10, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "3dribbles", name: "3 Dribbles / X Pässe", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar" },
-  { id: "bonuspunkte", name: "Bonuspunkte OReb", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar" },
-  { id: "1-1-clinic", name: "1-1 Clinic (Blind / Korridor / Chase etc.)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "Hütchen ggf.", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "ssg", name: "Small Sided Games", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
+  { id: "entry-clinic", name: "Entry Clinic (PnR / Post / DHO)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 6, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live/eingeschränkt)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "orbit", name: "Orbit Drill", kat: "Offense", phase: ["Warmup","Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 3, feld: "Halbfeld", bälle: "1", material: "keine", defense: "optional", competitive: "optional", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "pnr-22", name: "PnR 2-2 Side Drill (2 Bälle)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "2", material: "keine", defense: "ja (eingeschränkt)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "33-seite", name: "3-3 auf einer Seite", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "ueberzahl", name: "Überzahl (4-3, 5-4 etc.)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 7, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "5-0-motion", name: "5-0 Motion", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "backdoor", name: "Backdoor Cut Drill", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "Hütchen", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "spielen", name: "Spielen (Mann / Zone)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 10, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "3dribbles", name: "3 Dribbles / X Pässe", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar", createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "bonuspunkte", name: "Bonuspunkte OReb", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar", createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "1-1-clinic", name: "1-1 Clinic (Blind / Korridor / Chase etc.)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "Hütchen ggf.", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "ssg", name: "Small Sided Games", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
   // POST
-  { id: "post-aufdrehen", name: "Aufdrehen Post Up / Run-Catch", kat: "Post", phase: ["Warmup"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "drop-step", name: "Drop Step / Power KL / Up & Under", kat: "Post", phase: ["Warmup","Hauptteil"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "post-entry", name: "Post Entry Drill", kat: "Post", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 3, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true },
-  { id: "44-highpost", name: "4-4 High Post Entry", kat: "Post", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 8, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
-  { id: "bigs-smalls", name: "Bigs / Smalls Trennung", kat: "Post", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "bigman-shooting", name: "Big Man Shooting / 1-1 Bigs", kat: "Post", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "Hütchen ggf.", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true },
+  { id: "post-aufdrehen", name: "Aufdrehen Post Up / Run-Catch", kat: "Post", phase: ["Warmup"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "drop-step", name: "Drop Step / Power KL / Up & Under", kat: "Post", phase: ["Warmup","Hauptteil"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "post-entry", name: "Post Entry Drill", kat: "Post", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 3, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "44-highpost", name: "4-4 High Post Entry", kat: "Post", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 8, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "bigs-smalls", name: "Bigs / Smalls Trennung", kat: "Post", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "bigman-shooting", name: "Big Man Shooting / 1-1 Bigs", kat: "Post", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "Hütchen ggf.", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
   // KONDITION
-  { id: "leiter", name: "Leiter", kat: "Kondition", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 1, feld: "Halbfeld", bälle: "0", material: "Leiter", defense: "nein", competitive: "nein", gamelike: false, abschluss: false },
-  { id: "stationentraining", name: "Stationentraining", kat: "Kondition", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 6, feld: "Ganzfeld", bälle: "variabel", material: "Leiter, Hütchen, Tennisball", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "defense-kondi", name: "Defense Kondi Korridor", kat: "Kondition", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "hoch", minSpieler: 1, feld: "Ganzfeld", bälle: "0", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false, note: "Ersetzt: Ole/Defense Fickung" },
-  { id: "football", name: "Football (Basketball / Tennisball)", kat: "Kondition", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 6, feld: "Ganzfeld", bälle: "3", material: "Football, Tennisball", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false },
+  { id: "leiter", name: "Leiter", kat: "Kondition", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 1, feld: "Halbfeld", bälle: "0", material: "Leiter", defense: "nein", competitive: "nein", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "stationentraining", name: "Stationentraining", kat: "Kondition", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 6, feld: "Ganzfeld", bälle: "variabel", material: "Leiter, Hütchen, Tennisball", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "defense-kondi", name: "Defense Kondi Korridor", kat: "Kondition", phase: ["Hauptteil"], spielphase: ["Technik"], intensity: "hoch", minSpieler: 1, feld: "Ganzfeld", bälle: "0", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false, note: "Ersetzt: Ole/Defense Fickung", createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "football", name: "Football (Basketball / Tennisball)", kat: "Kondition", phase: ["Warmup"], spielphase: ["Technik"], intensity: "mittel", minSpieler: 6, feld: "Ganzfeld", bälle: "3", material: "Football, Tennisball", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
   // PLAYS
-  { id: "motion-durchgehen", name: "Motion 5-0 Durchgehen", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false },
-  { id: "philly", name: "Philly / Philly Flip", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true },
-  { id: "smash", name: "Smash (Zone)", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "123-walk", name: '"1" / "2" / Walk', kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true },
-  { id: "bl-sl", name: "BL / SL Einwurf", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
-  { id: "zone-intro", name: "Zone Einführung / 4-out / 3-out", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true },
+  { id: "motion-durchgehen", name: "Motion 5-0 Durchgehen", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "philly", name: "Philly / Philly Flip", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "smash", name: "Smash (Zone)", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "123-walk", name: '"1" / "2" / Walk', kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "nein", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "bl-sl", name: "BL / SL Einwurf", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
+  { id: "zone-intro", name: "Zone Einführung / 4-out / 3-out", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "seed"},
+
 ];
+
+// DRILLS live array — wird durch Firestore überschrieben
+window.DRILLS = window.DRILLS_SEED.slice();
 
 // ============================================================
 // DRILL-BESCHREIBUNGEN — DE
@@ -1891,7 +2228,7 @@ function toggleConstraint(cId, label) {
   autoSave();
 
   // Re-render the modal to reflect new state
-  const drill = DRILLS.find(d => d.id === sd.drillId);
+  const drill = window.DRILLS.find(d => d.id === sd.drillId);
   openConstraintModal(constraintTargetSlotId, constraintTargetDrillIdx, drill?.name || sd.drillId);
 }
 
@@ -1913,7 +2250,7 @@ function addCustomConstraint() {
   }
   document.getElementById('constraint-custom-input').value = '';
 
-  const drill = DRILLS.find(d => d.id === sd.drillId);
+  const drill = window.DRILLS.find(d => d.id === sd.drillId);
   openConstraintModal(constraintTargetSlotId, constraintTargetDrillIdx, drill?.name || sd.drillId);
 }
 
@@ -2003,6 +2340,13 @@ const CAT_CLASS = {
   Offense: 'cat-offense', Post: 'cat-post', Kondition: 'cat-kondition', Plays: 'cat-plays'
 };
 
+function canEditDrill(d) {
+  if (!d) return false;
+  if (d.createdBy === 'seed') return false;
+  if (d.createdAt === 764380800000) return false;
+  return true;
+}
+
 function renderBibliothek(drills) {
   const grid = document.getElementById('bib-grid');
   const countLabel = currentLang === 'en' ? drills.length + ' Drills' : drills.length + ' Drills';
@@ -2032,9 +2376,272 @@ function renderBibliothek(drills) {
         ${d.gamelike ? `<span class="meta-pill" style="background:#e8e8fe;color:#2b2b8b">🎮</span>` : ''}
         ${d.material !== 'keine' ? `<span class="meta-pill">🔧 ${d.material.split(',')[0].trim()}</span>` : ''}
       </div>
+      ${canEditDrill(d) ? `
+      <div class="drill-card-actions" style="position:absolute;top:8px;right:8px;display:none;gap:4px;">
+        <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:11px;" onclick="event.stopPropagation();openDrillEditModal('${d.id}')">✏️</button>
+        <button class="btn btn-danger btn-sm" style="padding:3px 7px;font-size:11px;" onclick="event.stopPropagation();deleteDrill('${d.id}')">🗑️</button>
+      </div>` : ''}
       <button class="drill-add-btn" onclick="event.stopPropagation();quickAddDrill('${d.id}')" title="${currentLang==='en'?'Add to practice plan':'Zu Trainingsplan hinzufügen'}">+</button>
     </div>
   `).join('');
+  // Show action buttons on hover (only for editable drills)
+  grid.querySelectorAll('.drill-card').forEach(card => {
+    const actions = card.querySelector('.drill-card-actions');
+    if (!actions) return;
+    card.addEventListener('mouseenter', () => { actions.style.display = 'flex'; });
+    card.addEventListener('mouseleave', () => { actions.style.display = 'none'; });
+  });
+}
+
+
+// ============================================================
+// DRILL CRUD — Erstellen / Bearbeiten / Löschen
+// ============================================================
+let drillEditId = null; // null = neuer Drill, sonst ID des zu bearbeitenden Drills
+
+function openDrillEditModal(drillId) {
+  drillEditId = drillId;
+  const isNew = !drillId;
+  document.getElementById('drill-edit-modal-title').textContent = isNew
+    ? (currentLang === 'en' ? 'New Drill' : 'Neuer Drill')
+    : (currentLang === 'en' ? 'Edit Drill' : 'Drill bearbeiten');
+
+  // Reset form
+  document.getElementById('de-name').value = '';
+  document.getElementById('de-kat').value = 'Passing';
+  document.getElementById('de-intensity').value = 'mittel';
+  document.getElementById('de-phase-warmup').checked = false;
+  document.getElementById('de-phase-haupt').checked = false;
+  ['technik','so','ot','dt','sd'].forEach(sp => {
+    document.getElementById('de-sp-' + sp).checked = false;
+  });
+  document.getElementById('de-spieler').value = 4;
+  document.getElementById('de-feld').value = 'Halbfeld';
+  document.getElementById('de-baelle').value = '';
+  document.getElementById('de-material').value = '';
+  document.getElementById('de-defense').value = 'nein';
+  document.getElementById('de-competitive').value = 'nein';
+  document.getElementById('de-gamelike').checked = false;
+  document.getElementById('de-abschluss').checked = false;
+  document.getElementById('de-beschreibung').value = '';
+  document.getElementById('de-variationen').value = '';
+  document.getElementById('de-coaching').value = '';
+  document.getElementById('de-note').value = '';
+  document.getElementById('de-bild').value = '';
+  document.getElementById('de-video').value = '';
+  document.getElementById('de-bild-file').value = '';
+  document.getElementById('de-video-file').value = '';
+  document.getElementById('de-bild-filename').textContent = '';
+  document.getElementById('de-video-filename').textContent = '';
+  document.getElementById('de-bild-preview').style.display = 'none';
+  document.getElementById('de-video-preview').style.display = 'none';
+  document.getElementById('de-bild-progress').style.display = 'none';
+  document.getElementById('de-video-progress').style.display = 'none';
+  document.getElementById('de-link').value = '';
+
+  if (!isNew) {
+    const d = window.DRILLS.find(x => x.id === drillId);
+    if (!d) return;
+    document.getElementById('de-name').value = d.name || '';
+    document.getElementById('de-kat').value = d.kat || 'Passing';
+    document.getElementById('de-intensity').value = d.intensity || 'mittel';
+    document.getElementById('de-phase-warmup').checked = (d.phase || []).includes('Warmup');
+    document.getElementById('de-phase-haupt').checked = (d.phase || []).includes('Hauptteil');
+    ['Technik','SO','OT','DT','SD'].forEach(sp => {
+      const el = document.getElementById('de-sp-' + sp.toLowerCase());
+      if (el) el.checked = (d.spielphase || []).includes(sp);
+    });
+    document.getElementById('de-spieler').value = d.minSpieler || 4;
+    document.getElementById('de-feld').value = d.feld || 'Halbfeld';
+    document.getElementById('de-baelle').value = d['bälle'] || d.baelle || '';
+    document.getElementById('de-material').value = d.material || '';
+    document.getElementById('de-defense').value = d.defense || 'nein';
+    document.getElementById('de-competitive').value = d.competitive || 'nein';
+    document.getElementById('de-gamelike').checked = !!d.gamelike;
+    document.getElementById('de-abschluss').checked = !!d.abschluss;
+    // Descriptions from DRILL_DESC_DE if not stored on drill
+    document.getElementById('de-beschreibung').value = d.beschreibung || DRILL_DESC_DE[drillId] || '';
+    document.getElementById('de-variationen').value = d.variationen || '';
+    document.getElementById('de-coaching').value = d.coachingPunkte || '';
+    document.getElementById('de-note').value = d.note || '';
+    document.getElementById('de-bild').value = d.bildUrl || '';
+    document.getElementById('de-video').value = d.videoUrl || '';
+    if (d.bildUrl) {
+      document.getElementById('de-bild-img').src = d.bildUrl;
+      document.getElementById('de-bild-preview').style.display = 'block';
+    }
+    if (d.videoUrl && !d.videoUrl.includes('youtube') && !d.videoUrl.includes('vimeo')) {
+      document.getElementById('de-video-player').src = d.videoUrl;
+      document.getElementById('de-video-preview').style.display = 'block';
+    }
+    document.getElementById('de-link').value = d.externerLink || '';
+  }
+
+  document.getElementById('drill-edit-modal').classList.remove('hidden');
+  document.getElementById('de-name').focus();
+}
+
+
+// ---- Drill-Formular: Bild/Video Preview + Upload Helpers
+function dePreviewBild() {
+  const url = document.getElementById('de-bild').value.trim();
+  const preview = document.getElementById('de-bild-preview');
+  const img = document.getElementById('de-bild-img');
+  if (url) { img.src = url; preview.style.display = 'block'; }
+  else { preview.style.display = 'none'; }
+}
+
+function dePreviewVideo() {
+  const url = document.getElementById('de-video').value.trim();
+  const preview = document.getElementById('de-video-preview');
+  const vid = document.getElementById('de-video-player');
+  // Only preview direct video files, not YouTube/Vimeo
+  if (url && !url.includes('youtube') && !url.includes('vimeo') && !url.includes('youtu.be')) {
+    vid.src = url; preview.style.display = 'block';
+  } else { preview.style.display = 'none'; }
+}
+
+function deBildFileChosen(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('de-bild-filename').textContent = file.name;
+  document.getElementById('de-bild').value = '';
+  // Local preview
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('de-bild-img').src = e.target.result;
+    document.getElementById('de-bild-preview').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+function deVideoFileChosen(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('de-video-filename').textContent = file.name;
+  document.getElementById('de-video').value = '';
+  // Local preview
+  const url = URL.createObjectURL(file);
+  document.getElementById('de-video-player').src = url;
+  document.getElementById('de-video-preview').style.display = 'block';
+}
+
+function closeDrillEditModal() {
+  document.getElementById('drill-edit-modal').classList.add('hidden');
+  drillEditId = null;
+}
+
+async function saveDrillFromModal() {
+  const name = document.getElementById('de-name').value.trim();
+  if (!name) { toast(currentLang === 'en' ? 'Name required' : 'Name erforderlich'); return; }
+  window._deUploadedBildUrl  = undefined;
+  window._deUploadedVideoUrl = undefined;
+
+  // Upload Bild-Datei wenn gewählt
+  const bildFile  = document.getElementById('de-bild-file').files[0];
+  const videoFile = document.getElementById('de-video-file').files[0];
+
+  if (bildFile) {
+    const path = 'drills/bilder/' + Date.now() + '_' + bildFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    try {
+      document.getElementById('de-bild-progress').style.display = 'block';
+      window._deUploadedBildUrl = await fbUploadFile(bildFile, path, pct => {
+        document.getElementById('de-bild-progress').textContent = '⏳ ' + pct + '%';
+      });
+      document.getElementById('de-bild-progress').textContent = '✓';
+      setTimeout(() => { document.getElementById('de-bild-progress').style.display = 'none'; }, 1500);
+    } catch(e) {
+      toast('Bild-Upload fehlgeschlagen: ' + e.message);
+      document.getElementById('de-bild-progress').style.display = 'none';
+      return;
+    }
+  }
+
+  if (videoFile) {
+    const path = 'drills/videos/' + Date.now() + '_' + videoFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    try {
+      document.getElementById('de-video-progress').style.display = 'block';
+      window._deUploadedVideoUrl = await fbUploadFile(videoFile, path, pct => {
+        document.getElementById('de-video-progress').textContent = '⏳ ' + pct + '%';
+      });
+      document.getElementById('de-video-progress').textContent = '✓';
+      setTimeout(() => { document.getElementById('de-video-progress').style.display = 'none'; }, 1500);
+    } catch(e) {
+      toast('Video-Upload fehlgeschlagen: ' + e.message);
+      document.getElementById('de-video-progress').style.display = 'none';
+      return;
+    }
+  }
+
+  const phase = [];
+  if (document.getElementById('de-phase-warmup').checked) phase.push('Warmup');
+  if (document.getElementById('de-phase-haupt').checked) phase.push('Hauptteil');
+  if (phase.length === 0) phase.push('Hauptteil');
+
+  const spielphase = [];
+  [['technik','Technik'],['so','SO'],['ot','OT'],['dt','DT'],['sd','SD']].forEach(([id, val]) => {
+    if (document.getElementById('de-sp-' + id).checked) spielphase.push(val);
+  });
+  if (spielphase.length === 0) spielphase.push('Technik');
+
+  const isNew = !drillEditId;
+  const id = isNew
+    ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36)
+    : drillEditId;
+
+  const drill = {
+    id,
+    name,
+    kat: document.getElementById('de-kat').value,
+    phase,
+    spielphase,
+    intensity: document.getElementById('de-intensity').value,
+    minSpieler: parseInt(document.getElementById('de-spieler').value) || 4,
+    feld: document.getElementById('de-feld').value,
+    'bälle': document.getElementById('de-baelle').value || '1',
+    material: document.getElementById('de-material').value || 'keine',
+    defense: document.getElementById('de-defense').value,
+    competitive: document.getElementById('de-competitive').value,
+    gamelike: document.getElementById('de-gamelike').checked,
+    abschluss: document.getElementById('de-abschluss').checked,
+    beschreibung: document.getElementById('de-beschreibung').value.trim(),
+    variationen: document.getElementById('de-variationen').value.trim(),
+    coachingPunkte: document.getElementById('de-coaching').value.trim(),
+    note: document.getElementById('de-note').value.trim(),
+    bildUrl: window._deUploadedBildUrl !== undefined ? window._deUploadedBildUrl : document.getElementById('de-bild').value.trim(),
+    videoUrl: window._deUploadedVideoUrl !== undefined ? window._deUploadedVideoUrl : document.getElementById('de-video').value.trim(),
+    externerLink: document.getElementById('de-link').value.trim(),
+    scope: 'team',
+    updatedAt: Date.now()
+  };
+
+  if (isNew) {
+    drill.createdAt = Date.now();
+    window.DRILLS.push(drill);
+  } else {
+    const idx = window.DRILLS.findIndex(x => x.id === id);
+    if (idx >= 0) window.DRILLS[idx] = drill;
+    else window.DRILLS.push(drill);
+  }
+
+  if (typeof fbSaveDrills === 'function') fbSaveDrills(window.DRILLS);
+
+  closeDrillEditModal();
+  applyBibFilters();
+  toast(isNew
+    ? (currentLang === 'en' ? 'Drill created' : 'Drill erstellt')
+    : (currentLang === 'en' ? 'Drill saved' : 'Drill gespeichert'));
+}
+
+function deleteDrill(drillId) {
+  const d = window.DRILLS.find(x => x.id === drillId);
+  const name = d ? d.name : drillId;
+  if (!confirm((currentLang === 'en' ? 'Delete drill: ' : 'Drill löschen: ') + name + '?')) return;
+
+  window.DRILLS = window.DRILLS.filter(x => x.id !== drillId);
+  if (typeof fbSaveDrills === 'function') fbSaveDrills(window.DRILLS);
+  applyBibFilters();
+  toast(currentLang === 'en' ? 'Drill deleted' : 'Drill gelöscht');
 }
 
 function applyBibFilters() {
@@ -2045,7 +2652,7 @@ function applyBibFilters() {
   const intens = document.getElementById('bib-intens').value;
   const spieler = parseInt(document.getElementById('bib-spieler').value) || 999;
 
-  const filtered = DRILLS.filter(d => {
+  const filtered = window.DRILLS.filter(d => {
     const enName = (DRILL_NAMES_EN[d.id] || '').toLowerCase();
     const enCat = (CAT_EN[d.kat] || '').toLowerCase();
     if (search && !d.name.toLowerCase().includes(search) && !d.kat.toLowerCase().includes(search) && !enName.includes(search) && !enCat.includes(search)) return false;
@@ -2066,14 +2673,14 @@ function resetBibFilters() {
   document.getElementById('bib-spielphase').value = '';
   document.getElementById('bib-intens').value = '';
   document.getElementById('bib-spieler').value = '';
-  renderBibliothek(DRILLS);
+  renderBibliothek(window.DRILLS);
 }
 
 // ============================================================
 // DRILL MODAL
 // ============================================================
 function openDrillModal(drillId, fromPicker) {
-  const d = DRILLS.find(x => x.id === drillId);
+  const d = window.DRILLS.find(x => x.id === drillId);
   if (!d) return;
   document.getElementById('modal-drill-name').textContent = getDrillName(d);
   document.getElementById('modal-drill-cat').innerHTML = `<span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${tCat(d.kat)}</span>`;
@@ -2098,12 +2705,24 @@ function openDrillModal(drillId, fromPicker) {
   `).join('');
 
   const descEl = document.getElementById('modal-drill-desc');
-  const desc = getDrillDesc(d.id);
+  // Prefer description stored on drill object, fallback to DRILL_DESC_DE lookup
+  const desc = d.beschreibung || getDrillDesc(d.id);
   if (desc) {
     descEl.textContent = desc;
     descEl.style.display = 'block';
   } else {
     descEl.style.display = 'none';
+  }
+
+  // Variationen + CoachingPunkte
+  const extEl = document.getElementById('modal-drill-extra');
+  if (extEl) {
+    let extraHtml = '';
+    if (d.variationen) extraHtml += `<div style="margin-top:10px;"><div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">${currentLang==='en'?'Variations':'Variationen'}</div><div style="font-size:13px;white-space:pre-wrap;">${d.variationen}</div></div>`;
+    if (d.coachingPunkte) extraHtml += `<div style="margin-top:10px;"><div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">${currentLang==='en'?'Coaching Points':'Coaching-Punkte'}</div><div style="font-size:13px;white-space:pre-wrap;">${d.coachingPunkte}</div></div>`;
+    if (d.videoUrl) extraHtml += `<div style="margin-top:10px;"><a href="${d.videoUrl}" target="_blank" class="btn btn-ghost btn-sm" style="display:inline-flex;align-items:center;gap:4px;">▶ Video</a></div>`;
+    if (d.externerLink) extraHtml += `<div style="margin-top:6px;"><a href="${d.externerLink}" target="_blank" class="btn btn-ghost btn-sm" style="display:inline-flex;align-items:center;gap:4px;">🔗 ${currentLang==='en'?'More info':'Mehr Info'}</a></div>`;
+    extEl.innerHTML = extraHtml;
   }
 
   const note = getDrillNote(d);
@@ -2112,7 +2731,10 @@ function openDrillModal(drillId, fromPicker) {
   let addSection = '';
   if (!fromPicker) {
     const btnLabel = currentLang === 'en' ? '+ Add to practice plan' : '+ Zu Trainingsplan hinzufügen';
-    addSection = `<button class="btn btn-primary" style="width:100%;" onclick="closeDrillModal();showPage('planung');quickAddDrill('${d.id}')">${btnLabel}</button>`;
+    const editLabel = currentLang === 'en' ? '✏️ Edit' : '✏️ Bearbeiten';
+    const canEdit = canEditDrill(d);
+    const editBtn = canEdit ? `<button class="btn btn-ghost" onclick="closeDrillModal();openDrillEditModal('${d.id}')">${editLabel}</button>` : '';
+    addSection = `<div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:1;" onclick="closeDrillModal();showPage('planung');quickAddDrill('${d.id}')">${btnLabel}</button>${editBtn}</div>`;
   }
   document.getElementById('modal-add-section').innerHTML = addSection;
   document.getElementById('modal-add-section').style.display = fromPicker ? 'none' : 'block';
@@ -2338,7 +2960,7 @@ function renderSlotHTML(slot, idx) {
   const drillsHTML = slot.drills.length === 0
     ? `<div class="slot-empty-hint">— ${currentLang === 'en' ? 'No drills planned yet' : 'Noch keine Drills geplant'}</div>`
     : slot.drills.map((sd, di) => {
-        const d = DRILLS.find(x => x.id === sd.drillId);
+        const d = window.DRILLS.find(x => x.id === sd.drillId);
         const constraints = sd.constraints || [];
         const constraintRow = constraints.length > 0 || true ? `
           <div class="constraint-row">
@@ -2482,7 +3104,7 @@ function removeDrillFromSlot(slotId, drillIdx) {
 
 function quickAddDrill(drillId) {
   if (!currentPlan) { toast(toastMsg('no-plan')); return; }
-  const drill = DRILLS.find(d => d.id === drillId);
+  const drill = window.DRILLS.find(d => d.id === drillId);
   if (!drill) return;
 
   // Passenden Slot nach Drill-Phase finden
@@ -2538,7 +3160,7 @@ function applyPickerFilters() {
   const intens = document.getElementById('picker-intens').value;
   const spieler = parseInt(document.getElementById('picker-spieler').value) || 999;
 
-  const filtered = DRILLS.filter(d => {
+  const filtered = window.DRILLS.filter(d => {
     const searchName = currentLang === 'en' ? (DRILL_NAMES_EN[d.id] || d.name) : d.name;
     if (search && !searchName.toLowerCase().includes(search) && !d.name.toLowerCase().includes(search)) return false;
     if (kat && d.kat !== kat) return false;
@@ -2570,7 +3192,7 @@ function addDrillToSlot(drillId) {
   updateTimeSummary();
   autoSave();
   document.getElementById('picker-modal').classList.add('hidden');
-  const d = DRILLS.find(d => d.id === drillId);
+  const d = window.DRILLS.find(d => d.id === drillId);
   toast('+ ' + getDrillName(d));
 }
 
@@ -2619,7 +3241,7 @@ function buildWordHTMLPro(plan) {
     </tr>`;
 
     const rows = slot.drills.map((sd, i) => {
-      const d = DRILLS.find(x => x.id === sd.drillId);
+      const d = window.DRILLS.find(x => x.id === sd.drillId);
       const bg = i % 2 === 0 ? '#ffffff' : '#f7f6f3';
       const details = d ? `${d.minSpieler}+ Sp · ${d.feld}${d.material !== 'keine' ? ' · ' + d.material.split(',')[0] : ''}` : '';
       const constraintStr = (sd.constraints||[]).length > 0
@@ -2698,7 +3320,7 @@ function buildWhatsAppText(plan) {
     const emoji = phaseEmoji[slot.phase] || '▶';
     txt += `\n${emoji} *${slot.label}* (${slotMins} min)\n`;
     slot.drills.forEach(sd => {
-      const d = DRILLS.find(x => x.id === sd.drillId);
+      const d = window.DRILLS.find(x => x.id === sd.drillId);
       txt += `  • ${d ? d.name : sd.drillId} — ${sd.mins} min`;
       if (sd.constraints && sd.constraints.length > 0) {
         txt += `\n    ⚡ ${sd.constraints.join(' · ')}`;
@@ -2739,7 +3361,7 @@ function buildWordHTML(plan) {
       <h2>${esc(slot.label)} &mdash; 0 min</h2>
       <p><em>Keine Drills geplant</em></p>`;
     const rows = slot.drills.map((sd, i) => {
-      const d = DRILLS.find(x => x.id === sd.drillId);
+      const d = window.DRILLS.find(x => x.id === sd.drillId);
       const bg = i % 2 === 0 ? '#ffffff' : '#f5f4f1';
       return `<tr style="background:${bg};">
         <td style="padding:4pt 8pt;border:1pt solid #ccc;">${esc(d ? d.name : sd.drillId)}</td>
@@ -2817,7 +3439,7 @@ function buildRTF(plan) {
 
     // Drill-Zeilen
     slot.drills.forEach((sd, i) => {
-      const d = DRILLS.find(x => x.id === sd.drillId);
+      const d = window.DRILLS.find(x => x.id === sd.drillId);
       const shade = i % 2 === 1 ? '\\trshdng500' : '';
       body += `{\\trowd\\trgaph108\\trleft-108${shade}\n`;
       body += `\\clbrdrt\\brdrs\\clbrdrb\\brdrs\\clbrdrl\\brdrs\\clbrdrr\\brdrs\\cellx5500\n`;
@@ -2864,7 +3486,7 @@ function buildPrintHTML(plans, title) {
       const drillRows = !slot.drills || slot.drills.length === 0
         ? '<tr><td colspan="4" style="color:#999;font-style:italic;padding:4px 8px;">Keine Drills</td></tr>'
         : slot.drills.map(sd => {
-            const d = DRILLS.find(x => x.id === sd.drillId);
+            const d = window.DRILLS.find(x => x.id === sd.drillId);
             return `<tr>
               <td style="padding:4px 8px;font-weight:600;">${esc(d ? d.name : sd.drillId)}</td>
               <td style="padding:4px 8px;white-space:nowrap;">${sd.mins} min</td>
@@ -2925,7 +3547,7 @@ function buildPlanText(plan) {
     txt += `[${slot.label.toUpperCase()} — ${slot.durationMin} min]\n`;
     if (slot.drills.length === 0) txt += '  (keine Drills)\n';
     slot.drills.forEach(sd => {
-      const d = DRILLS.find(x => x.id === sd.drillId);
+      const d = window.DRILLS.find(x => x.id === sd.drillId);
       txt += `  • ${d ? d.name : sd.drillId} (${sd.mins} min)\n`;
       if (d) txt += `    ${d.kat} · ${d.intensity} · ${d.minSpieler}+ Sp · ${d.spielphase.join('/')}\n`;
     });
@@ -3074,7 +3696,7 @@ function renderPlanOverview() {
       const slotMins = (slot.drills||[]).reduce((a,sd) => a+(parseInt(sd.mins)||0),0);
       if (slot.drills.length === 0) return '';
       const drillList = slot.drills.map(sd => {
-        const d = DRILLS.find(x => x.id === sd.drillId);
+        const d = window.DRILLS.find(x => x.id === sd.drillId);
         return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:12px;">
           <span>${d ? getDrillName(d) : sd.drillId}</span>
           <span style="font-family:DM Mono,monospace;color:var(--text-muted);flex-shrink:0;margin-left:8px;">${sd.mins} min</span>
@@ -3189,9 +3811,10 @@ function renderSavedPlansList() {
 // ============================================================
 // DRILL TRACKING
 // ============================================================
-function computeTracking() {
+function computeTracking(plans) {
+  if (!plans) plans = savedPlans;
   const usage = {}; // drillId -> { count, totalMins, plans: [] }
-  savedPlans.forEach(plan => {
+  plans.forEach(plan => {
     (plan.slots || []).forEach(slot => {
       (slot.drills || []).forEach(sd => {
         if (!usage[sd.drillId]) usage[sd.drillId] = { count: 0, totalMins: 0, plans: [] };
@@ -3207,7 +3830,15 @@ function computeTracking() {
 }
 
 function renderTracking() {
-  const usage = computeTracking();
+  const fromVal = document.getElementById('tracking-from')?.value || '';
+  const toVal   = document.getElementById('tracking-to')?.value   || '';
+  const plansToUse = savedPlans.filter(p => {
+    if (!p.date) return true;
+    if (fromVal && p.date < fromVal) return false;
+    if (toVal   && p.date > toVal)   return false;
+    return true;
+  });
+  const usage = computeTracking(plansToUse);
   const sortVal = document.getElementById('tracking-sort')?.value || 'count-desc';
   const katFilter = document.getElementById('tracking-kat')?.value || '';
 
@@ -3218,7 +3849,7 @@ function renderTracking() {
   const maxCount = Math.max(...Object.values(usage).map(u => u.count), 1);
 
   // Drills never used
-  const neverUsed = DRILLS.filter(d => !usage[d.id] && (!katFilter || d.kat === katFilter));
+  const neverUsed = window.DRILLS.filter(d => !usage[d.id] && (!katFilter || d.kat === katFilter));
 
   document.getElementById('tracking-summary').innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;">
@@ -3246,8 +3877,11 @@ function renderTracking() {
   }
 
   // Build rows
-  let rows = DRILLS
-    .filter(d => !katFilter || d.kat === katFilter)
+  let rows = window.DRILLS
+    .filter(d => {
+      if (katFilter && d.kat !== katFilter) return false;
+      return true;
+    })
     .map(d => ({
       drill: d,
       count: usage[d.id]?.count || 0,
@@ -3270,7 +3904,7 @@ function renderTracking() {
     const avgMins = r.count > 0 ? Math.round(r.totalMins / r.count) : 0;
     return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 14px;display:flex;align-items:center;gap:12px;">
       <span class="drill-cat-badge ${CAT_CLASS[r.drill.kat] || ''}" style="font-size:8px;flex-shrink:0;width:70px;text-align:center;">${tCat(r.drill.kat)}</span>
-      <span style="font-size:13px;font-weight:${r.count > 0 ? 600 : 400};flex:1;min-width:0;color:${r.count === 0 ? 'var(--text-subtle)' : 'var(--text)'};">${getDrillName(r.drill)}</span>
+      <span style="font-size:13px;font-weight:${r.count > 0 ? 600 : 400};flex:1;min-width:0;color:${r.count === 0 ? 'var(--text-subtle)' : 'var(--text)'};cursor:pointer;text-decoration:underline dotted;" onclick="openDrillModal('${r.drill.id}')">${getDrillName(r.drill)}</span>
       <div style="flex:0 0 160px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
         <div style="height:100%;width:${barW}%;background:${r.count === 0 ? 'var(--border)' : 'var(--text)'};border-radius:3px;"></div>
       </div>
@@ -3917,8 +4551,8 @@ function applyLang() {
 // INIT
 // ============================================================
 loadFromStorage();
-renderBibliothek(DRILLS);
-document.getElementById('nav-count-bib').textContent = DRILLS.length;
+renderBibliothek(window.DRILLS);
+document.getElementById('nav-count-bib').textContent = window.DRILLS.length;
 newPlan();
 renderNavSavedPlans();
 // Set today's date
