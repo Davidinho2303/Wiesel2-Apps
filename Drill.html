@@ -1127,6 +1127,21 @@ signInAnonymously(auth).then(async () => {
     if (navCount) navCount.textContent = window.DRILLS.length;
   }
 
+  // Plans: erst direkt laden, dann live-listener
+  try {
+    const initSnap = await getDoc(PLANS_DOC);
+    if (initSnap.exists()) {
+      const data = initSnap.data();
+      if (Array.isArray(data.plans) && data.plans.length > 0) {
+        savedPlans = data.plans;
+        if (data.drillMins) drillMins = data.drillMins;
+        try { renderSavedPlansList(); } catch(e) {}
+        try { renderNavSavedPlans(); } catch(e) {}
+        try { renderPlanOverview(); } catch(e) {}
+      }
+    }
+  } catch(e) { console.warn('Plans initial load:', e.message); }
+
   // Plans live-listener
   onSnapshot(PLANS_DOC, (snap) => {
     if (!snap.exists()) return;
