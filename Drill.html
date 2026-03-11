@@ -1147,7 +1147,8 @@ signInAnonymously(auth).then(async () => {
     if (!snap.exists()) return;
     const data = snap.data();
     if (!Array.isArray(data.plans)) return;
-    if (isSyncing) return;
+    // Only apply cloud data if it's newer than our last local save
+    if (data.updatedAt && window._lastLocalSave && data.updatedAt < window._lastLocalSave) return;
     savedPlans = data.plans;
     if (data.drillMins && typeof data.drillMins === 'object') drillMins = data.drillMins;
     try { renderSavedPlansList(); } catch(e) {}
@@ -2313,6 +2314,7 @@ function saveToStorage() {
   try { localStorage.setItem('wiesel2_plans', JSON.stringify(savedPlans)); } catch(e) {}
   try { localStorage.setItem('wiesel2_drillMins', JSON.stringify(drillMins)); } catch(e) {}
   if (typeof fbSavePlans === 'function') {
+    window._lastLocalSave = Date.now();
     if (typeof fbSetSyncing === 'function') fbSetSyncing(true);
     const el = document.getElementById('sync-status');
     if (el) { el.textContent = currentLang==="en"?'☁ Saving…':'☁ Speichern…'; el.style.color = 'var(--text-muted)'; }
