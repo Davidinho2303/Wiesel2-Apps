@@ -4674,18 +4674,22 @@ if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
 
   <!-- DRILL JSON IMPORT MODAL -->
   <div class="modal-overlay" id="drill-import-modal" style="display:none;" onclick="if(event.target===this)closeDrillImportModal()">
-    <div class="modal-box" style="max-width:520px;">
+    <div class="modal-box" style="max-width:480px;">
       <div class="modal-header">
-        <div class="modal-title">&#128229; Drills importieren (JSON)</div>
+        <div class="modal-title">&#128229; Drills importieren</div>
         <button class="modal-close" onclick="closeDrillImportModal()">&#10005;</button>
       </div>
       <div style="padding:16px;display:flex;flex-direction:column;gap:12px;">
-        <div style="font-size:13px;color:var(--text-subtle);">JSON-Array mit Drill-Objekten. Pflichtfelder: <code>id, name, kat, phase, spielphase, intensity, minSpieler, feld</code>. Vorhandene IDs werden &#252;bersprungen.</div>
-        <textarea id="drill-import-json" style="font-family:DM Mono,monospace;font-size:12px;min-height:200px;width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);resize:vertical;" placeholder="JSON-Array hier einf&#252;gen..."></textarea>
+        <div style="font-size:12px;color:var(--text-subtle);">JSON oder CSV hochladen. Pflichtfelder: <code>id, name, kat, phase, spielphase, intensity, minSpieler, feld</code>.</div>
+        <label style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed var(--border);border-radius:var(--radius);padding:32px;cursor:pointer;background:var(--surface2);" onclick="document.getElementById('drill-import-file').click()">
+          <span style="font-size:28px;">&#128229;</span>
+          <span style="font-size:13px;color:var(--text-subtle);">JSON oder CSV w&#228;hlen</span>
+          <input type="file" id="drill-import-file" accept=".json,.csv" style="display:none;" onchange="handleDrillImportFile(this)">
+        </label>
         <div id="drill-import-status" style="font-size:12px;color:var(--text-subtle);min-height:18px;"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;">
           <button class="btn btn-ghost btn-sm" onclick="closeDrillImportModal()">Abbrechen</button>
-          <button class="btn btn-primary btn-sm" onclick="executeDrillImport()">Importieren</button>
+          <button class="btn btn-primary btn-sm" id="drill-import-btn" style="display:none;" onclick="executeDrillImport()">Importieren</button>
         </div>
       </div>
     </div>
