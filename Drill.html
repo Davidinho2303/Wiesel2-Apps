@@ -1235,7 +1235,8 @@ signInAnonymously(auth).then(async () => {
           <div class="page-title">Drill-Bibliothek</div>
           <div class="page-subtitle">Alle Drills — filterbar, durchsuchbar, klickbar für Details</div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openDrillEditModal(null)">+ Neuer Drill</button>
+        <button class="btn btn-ghost btn-sm" onclick="openDrillImportModal()" title="Drills per JSON importieren">📥 Import</button>
+          <button class="btn btn-primary btn-sm" onclick="openDrillEditModal(null)">+ Neuer Drill</button>
       </div>
 
       <div class="filter-bar" id="bib-filters">
@@ -2372,23 +2373,73 @@ function renderBibliothek(drills) {
         ${d.gamelike ? `<span class="meta-pill" style="background:#e8e8fe;color:#2b2b8b">🎮</span>` : ''}
         ${d.material !== 'keine' ? `<span class="meta-pill">🔧 ${d.material.split(',')[0].trim()}</span>` : ''}
       </div>
-      ${canEditDrill(d) ? `
-      <div class="drill-card-actions" style="position:absolute;top:8px;right:8px;display:none;gap:4px;">
-        <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:11px;" onclick="event.stopPropagation();openDrillEditModal('${d.id}')">✏️</button>
-        <button class="btn btn-danger btn-sm" style="padding:3px 7px;font-size:11px;" onclick="event.stopPropagation();deleteDrill('${d.id}')">🗑️</button>
-      </div>` : ''}
+
       <button class="drill-add-btn" onclick="event.stopPropagation();quickAddDrill('${d.id}')" title="${currentLang==='en'?'Add to practice plan':'Zu Trainingsplan hinzufügen'}">+</button>
     </div>
   `).join('');
-  // Show action buttons on hover (only for editable drills)
-  grid.querySelectorAll('.drill-card').forEach(card => {
-    const actions = card.querySelector('.drill-card-actions');
-    if (!actions) return;
-    card.addEventListener('mouseenter', () => { actions.style.display = 'flex'; });
-    card.addEventListener('mouseleave', () => { actions.style.display = 'none'; });
-  });
+
 }
 
+
+
+// ============================================================
+// DRILL JSON IMPORT
+// ============================================================
+function openDrillImportModal() {
+  document.getElementById('drill-import-json').value = '';
+  document.getElementById('drill-import-status').textContent = '';
+  document.getElementById('drill-import-modal').style.display = 'flex';
+}
+
+function closeDrillImportModal() {
+  document.getElementById('drill-import-modal').style.display = 'none';
+}
+
+function executeDrillImport() {
+  const statusEl = document.getElementById('drill-import-status');
+  const raw = document.getElementById('drill-import-json').value.trim();
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch(e) {
+    statusEl.textContent = '❌ Ungültiges JSON: ' + e.message;
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+  if (!Array.isArray(parsed)) {
+    statusEl.textContent = '❌ Erwartet ein JSON-Array [ {...}, {...} ]';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+
+  const REQUIRED = ['id','name','kat','phase','spielphase','intensity','minSpieler','feld'];
+  const DEFAULTS = { bälle:'1', material:'keine', defense:'nein', competitive:'nein', gamelike:false, abschluss:false, beschreibung:'', variationen:'', coachingPunkte:'', note:'', bildUrl:'', videoUrl:'', externerLink:'', scope:'team' };
+
+  let imported = 0, skipped = 0, errors = [];
+  const existingIds = new Set(window.DRILLS.map(d => d.id));
+
+  for (const raw of parsed) {
+    const missing = REQUIRED.filter(f => raw[f] === undefined || raw[f] === null);
+    if (missing.length) { errors.push(`"${raw.id||'?'}": fehlt ${missing.join(', ')}`); continue; }
+    if (existingIds.has(raw.id)) { skipped++; continue; }
+
+    const drill = { ...DEFAULTS, ...raw, createdAt: raw.createdAt || Date.now(), createdBy: raw.createdBy || 'import', updatedAt: Date.now() };
+    window.DRILLS.push(drill);
+    existingIds.add(drill.id);
+    imported++;
+  }
+
+  if (imported > 0 && typeof fbSaveDrills === 'function') fbSaveDrills(window.DRILLS);
+  applyBibFilters();
+
+  let msg = `✓ ${imported} importiert`;
+  if (skipped) msg += `, ${skipped} übersprungen (ID vorhanden)`;
+  if (errors.length) msg += `. Fehler: ${errors.slice(0,3).join(' | ')}`;
+  statusEl.textContent = msg;
+  statusEl.style.color = imported > 0 ? 'var(--green, #2a7a2a)' : 'var(--red)';
+
+  if (imported > 0) setTimeout(closeDrillImportModal, 1500);
+}
 
 // ============================================================
 // DRILL CRUD — Erstellen / Bearbeiten / Löschen
@@ -2402,31 +2453,20 @@ function openDrillEditModal(drillId) {
     ? (currentLang === 'en' ? 'New Drill' : 'Neuer Drill')
     : (currentLang === 'en' ? 'Edit Drill' : 'Drill bearbeiten');
 
-  // Reset form
-  document.getElementById('de-name').value = '';
-  document.getElementById('de-kat').value = 'Passing';
-  document.getElementById('de-intensity').value = 'mittel';
-  document.getElementById('de-phase-warmup').checked = false;
-  document.getElementById('de-phase-haupt').checked = false;
-  ['technik','so','ot','dt','sd'].forEach(sp => {
-    document.getElementById('de-sp-' + sp).checked = false;
-  });
-  document.getElementById('de-spieler').value = 4;
-  document.getElementById('de-feld').value = 'Halbfeld';
-  document.getElementById('de-baelle').value = '';
-  document.getElementById('de-material').value = '';
-  document.getElementById('de-defense').value = 'nein';
-  document.getElementById('de-competitive').value = 'nein';
-  document.getElementById('de-gamelike').checked = false;
-  document.getElementById('de-abschluss').checked = false;
-  document.getElementById('de-beschreibung').value = '';
-  document.getElementById('de-variationen').value = '';
-  document.getElementById('de-coaching').value = '';
-  document.getElementById('de-note').value = '';
-  document.getElementById('de-bild').value = '';
-  document.getElementById('de-video').value = '';
-  document.getElementById('de-bild-file').value = '';
-  document.getElementById('de-video-file').value = '';
+  // Reset form (null-safe)
+  const _s = (id, prop, val) => { const el = document.getElementById(id); if (el) el[prop] = val; };
+  _s('de-name','value',''); _s('de-kat','value','Passing'); _s('de-intensity','value','mittel');
+  _s('de-phase-warmup','checked',false); _s('de-phase-haupt','checked',false);
+  ['technik','so','ot','dt','sd'].forEach(sp => _s('de-sp-'+sp,'checked',false));
+  _s('de-spieler','value',4); _s('de-feld','value','Halbfeld');
+  _s('de-baelle','value',''); _s('de-material','value','');
+  _s('de-defense','value','nein'); _s('de-competitive','value','nein');
+  _s('de-gamelike','checked',false); _s('de-abschluss','checked',false);
+  _s('de-beschreibung','value',''); _s('de-variationen','value','');
+  _s('de-coaching','value',''); _s('de-note','value','');
+  _s('de-bild','value',''); _s('de-video','value','');
+  try { document.getElementById('de-bild-file').value = ''; } catch(e) {}
+  try { document.getElementById('de-video-file').value = ''; } catch(e) {}
   document.getElementById('de-bild-filename').textContent = '';
   document.getElementById('de-video-filename').textContent = '';
   document.getElementById('de-bild-preview').style.display = 'none';
@@ -3284,6 +3324,25 @@ ${slotsHTML}
 </table>
 ${plan.notes ? `<div class="notes"><strong>📌 Notizen:</strong><br>${esc(plan.notes).replace(/\n/g,'<br>')}</div>` : ''}
 <div class="footer">Weddinger Wiesel 2 &middot; Saison 2025/2026 &middot; ${new Date().toLocaleDateString('de-DE')}</div>
+
+  <!-- DRILL JSON IMPORT MODAL -->
+  <div class="modal-overlay" id="drill-import-modal" style="display:none;" onclick="if(event.target===this)closeDrillImportModal()">
+    <div class="modal-box" style="max-width:520px;">
+      <div class="modal-header">
+        <div class="modal-title">📥 Drills importieren (JSON)</div>
+        <button class="modal-close" onclick="closeDrillImportModal()">✕</button>
+      </div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+        <div style="font-size:13px;color:var(--text-subtle);">JSON-Array mit Drill-Objekten. Pflichtfelder: <code>id, name, kat, phase, spielphase, intensity, minSpieler, feld</code>. Vorhandene IDs werden übersprungen.</div>
+        <textarea id="drill-import-json" style="font-family:DM Mono,monospace;font-size:12px;min-height:200px;width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);resize:vertical;" placeholder='[{"id":"mein-drill","name":"Mein Drill","kat":"Shooting","phase":["Hauptteil"],"spielphase":["Technik"],"intensity":"mittel","minSpieler":4,"feld":"Halbfeld",...}]'></textarea>
+        <div id="drill-import-status" style="font-size:12px;color:var(--text-subtle);min-height:18px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn btn-ghost btn-sm" onclick="closeDrillImportModal()">Abbrechen</button>
+          <button class="btn btn-primary btn-sm" onclick="executeDrillImport()">Importieren</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>`;
 }
