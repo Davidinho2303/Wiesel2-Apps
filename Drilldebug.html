@@ -1001,7 +1001,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getAuth, signInAnonymously }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-         doc, setDoc, getDoc, getDocFromServer, onSnapshot }
+         doc, setDoc, getDoc, onSnapshot }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
@@ -1154,7 +1154,7 @@ signInAnonymously(auth).then(async () => {
   // Plans: erst direkt laden, dann live-listener
   try {
     dbg("getDoc plans start");
-    const initSnap = await getDocFromServer(PLANS_DOC);
+    const initSnap = await getDoc(PLANS_DOC);
     dbg("getDoc plans done, exists=" + initSnap.exists());
     if (initSnap.exists()) {
       const data = initSnap.data();
