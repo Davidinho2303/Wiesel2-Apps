@@ -2340,11 +2340,7 @@ const CAT_CLASS = {
 };
 
 function canEditDrill(d) {
-  if (!d) return false;
-  if (!d.createdAt) return false;
-  if (d.createdAt === 764380800000) return false;
-  if (d.createdBy === 'seed') return false;
-  return true;
+  return !!d;
 }
 
 function renderBibliothek(drills) {
@@ -2617,9 +2613,13 @@ async function saveDrillFromModal() {
 
   if (isNew) {
     drill.createdAt = Date.now();
+    drill.createdBy = 'user';
     window.DRILLS.push(drill);
   } else {
     const idx = window.DRILLS.findIndex(x => x.id === id);
+    const existing = idx >= 0 ? window.DRILLS[idx] : null;
+    drill.createdAt = existing?.createdAt || Date.now();
+    drill.createdBy = existing?.createdBy || 'user';
     if (idx >= 0) window.DRILLS[idx] = drill;
     else window.DRILLS.push(drill);
   }
