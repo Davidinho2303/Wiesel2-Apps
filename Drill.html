@@ -4392,7 +4392,7 @@ function attachTouchDragListeners() {
 // ============================================================
 // I18N — SPRACH-TOGGLE
 // ============================================================
-let currentLang = 'de';
+let currentLang = localStorage.getItem('wiesel2_lang') || 'de';
 
 const T = {
   // TOPBAR & NAV
@@ -4578,6 +4578,7 @@ const CONSTRAINT_DESC_EN = {
 
 function toggleLang() {
   currentLang = currentLang === 'de' ? 'en' : 'de';
+  localStorage.setItem('wiesel2_lang', currentLang);
   applyLang();
 }
 
@@ -4703,6 +4704,7 @@ function applyLang() {
   if (umsave) umsave.textContent = currentLang === 'en' ? 'Continue' : 'Weiter';
   const umhint = document.getElementById('user-modal-google-hint');
   if (umhint) umhint.textContent = currentLang === 'en' ? 'Google Login coming soon' : 'Google Login kommt demnächst';
+  applyUserModalLang();
 
   // Scope dropdown labels
   const scopeLabel = document.getElementById('de-scope-label');
@@ -4823,6 +4825,14 @@ const ADMINS = ['david'];
 
 function isAdmin() { return ADMINS.includes((currentUser||'').toLowerCase()); }
 
+function applyUserModalLang() {
+  const isEN = currentLang === 'en';
+  const flag = document.getElementById('user-modal-lang-flag');
+  const label = document.getElementById('user-modal-lang-label');
+  if (flag) flag.textContent = isEN ? '🇩🇪' : '🇬🇧';
+  if (label) label.textContent = isEN ? 'DE' : 'EN';
+}
+
 function updateUserBadge() {
   const el = document.getElementById('user-badge-label');
   if (el) el.textContent = currentUser || '—';
@@ -4858,6 +4868,8 @@ function saveUserKuerzel() {
 
 // INIT
 // ============================================================
+if (currentLang !== 'de') applyLang(); // Apply saved language before first render
+else applyUserModalLang(); // Init lang button in modal
 loadFromStorage();
 renderBibliothek(window.DRILLS);
 document.getElementById('nav-count-bib').textContent = window.DRILLS.length;
@@ -4908,7 +4920,12 @@ window.renderPlanOverview   = renderPlanOverview;
         onkeydown="if(event.key==='Enter')saveUserKuerzel()">
       <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" id="user-modal-save-btn" onclick="saveUserKuerzel()">Speichern</button>
       <button class="btn btn-ghost btn-sm" id="user-modal-cancel-btn" onclick="closeUserModal()" style="display:none;"></button>
-      <div class="user-modal-google-hint" id="user-modal-google-hint">Google Login kommt demnächst</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="user-modal-google-hint" id="user-modal-google-hint">Google Login kommt demnächst</div>
+        <button onclick="toggleLang();applyUserModalLang();" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;cursor:pointer;font-size:11px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:4px;" id="user-modal-lang-btn">
+          <span id="user-modal-lang-flag">🇬🇧</span><span id="user-modal-lang-label">EN</span>
+        </button>
+      </div>
     </div>
   </div>
 
