@@ -1262,6 +1262,12 @@ window.fbInitUserListeners = (kuerzel) => {
   }).catch(e => console.warn('Plans init load:', e.message));
 };
 
+// Helper: check if user profile exists (für Login-Warning)
+window._fbGetDoc = async (kuerzel) => {
+  const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
+  return await getDoc(userDoc);
+};
+
 window.fbRegisterUser = async (kuerzel) => {
   try {
     const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
@@ -4884,6 +4890,8 @@ function applyLang() {
   if (umwarnSpans.length >= 2) umwarnSpans[1].textContent = currentLang === 'en'
     ? 'ℹ️ Capitalisation is ignored.'
     : 'ℹ️ Groß- und Kleinschreibung wird ignoriert.';
+  const continueBtn = document.getElementById('user-modal-continue-btn');
+  if (continueBtn && continueBtn.style.display !== 'none') continueBtn.textContent = currentLang === 'en' ? 'Continue anyway' : 'Trotzdem fortfahren';
   const bibOwnerLabel = document.getElementById('bib-owner-label');
   if (bibOwnerLabel) bibOwnerLabel.textContent = currentLang === 'en' ? 'Creator' : 'Ersteller';
   const bibOwnerAll = document.getElementById('bib-owner-all');
@@ -5040,12 +5048,43 @@ function closeUserModal() {
   if (modal) modal.style.display = 'none';
 }
 
-function saveUserKuerzel() {
+async function saveUserKuerzel() {
   const input = document.getElementById('user-modal-input');
   const val = (input ? input.value.trim() : '').toLowerCase().replace(/[^a-z0-9_-]/g,'');
   if (!val) { if (input) { input.style.borderColor='var(--red)'; setTimeout(()=>input.style.borderColor='',1000); } return; }
+
+  // Firestore-Check: existiert das Kürzel schon?
+  const saveBtn = document.getElementById('user-modal-save-btn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳'; }
+  let alreadyExists = false;
+  try {
+    if (typeof window._fbGetDoc === 'function') {
+      const snap = await window._fbGetDoc(val);
+      alreadyExists = snap.exists();
+    }
+  } catch(e) { /* offline — weitermachen */ }
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = currentLang === 'en' ? 'Save' : 'Speichern'; }
+
+  if (alreadyExists) {
+    // Warnung anzeigen
+    const warnEl = document.getElementById('user-modal-exists-warn');
+    if (warnEl) {
+      warnEl.style.display = 'block';
+      warnEl.textContent = currentLang === 'en'
+        ? `⚠️ "${val}" already exists. If this is you, tap "Continue anyway".`
+        : `⚠️ „${val}" existiert bereits. Wenn du das bist, tippe auf „Trotzdem fortfahren".`;
+    }
+    const continueBtn = document.getElementById('user-modal-continue-btn');
+    if (continueBtn) continueBtn.style.display = 'block';
+    return; // Abbruch — User muss bestätigen
+  }
+
+  _doLogin(val);
+}
+
+function _doLogin(val) {
   currentUser = val;
-  window.currentUser = val; // expose to module scope
+  window.currentUser = val;
   localStorage.setItem('wiesel2_user', val);
   updateUserBadge();
   if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(val);
@@ -5104,8 +5143,14 @@ window.renderPlanOverview   = renderPlanOverview;
         <span>⚠️ Merke dir deinen Namen — solange es kein Google Login gibt, ist er dein einziger Zugang zu deinen Daten.</span>
         <span id="user-modal-case-hint" style="color:#5a6a7a;">ℹ️ Groß- und Kleinschreibung wird ignoriert.</span>
       </div>
+      <div id="user-modal-exists-warn" style="display:none;background:#fdecea;border:1px solid #e57373;border-radius:8px;padding:10px 12px;font-size:12px;color:#b71c1c;"></div>
+      <button id="user-modal-continue-btn" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:13px;cursor:pointer;color:var(--text);" onclick="
+        const input=document.getElementById('user-modal-input');
+        const val=(input?input.value.trim():'').toLowerCase().replace(/[^a-z0-9_-]/g,'');
+        if(val){document.getElementById('user-modal-exists-warn').style.display='none';this.style.display='none';_doLogin(val);}
+      ">Trotzdem fortfahren</button>
       <hr class="user-modal-divider">
-      <input type="text" id="user-modal-input" class="form-input"
+      <input type="text" id="user-modal-input" oninput="document.getElementById('user-modal-exists-warn').style.display='none';document.getElementById('user-modal-continue-btn').style.display='none';" class="form-input"
         placeholder="z.B. david, moritz, jeff …"
         maxlength="20"
         style="font-size:16px;"
