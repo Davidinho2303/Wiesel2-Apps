@@ -1562,6 +1562,7 @@ signInAnonymously(auth).then(async () => {
           <button class="btn btn-ghost btn-sm" onclick="newPlanTemplate('montag')" title="Training Pankstraße (nächster Montag)">📋 Mo Pankstraße</button>
           <button class="btn btn-ghost btn-sm" onclick="newPlanTemplate('mittwoch')" title="Training Wiesenstraße (nächster Mittwoch)">📋 Mi Wiesenstraße</button>
           <button class="btn btn-secondary" onclick="newPlan()">+ Leerer Plan</button>
+          <button class="btn btn-ghost btn-sm" id="plan-lock-btn" onclick="togglePlanLock()" title="Plan sperren/entsperren">🔓</button>
           <button class="btn btn-primary" onclick="savePlan()">💾 Speichern</button>
         </div>
       </div>
@@ -3068,7 +3069,7 @@ function applyBibFilters() {
     if (effectiveScope === 'personal' && d.createdBy !== currentUser) return false;
     // Eigene Drills Filter
     const owner = document.getElementById('bib-owner')?.value;
-    if (owner === 'mine' && d.createdBy !== window.currentUser) return false;
+    if (owner === 'mine' && d.createdBy !== (window.currentUser || currentUser)) return false;
     const enName = (DRILL_NAMES_EN[d.id] || '').toLowerCase();
     const enCat = (CAT_EN[d.kat] || '').toLowerCase();
     if (search && !d.name.toLowerCase().includes(search) && !d.kat.toLowerCase().includes(search) && !enName.includes(search) && !enCat.includes(search)) return false;
@@ -3287,6 +3288,38 @@ function updatePlanDisplayHeader() {
   document.getElementById('plan-title-display').textContent = name;
   const sub = [currentPlan.date, currentPlan.theme].filter(Boolean).join(' · ');
   document.getElementById('plan-subtitle-display').textContent = sub || (currentLang === 'en' ? 'Plan time blocks · Assign drills · Export' : 'Zeitblöcke planen · Drills zuweisen · Exportieren');
+  updatePlanLockUI();
+}
+
+function togglePlanLock() {
+  if (!currentPlan) return;
+  const canLock = !currentPlan.createdBy || currentPlan.createdBy === currentUser || isAdmin();
+  if (!canLock) { toast(currentLang === 'en' ? 'Only the creator can lock/unlock' : 'Nur der Ersteller kann sperren'); return; }
+  currentPlan.locked = !currentPlan.locked;
+  autoSave();
+  updatePlanLockUI();
+  toast(currentPlan.locked
+    ? (currentLang === 'en' ? '🔒 Plan locked' : '🔒 Plan gesperrt')
+    : (currentLang === 'en' ? '🔓 Plan unlocked' : '🔓 Plan entsperrt'));
+}
+
+function updatePlanLockUI() {
+  const locked = currentPlan?.locked;
+  const btn = document.getElementById('plan-lock-btn');
+  if (btn) btn.textContent = locked ? '🔒' : '🔓';
+
+  // Eingabefelder im Plan-Header sperren
+  ['plan-name','plan-date','plan-theme'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !!locked;
+  });
+
+  // Slots neu rendern (mit/ohne Edit-Controls)
+  renderSlots();
+
+  // + Block hinzufügen Button
+  const addSlotBtn = document.querySelector('.add-slot-btn');
+  if (addSlotBtn) addSlotBtn.style.display = locked ? 'none' : '';
 }
 
 function savePlan() {
@@ -3330,7 +3363,11 @@ function loadPlan(planId) {
 
 function deletePlan(planId, e) {
   if (e) e.stopPropagation();
-  showConfirm(currentLang === 'en' ? 'Delete this plan?' : 'Plan wirklich löschen?', () => {
+  const plan = savedPlans.find(p => p.id === planId);
+  const isPast = plan && plan.date && plan.date < new Date().toISOString().slice(0,10);
+  const isLocked = plan?.locked;
+
+  const doDelete = () => {
     savedPlans = savedPlans.filter(p => p.id !== planId);
     if (currentPlan && currentPlan.id === planId) currentPlan = null;
     saveToStorage();
@@ -3338,7 +3375,24 @@ function deletePlan(planId, e) {
     renderNavSavedPlans();
     renderPlanOverview();
     toast(toastMsg('plan-deleted'));
-  });
+  };
+
+  if (isLocked) {
+    const msg = currentLang === 'en'
+      ? '🔒 This plan is locked. Delete anyway?'
+      : '🔒 Dieser Plan ist gesperrt. Trotzdem löschen?';
+    showConfirm(msg, () => {
+      const msg2 = currentLang === 'en' ? 'Are you sure? This cannot be undone.' : 'Wirklich? Das kann nicht rückgängig gemacht werden.';
+      showConfirm(msg2, doDelete);
+    });
+  } else if (isPast) {
+    const msg = currentLang === 'en'
+      ? '⚠️ This plan is in the past. Delete anyway?'
+      : '⚠️ Dieser Plan liegt in der Vergangenheit. Trotzdem löschen?';
+    showConfirm(msg, doDelete);
+  } else {
+    showConfirm(currentLang === 'en' ? 'Delete this plan?' : 'Plan wirklich löschen?', doDelete);
+  }
 }
 
 function showConfirm(msg, onYes) {
@@ -3385,6 +3439,7 @@ function renderSlotHTML(slot, idx) {
   const minsOver = drillMinsTotal > slotMins;
   const isFixed = !!slot.fixed;
   const isNoEdit = !!slot.noEdit;
+  const isLocked = !!currentPlan?.locked;
 
   const drillsHTML = slot.drills.length === 0
     ? `<div class="slot-empty-hint">— ${currentLang === 'en' ? 'No drills planned yet' : 'Noch keine Drills geplant'}</div>`
@@ -3423,13 +3478,15 @@ function renderSlotHTML(slot, idx) {
                 style="width:38px;padding:3px 4px;border:1px solid var(--border);border-radius:5px;font-family:DM Mono,monospace;font-size:12px;text-align:center;background:var(--surface);color:var(--text);touch-action:manipulation;-webkit-appearance:none;">
               min
             </span>
-            <button onclick="removeDrillFromSlot('${slot.id}',${di})" style="background:none;border:none;cursor:pointer;color:var(--text-subtle);font-size:14px;padding:0 2px;">✕</button>
+            ${isLocked ? '' : `<button onclick="removeDrillFromSlot('${slot.id}',${di})" style="background:none;border:none;cursor:pointer;color:var(--text-subtle);font-size:14px;padding:0 2px;">✕</button>`}
           </div>
           ${constraintRow}
         </div>`;
       }).join('');
 
-  const controls = isFixed
+  const controls = isLocked
+    ? `<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);padding:2px 6px;border:1px solid var(--border);border-radius:10px;">🔒</span>`
+    : isFixed
     ? `<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);padding:2px 6px;border:1px solid var(--border);border-radius:10px;">${currentLang === 'en' ? 'fixed' : 'fest'}</span>`
     : `${idx > 0 ? `<button class="btn btn-ghost btn-sm" onclick="moveSlot('${slot.id}',-1)">↑</button>` : ''}
        ${idx < currentPlan.slots.length - 1 ? `<button class="btn btn-ghost btn-sm" onclick="moveSlot('${slot.id}',1)">↓</button>` : ''}
@@ -3455,7 +3512,7 @@ function renderSlotHTML(slot, idx) {
       ondragleave="onSlotContentDragLeave(event)"
       ondrop="onSlotContentDrop(event, '${slot.id}')">
       ${isNoEdit ? '' : drillsHTML}
-      ${isNoEdit ? '' : `<button class="slot-add-btn" onclick="openPickerForSlot('${slot.id}', '${slot.phase}')">${currentLang === 'en' ? '+ Select drill …' : '+ Drill auswählen …'}</button>`}
+      ${isNoEdit || isLocked ? '' : `<button class="slot-add-btn" onclick="openPickerForSlot('${slot.id}', '${slot.phase}')">${currentLang === 'en' ? '+ Select drill …' : '+ Drill auswählen …'}</button>`}
     </div>
   </div>`;
 }
