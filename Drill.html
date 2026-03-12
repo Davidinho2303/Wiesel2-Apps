@@ -4872,7 +4872,7 @@ updateUserBadge();
 if (currentUser) {
   if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(currentUser);
 } else {
-  openUserModal(true);
+  setTimeout(() => openUserModal(true), 100);
 }
 console.log('[APP] _appReady set, pendingCloudPlans:', window.pendingCloudPlans?.length);
 if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
