@@ -1010,6 +1010,17 @@
       padding: 20px 16px;
       padding-bottom: 32px;
     }
+    #drill-edit-modal .modal {
+      max-height: 100dvh;
+      height: 100dvh;
+      border-radius: 0;
+      margin: 0;
+      padding: 16px;
+      padding-bottom: env(safe-area-inset-bottom, 20px);
+    }
+    #drill-edit-modal {
+      align-items: flex-start;
+    }
     .drill-picker-list { max-height: 40dvh; }
     .drill-picker-item { padding: 14px 12px; min-height: 52px; }
     .drill-picker-name { font-size: 14px; }
@@ -2586,7 +2597,8 @@ const CAT_CLASS = {
 };
 
 function canEditDrill(d) {
-  return !!d;
+  if (!d) return false;
+  return d.createdBy === currentUser || isAdmin();
 }
 
 function renderBibliothek(drills) {
@@ -2838,7 +2850,8 @@ function openDrillEditModal(drillId) {
   }
 
   document.getElementById('drill-edit-modal').classList.remove('hidden');
-  document.getElementById('de-name').focus();
+  // Kein auto-focus auf mobile (verhindert Tastatur-Popup)
+  if (window.innerWidth > 768) document.getElementById('de-name').focus();
 }
 
 
@@ -3041,7 +3054,7 @@ function applyBibFilters() {
     if (effectiveScope === 'personal' && d.createdBy !== currentUser) return false;
     // Eigene Drills Filter
     const owner = document.getElementById('bib-owner')?.value;
-    if (owner === 'mine' && d.createdBy !== currentUser) return false;
+    if (owner === 'mine' && d.createdBy !== window.currentUser) return false;
     const enName = (DRILL_NAMES_EN[d.id] || '').toLowerCase();
     const enCat = (CAT_EN[d.kat] || '').toLowerCase();
     if (search && !d.name.toLowerCase().includes(search) && !d.kat.toLowerCase().includes(search) && !enName.includes(search) && !enCat.includes(search)) return false;
@@ -3129,7 +3142,10 @@ function openDrillModal(drillId, fromPicker) {
     const editLabel = currentLang === 'en' ? '✏️ Edit' : '✏️ Bearbeiten';
     const canEdit = canEditDrill(d);
     const editBtn = canEdit ? `<button class="btn btn-ghost" onclick="closeDrillModal();openDrillEditModal('${d.id}')">${editLabel}</button>` : '';
-    addSection = `<div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:1;" onclick="closeDrillModal();showPage('planung');quickAddDrill('${d.id}')">${btnLabel}</button>${editBtn}</div>`;
+    const deleteLabel = currentLang === 'en' ? '🗑 Delete' : '🗑 Löschen';
+    const canDelete = d.createdBy === currentUser || isAdmin();
+    const deleteBtn = canDelete ? `<button class="btn btn-ghost" style="color:var(--red,#c0392b);" onclick="deleteDrill('${d.id}')">${deleteLabel}</button>` : '';
+    addSection = `<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-primary" style="flex:1;" onclick="closeDrillModal();showPage('planung');quickAddDrill('${d.id}')">${btnLabel}</button>${editBtn}${deleteBtn}</div>`;
   }
   document.getElementById('modal-add-section').innerHTML = addSection;
   document.getElementById('modal-add-section').style.display = fromPicker ? 'none' : 'block';
@@ -3138,6 +3154,10 @@ function openDrillModal(drillId, fromPicker) {
 
 function closeDrillModal(e) {
   document.getElementById('drill-modal').classList.add('hidden');
+  // Filter neu anwenden damit Grid nicht leer bleibt
+  if (document.getElementById('page-bibliothek')?.classList.contains('active')) {
+    applyBibFilters();
+  }
 }
 
 // ============================================================
