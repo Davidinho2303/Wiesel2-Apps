@@ -1103,8 +1103,11 @@ const TEAM_DRILLS_DOC = doc(db, 'teams', 'wiesel2', 'data', 'drills');
 const META_DOC        = doc(db, 'teams', 'wiesel2', 'data', 'meta');
 
 // Dynamic docs — depend on currentUser (set after login)
-function getPlansDoc()        { const u = window.currentUser || 'anonymous'; return doc(db, 'users', u, 'data', 'plans'); }
+function getPlansDoc()          { const u = window.currentUser || 'anonymous'; return doc(db, 'users', u, 'data', 'plans'); }
 function getPersonalDrillsDoc() { const u = window.currentUser || 'anonymous'; return doc(db, 'users', u, 'data', 'drills'); }
+function getTemplatesDoc()      { const u = window.currentUser || 'anonymous'; return doc(db, 'users', u, 'data', 'planTemplates'); }
+const SHARED_PLANS_DOC      = doc(db, 'teams', 'wiesel2', 'data', 'sharedPlans');
+const SHARED_TEMPLATES_DOC  = doc(db, 'teams', 'wiesel2', 'data', 'sharedPlanTemplates');
 
 // Aliases for backward compat
 const DRILLS_DOC = TEAM_DRILLS_DOC;
@@ -1193,14 +1196,46 @@ async function migrateIfNeeded() {
         const existingDavidSnap = await getDoc(davidPlansDoc);
         // Nur migrieren wenn david noch keine eigenen Pläne hat
         if (!existingDavidSnap.exists() || !(existingDavidSnap.data().plans?.length > 0)) {
-          await setDoc(davidPlansDoc, { ...data, updatedAt: Date.now() });
+          const plans = (data.plans || []).map(p => ({
+            ...p,
+            createdBy: p.createdBy || 'david',
+            scope: p.scope || 'personal'
+          }));
+          await setDoc(davidPlansDoc, { ...data, plans, updatedAt: Date.now() });
+        } else {
+          // Patch existing plans: set createdBy + scope if missing
+          const existing = existingDavidSnap.data();
+          const patched = (existing.plans || []).map(p => ({
+            ...p,
+            createdBy: p.createdBy || 'david',
+            scope: p.scope || 'personal'
+          }));
+          await setDoc(davidPlansDoc, { ...existing, plans: patched, updatedAt: Date.now() });
         }
       }
 
-      await setDoc(META_DOC, { ...meta, userMigrated: true, userMigratedAt: Date.now() }, { merge: true });
+      await setDoc(META_DOC, { ...meta, userMigrated: true, plansMigrated: true, userMigratedAt: Date.now() }, { merge: true });
+      return; // Migration done
       setStatus('✓ Migration fertig', 'var(--green)');
       setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
       return;
+    }
+
+    // --- Patch: plans createdBy + scope ---
+    if (!meta.plansMigrated && window.currentUser === 'david') {
+      const davidPlansDoc = doc(db, 'users', 'david', 'data', 'plans');
+      const snap = await getDoc(davidPlansDoc);
+      if (snap.exists()) {
+        const data = snap.data();
+        const plans = (data.plans || []).map(p => ({
+          ...p,
+          createdBy: p.createdBy || 'david',
+          scope: p.scope || 'personal'
+        }));
+        await setDoc(davidPlansDoc, { ...data, plans, updatedAt: Date.now() });
+      }
+      await setDoc(META_DOC, { ...meta, plansMigrated: true }, { merge: true });
+      console.log('[MIGRATE] plans patched with createdBy+scope');
     }
 
     // --- Original Seed-Migration ---
@@ -1323,6 +1358,53 @@ window.fbSavePlans = async (plans, mins) => {
 
 window.fbSetSyncing = (v) => { isSyncing = v; };
 
+// ---- Templates speichern
+window.fbSaveTemplates = async (templates) => {
+  try {
+    await setDoc(getTemplatesDoc(), { templates, updatedAt: Date.now() });
+  } catch(e) { console.warn('fbSaveTemplates:', e.message); }
+};
+
+// ---- Plan teilen (Kopie in sharedPlans)
+window.fbSharePlan = async (plan) => {
+  try {
+    const snap = await getDoc(SHARED_PLANS_DOC);
+    const existing = snap.exists() ? (snap.data().plans || []) : [];
+    const filtered = existing.filter(p => p.id !== plan.id);
+    await setDoc(SHARED_PLANS_DOC, { plans: [...filtered, { ...plan, scope: 'team' }], updatedAt: Date.now() });
+  } catch(e) { console.warn('fbSharePlan:', e.message); }
+};
+
+// ---- Plan zurückziehen
+window.fbUnsharePlan = async (planId) => {
+  try {
+    const snap = await getDoc(SHARED_PLANS_DOC);
+    if (!snap.exists()) return;
+    const plans = (snap.data().plans || []).filter(p => p.id !== planId);
+    await setDoc(SHARED_PLANS_DOC, { plans, updatedAt: Date.now() });
+  } catch(e) { console.warn('fbUnsharePlan:', e.message); }
+};
+
+// ---- Template teilen
+window.fbShareTemplate = async (tpl) => {
+  try {
+    const snap = await getDoc(SHARED_TEMPLATES_DOC);
+    const existing = snap.exists() ? (snap.data().templates || []) : [];
+    const filtered = existing.filter(t => t.id !== tpl.id);
+    await setDoc(SHARED_TEMPLATES_DOC, { templates: [...filtered, { ...tpl, scope: 'team' }], updatedAt: Date.now() });
+  } catch(e) { console.warn('fbShareTemplate:', e.message); }
+};
+
+// ---- Template zurückziehen
+window.fbUnshareTemplate = async (tplId) => {
+  try {
+    const snap = await getDoc(SHARED_TEMPLATES_DOC);
+    if (!snap.exists()) return;
+    const templates = (snap.data().templates || []).filter(t => t.id !== tplId);
+    await setDoc(SHARED_TEMPLATES_DOC, { templates, updatedAt: Date.now() });
+  } catch(e) { console.warn('fbUnshareTemplate:', e.message); }
+};
+
 // ---- Anonym einloggen
 signInAnonymously(auth).then(async () => {
   setStatus('☁ ' + ((window.currentLang||"de")==="en"?"Connected":"Verbunden"), 'var(--green)');
@@ -1372,6 +1454,20 @@ signInAnonymously(auth).then(async () => {
     setStatus('⚠ Offline', 'var(--orange)');
   });
 
+  // Shared Plans live-listener
+  onSnapshot(SHARED_PLANS_DOC, (snap) => {
+    if (!snap.exists()) return;
+    window.sharedPlans = snap.data().plans || [];
+    try { renderPlansLibrary(); } catch(e) {}
+  }, err => console.warn('SharedPlans snapshot:', err.message));
+
+  // Shared Templates live-listener
+  onSnapshot(SHARED_TEMPLATES_DOC, (snap) => {
+    if (!snap.exists()) return;
+    window.sharedTemplates = snap.data().templates || [];
+    try { renderPlansLibrary(); } catch(e) {}
+  }, err => console.warn('SharedTemplates snapshot:', err.message));
+
   // Drills live-listener — team drills
   onSnapshot(TEAM_DRILLS_DOC, (snap) => {
     if (!snap.exists()) return;
@@ -1386,6 +1482,13 @@ signInAnonymously(auth).then(async () => {
 
   // Personal drills live-listener (nur wenn User bereits bekannt)
   if (window.currentUser) {
+    // User Templates listener
+    onSnapshot(getTemplatesDoc(), (snap) => {
+      if (!snap.exists()) return;
+      window.myTemplates = snap.data().templates || [];
+      try { renderPlansLibrary(); } catch(e) {}
+    }, err => console.warn('Templates snapshot:', err.message));
+
     onSnapshot(getPersonalDrillsDoc(), (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
@@ -1562,6 +1665,7 @@ signInAnonymously(auth).then(async () => {
           <button class="btn btn-ghost btn-sm" onclick="newPlanTemplate('montag')" title="Training Pankstraße (nächster Montag)">📋 Mo Pankstraße</button>
           <button class="btn btn-ghost btn-sm" onclick="newPlanTemplate('mittwoch')" title="Training Wiesenstraße (nächster Mittwoch)">📋 Mi Wiesenstraße</button>
           <button class="btn btn-secondary" onclick="newPlan()">+ Leerer Plan</button>
+          <button class="btn btn-ghost btn-sm" onclick="saveCurrentPlanAsTemplate()" title="Als Template speichern">📋 Tpl.</button>
           <button class="btn btn-ghost btn-sm" id="plan-lock-btn" onclick="togglePlanLock()" title="Plan sperren" style="padding:4px 8px;">
             <svg id="plan-lock-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2"/>
@@ -1604,17 +1708,25 @@ signInAnonymously(auth).then(async () => {
         </div>
         <div class="plan-sidebar-panel">
           <div class="panel">
-            <div class="panel-title">
-              Gespeicherte Pläne
-              <span id="saved-plans-count" style="font-size:10px;background:var(--tag-bg);padding:1px 5px;border-radius:10px;color:var(--tag-text);">0</span>
+            <!-- Tab Bar -->
+            <div style="display:flex;border-bottom:1px solid var(--border);">
+              <button class="plans-lib-tab active" id="plt-mine" onclick="setPlansTab('mine')" style="flex:1;padding:8px 4px;font-size:11px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--text);cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text);">Meine Pläne <span id="saved-plans-count" style="font-size:9px;background:var(--tag-bg);padding:1px 4px;border-radius:8px;color:var(--tag-text);">0</span></button>
+              <button class="plans-lib-tab" id="plt-shared" onclick="setPlansTab('shared')" style="flex:1;padding:8px 4px;font-size:11px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);">Geteilt <span id="shared-plans-count" style="font-size:9px;background:var(--tag-bg);padding:1px 4px;border-radius:8px;color:var(--tag-text);">0</span></button>
+              <button class="plans-lib-tab" id="plt-tpl-mine" onclick="setPlansTab('tpl-mine')" style="flex:1;padding:8px 4px;font-size:11px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);">Meine Tpl.</button>
+              <button class="plans-lib-tab" id="plt-tpl-shared" onclick="setPlansTab('tpl-shared')" style="flex:1;padding:8px 4px;font-size:11px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);">Geteilte Tpl.</button>
             </div>
-            <div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;gap:6px;">
-              <input type="text" id="plans-search" class="filter-input" placeholder="Plan suchen …" oninput="renderSavedPlansList()" style="flex:1;min-width:0;">
-              <select class="filter-select" id="plans-sort" onchange="renderSavedPlansList()" style="min-width:90px;">
+            <!-- Search + Sort (nur für Pläne) -->
+            <div id="plans-search-bar" style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;gap:6px;">
+              <input type="text" id="plans-search" class="filter-input" placeholder="Suchen …" oninput="renderPlansLibrary()" style="flex:1;min-width:0;">
+              <select class="filter-select" id="plans-sort" onchange="renderPlansLibrary()" style="min-width:90px;">
                 <option value="date-desc">Neueste</option>
                 <option value="date-asc">Älteste</option>
                 <option value="name-asc">A–Z</option>
               </select>
+            </div>
+            <!-- New Template Button (nur für eigene Templates) -->
+            <div id="tpl-new-bar" style="display:none;padding:8px 10px;border-bottom:1px solid var(--border);">
+              <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="openTemplateModal(null)">+ Neues Template</button>
             </div>
             <div id="saved-plans-list"><div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">Noch keine Pläne gespeichert.</div></div>
           </div>
@@ -2533,6 +2645,9 @@ function removeConstraint(slotId, drillIdx, label, e) {
 // ============================================================
 let currentPlan = null;
 let savedPlans = [];
+window.myTemplates = [];
+window.sharedPlans = [];
+window.sharedTemplates = [];
 // Keep local savedPlans in sync with window.savedPlans
 Object.defineProperty(window, 'savedPlans', {
   get: function() { return savedPlans; },
@@ -2602,7 +2717,7 @@ function showPage(page) {
   document.getElementById('picker-modal')?.classList.add('hidden');
   const main = document.querySelector('.main');
   if (main) main.scrollTop = 0;
-  if (page === 'planung') renderSavedPlansList();
+  if (page === 'planung') renderPlansLibrary();
   if (page === 'tracking') renderTracking();
   if (page === 'import-export') renderPlanOverview();
 }
@@ -3373,6 +3488,222 @@ function loadPlan(planId) {
   updateTimeSummary();
   updatePlanDisplayHeader();
   showPage('planung');
+}
+
+// ---- Plan teilen
+function sharePlan(planId) {
+  const plan = savedPlans.find(p => p.id === planId);
+  if (!plan) return;
+  plan.scope = 'team';
+  const idx = savedPlans.findIndex(p => p.id === planId);
+  if (idx >= 0) savedPlans[idx] = plan;
+  saveToStorage();
+  if (typeof window.fbSharePlan === 'function') window.fbSharePlan(plan);
+  if (typeof window.fbSavePlans === 'function') window.fbSavePlans(savedPlans, window.drillMins);
+  renderSavedPlansList();
+  toast(currentLang === 'en' ? '🌐 Plan shared' : '🌐 Plan geteilt');
+}
+
+// ---- Plan zurückziehen (aus shared entfernen)
+function unsharePlan(planId) {
+  const plan = savedPlans.find(p => p.id === planId);
+  if (plan) { plan.scope = 'personal'; }
+  const idx = savedPlans.findIndex(p => p.id === planId);
+  if (idx >= 0) savedPlans[idx] = plan;
+  saveToStorage();
+  if (typeof window.fbUnsharePlan === 'function') window.fbUnsharePlan(planId);
+  if (typeof window.fbSavePlans === 'function') window.fbSavePlans(savedPlans, window.drillMins);
+  renderSavedPlansList();
+  toast(currentLang === 'en' ? 'Plan unshared' : 'Plan zurückgezogen');
+}
+
+// ---- Toggle Share für Plan
+function toggleSharePlan(planId) {
+  const plan = savedPlans.find(p => p.id === planId);
+  if (!plan) return;
+  if (plan.scope === 'team') unsharePlan(planId);
+  else sharePlan(planId);
+}
+
+// ---- Geteilten Plan als Kopie laden
+function loadSharedPlan(planId) {
+  const plan = (window.sharedPlans || []).find(p => p.id === planId);
+  if (!plan) return;
+  const copy = JSON.parse(JSON.stringify(plan));
+  copy.id = 'plan_' + Date.now();
+  copy.scope = 'personal';
+  copy.name = (copy.name || '') + (currentLang === 'en' ? ' (copy)' : ' (Kopie)');
+  currentPlan = copy;
+  document.getElementById('plan-name').value = copy.name;
+  document.getElementById('plan-date').value = copy.date || '';
+  document.getElementById('plan-theme').value = copy.theme || '';
+  document.getElementById('plan-notes').value = copy.notes || '';
+  document.getElementById('plan-total-time').value = copy.totalTime || 90;
+  renderSlots(); updateTimeSummary(); updatePlanDisplayHeader();
+  showPage('planung');
+  toast(currentLang === 'en' ? 'Plan loaded as copy' : 'Plan als Kopie geladen');
+}
+
+// ---- Plan aus shared löschen (nur Ersteller/Admin)
+function unshareAndDeletePlan(planId, e) {
+  if (e) e.stopPropagation();
+  showConfirm(currentLang === 'en' ? 'Remove from shared plans?' : 'Aus geteilten Plänen entfernen?', () => {
+    if (typeof window.fbUnsharePlan === 'function') window.fbUnsharePlan(planId);
+    window.sharedPlans = (window.sharedPlans || []).filter(p => p.id !== planId);
+    renderSharedPlansList();
+    toast(currentLang === 'en' ? 'Removed' : 'Entfernt');
+  });
+}
+
+// ---- Template laden (als neuen Plan instantiieren)
+function loadTemplate(tplId, fromShared) {
+  const list = fromShared ? (window.sharedTemplates || []) : (window.myTemplates || []);
+  const tpl = list.find(t => t.id === tplId);
+  if (!tpl) return;
+  const weekday = (tpl.theme || '').includes('Pankstraße') ? 1 : (tpl.theme || '').includes('Wiesenstraße') ? 3 : null;
+  const datum = weekday ? getNextWeekday(weekday) : new Date();
+  const datumStr = formatDateDE(datum);
+  const name = tpl.name.replace(/\d{2}\.\d{2}\.\d{4}/, datumStr) || tpl.name;
+  currentPlan = {
+    id: 'plan_' + Date.now(),
+    name,
+    date: formatDate(datum),
+    theme: tpl.theme || '',
+    notes: tpl.notes || '',
+    totalTime: tpl.totalTime || 90,
+    scope: 'team',
+    createdBy: currentUser,
+    createdAt: Date.now(),
+    slots: JSON.parse(JSON.stringify(tpl.slots || []))
+  };
+  document.getElementById('plan-name').value = currentPlan.name;
+  document.getElementById('plan-date').value = currentPlan.date;
+  document.getElementById('plan-theme').value = currentPlan.theme;
+  document.getElementById('plan-notes').value = currentPlan.notes;
+  document.getElementById('plan-total-time').value = currentPlan.totalTime;
+  renderSlots(); updateTimeSummary(); updatePlanDisplayHeader();
+  showPage('planung');
+  toast(currentLang === 'en' ? 'Template loaded' : 'Template geladen');
+}
+
+// ---- Template aus aktuellem Plan erstellen
+function saveCurrentPlanAsTemplate() {
+  if (!currentPlan) return;
+  openTemplateModal(null, currentPlan);
+}
+
+// ---- Template Toggle Share
+function toggleShareTemplate(tplId) {
+  const tpl = (window.myTemplates || []).find(t => t.id === tplId);
+  if (!tpl) return;
+  if (tpl.scope === 'team') {
+    tpl.scope = 'personal';
+    if (typeof window.fbUnshareTemplate === 'function') window.fbUnshareTemplate(tplId);
+    toast(currentLang === 'en' ? 'Template unshared' : 'Template zurückgezogen');
+  } else {
+    tpl.scope = 'team';
+    if (typeof window.fbShareTemplate === 'function') window.fbShareTemplate(tpl);
+    toast(currentLang === 'en' ? '🌐 Template shared' : '🌐 Template geteilt');
+  }
+  if (typeof window.fbSaveTemplates === 'function') window.fbSaveTemplates(window.myTemplates);
+  renderMyTemplatesList();
+}
+
+// ---- Template löschen
+function deleteTemplate(tplId, e) {
+  if (e) e.stopPropagation();
+  showConfirm(currentLang === 'en' ? 'Delete template?' : 'Template löschen?', () => {
+    const tpl = (window.myTemplates || []).find(t => t.id === tplId);
+    if (tpl?.scope === 'team' && typeof window.fbUnshareTemplate === 'function') window.fbUnshareTemplate(tplId);
+    window.myTemplates = (window.myTemplates || []).filter(t => t.id !== tplId);
+    if (typeof window.fbSaveTemplates === 'function') window.fbSaveTemplates(window.myTemplates);
+    renderMyTemplatesList();
+    toast(currentLang === 'en' ? 'Template deleted' : 'Template gelöscht');
+  });
+}
+
+// ---- Template aus shared entfernen
+function unshareTemplate(tplId, e) {
+  if (e) e.stopPropagation();
+  showConfirm(currentLang === 'en' ? 'Remove from shared templates?' : 'Aus geteilten Templates entfernen?', () => {
+    if (typeof window.fbUnshareTemplate === 'function') window.fbUnshareTemplate(tplId);
+    window.sharedTemplates = (window.sharedTemplates || []).filter(t => t.id !== tplId);
+    renderSharedTemplatesList();
+    toast(currentLang === 'en' ? 'Removed' : 'Entfernt');
+  });
+}
+
+// ---- Template Modal (erstellen / bearbeiten)
+function openTemplateModal(tplId, fromPlan) {
+  const existing = tplId ? (window.myTemplates || []).find(t => t.id === tplId) : null;
+  const isNew = !existing;
+  const name = existing?.name || fromPlan?.name || '';
+  const theme = existing?.theme || fromPlan?.theme || '';
+  const overlay = document.createElement('div');
+  overlay.id = 'tpl-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;padding:24px;max-width:380px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:DM Sans,sans-serif;">
+      <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text);">${isNew?(currentLang==='en'?'New Template':'Neues Template'):(currentLang==='en'?'Edit Template':'Template bearbeiten')}</div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label class="form-label">${currentLang==='en'?'Name':'Name'} *</label>
+        <input type="text" id="tpl-name-input" class="form-input" value="${name}" placeholder="z.B. Training Montag">
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label class="form-label">${currentLang==='en'?'Location/Theme':'Ort/Thema'}</label>
+        <input type="text" id="tpl-theme-input" class="form-input" value="${theme}" placeholder="z.B. Pankstraße">
+      </div>
+      <div class="form-group" style="margin-bottom:16px;">
+        <label class="form-label">Scope</label>
+        <select id="tpl-scope-input" class="form-select">
+          <option value="personal" ${(existing?.scope||'personal')==='personal'?'selected':''}>Privat</option>
+          <option value="team" ${(existing?.scope||'')==='team'?'selected':''}>Geteilt</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-ghost" onclick="document.getElementById('tpl-modal-overlay').remove()">${currentLang==='en'?'Cancel':'Abbrechen'}</button>
+        <button class="btn btn-primary" onclick="saveTemplateFromModal('${tplId||''}','${fromPlan?fromPlan.id:''}')">${currentLang==='en'?'Save':'Speichern'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('tpl-name-input').focus();
+}
+
+function saveTemplateFromModal(tplId, fromPlanId) {
+  const name = document.getElementById('tpl-name-input').value.trim();
+  if (!name) { document.getElementById('tpl-name-input').style.borderColor='var(--red)'; return; }
+  const theme = document.getElementById('tpl-theme-input').value.trim();
+  const scope = document.getElementById('tpl-scope-input').value;
+  const existing = tplId ? (window.myTemplates || []).find(t => t.id === tplId) : null;
+  const fromPlan = fromPlanId ? savedPlans.find(p => p.id === fromPlanId) : currentPlan;
+
+  const tpl = {
+    id: existing?.id || 'tpl_' + Date.now(),
+    name, theme, scope,
+    notes: existing?.notes || fromPlan?.notes || '',
+    totalTime: existing?.totalTime || fromPlan?.totalTime || 90,
+    createdBy: currentUser,
+    createdAt: existing?.createdAt || Date.now(),
+    updatedAt: Date.now(),
+    slots: JSON.parse(JSON.stringify(existing?.slots || fromPlan?.slots || []))
+  };
+
+  if (existing) {
+    const idx = window.myTemplates.findIndex(t => t.id === tpl.id);
+    window.myTemplates[idx] = tpl;
+    // Update shared copy if was shared
+    if (scope === 'team' && typeof window.fbShareTemplate === 'function') window.fbShareTemplate(tpl);
+    else if (scope === 'personal' && existing.scope === 'team' && typeof window.fbUnshareTemplate === 'function') window.fbUnshareTemplate(tpl.id);
+  } else {
+    if (!window.myTemplates) window.myTemplates = [];
+    window.myTemplates.unshift(tpl);
+    if (scope === 'team' && typeof window.fbShareTemplate === 'function') window.fbShareTemplate(tpl);
+  }
+
+  if (typeof window.fbSaveTemplates === 'function') window.fbSaveTemplates(window.myTemplates);
+  document.getElementById('tpl-modal-overlay').remove();
+  renderMyTemplatesList();
+  toast(currentLang === 'en' ? 'Template saved' : 'Template gespeichert');
 }
 
 function deletePlan(planId, e) {
@@ -4268,9 +4599,110 @@ function openPrintBlob(html) {
 
 // ============================================================
 // PLAN ÜBERSICHT & EXPORT
+// ============================================================
+// PLANS LIBRARY — Tabs: mine / shared / tpl-mine / tpl-shared
+// ============================================================
+let plansLibTab = 'mine';
+
+function setPlansTab(tab) {
+  plansLibTab = tab;
+  document.querySelectorAll('.plans-lib-tab').forEach(b => {
+    b.style.borderBottomColor = 'transparent';
+    b.style.color = 'var(--text-subtle)';
+    b.style.fontWeight = '500';
+  });
+  const active = document.getElementById('plt-' + tab);
+  if (active) { active.style.borderBottomColor = 'var(--text)'; active.style.color = 'var(--text)'; active.style.fontWeight = '600'; }
+  const searchBar = document.getElementById('plans-search-bar');
+  const tplBar = document.getElementById('tpl-new-bar');
+  if (searchBar) searchBar.style.display = (tab === 'tpl-mine' || tab === 'tpl-shared') ? 'none' : 'flex';
+  if (tplBar) tplBar.style.display = tab === 'tpl-mine' ? 'block' : 'none';
+  renderPlansLibrary();
+}
+
+function renderPlansLibrary() {
+  if (plansLibTab === 'mine') renderSavedPlansList();
+  else if (plansLibTab === 'shared') renderSharedPlansList();
+  else if (plansLibTab === 'tpl-mine') renderMyTemplatesList();
+  else if (plansLibTab === 'tpl-shared') renderSharedTemplatesList();
+}
+
+function renderSharedPlansList() {
+  const container = document.getElementById('saved-plans-list');
+  document.getElementById('shared-plans-count').textContent = (window.sharedPlans || []).length;
+  const plans = window.sharedPlans || [];
+  if (plans.length === 0) {
+    container.innerHTML = `<div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">${currentLang==='en'?'No shared plans.':'Keine geteilten Pläne.'}</div>`;
+    return;
+  }
+  container.innerHTML = plans.map(p => {
+    const canManage = p.createdBy === currentUser || isAdmin();
+    const drillCount = (p.slots||[]).reduce((a,s)=>a+(s.drills||[]).length,0);
+    return `<div class="plan-list-item">
+      <div style="flex:1;min-width:0;">
+        <div class="plan-list-name">${p.name||'—'} <span style="font-size:9px;color:var(--text-subtle);font-family:DM Mono,monospace;">🤖 ${p.createdBy||'?'}</span></div>
+        <div class="plan-list-date">${p.date||''}${p.theme?' · '+p.theme:''}</div>
+        <div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);margin-top:2px;">${drillCount} Drills</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button class="btn btn-ghost btn-sm" onclick="loadSharedPlan('${p.id}')" title="${currentLang==='en'?'Load as copy':'Als Kopie laden'}">📋</button>
+        ${canManage ? `<button class="btn btn-danger btn-sm" onclick="unshareAndDeletePlan('${p.id}',event)">✕</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMyTemplatesList() {
+  const container = document.getElementById('saved-plans-list');
+  const templates = window.myTemplates || [];
+  if (templates.length === 0) {
+    container.innerHTML = `<div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">${currentLang==='en'?'No templates yet.':'Noch keine Templates.'}</div>`;
+    return;
+  }
+  container.innerHTML = templates.map(t => {
+    const isShared = t.scope === 'team';
+    return `<div class="plan-list-item">
+      <div style="flex:1;min-width:0;">
+        <div class="plan-list-name">${t.name||'—'}</div>
+        <div class="plan-list-date">${t.theme||''}${isShared?' · 🌐 Geteilt':''}</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button class="btn btn-ghost btn-sm" onclick="loadTemplate('${t.id}')" title="${currentLang==='en'?'Use template':'Template laden'}">▶</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleShareTemplate('${t.id}')" title="${isShared?(currentLang==='en'?'Unshare':'Zurückziehen'):(currentLang==='en'?'Share':'Teilen')}">${isShared?'🌐':'🔗'}</button>
+        <button class="btn btn-ghost btn-sm" onclick="openTemplateModal('${t.id}')" title="${currentLang==='en'?'Edit':'Bearbeiten'}">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteTemplate('${t.id}',event)">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderSharedTemplatesList() {
+  const container = document.getElementById('saved-plans-list');
+  const templates = window.sharedTemplates || [];
+  if (templates.length === 0) {
+    container.innerHTML = `<div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">${currentLang==='en'?'No shared templates.':'Keine geteilten Templates.'}</div>`;
+    return;
+  }
+  container.innerHTML = templates.map(t => {
+    const canManage = t.createdBy === currentUser || isAdmin();
+    return `<div class="plan-list-item">
+      <div style="flex:1;min-width:0;">
+        <div class="plan-list-name">${t.name||'—'} <span style="font-size:9px;color:var(--text-subtle);font-family:DM Mono,monospace;">🤖 ${t.createdBy||'?'}</span></div>
+        <div class="plan-list-date">${t.theme||''}</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button class="btn btn-ghost btn-sm" onclick="loadTemplate('${t.id}',true)" title="${currentLang==='en'?'Use template':'Template laden'}">▶</button>
+        ${canManage ? `<button class="btn btn-danger btn-sm" onclick="unshareTemplate('${t.id}',event)">✕</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function renderSavedPlansList() {
   const container = document.getElementById('saved-plans-list');
   document.getElementById('saved-plans-count').textContent = savedPlans.length;
+  const spc = document.getElementById('shared-plans-count');
+  if (spc) spc.textContent = (window.sharedPlans||[]).length;
 
   const search = (document.getElementById('plans-search')?.value || '').toLowerCase();
   const sort = document.getElementById('plans-sort')?.value || 'date-desc';
@@ -4297,13 +4729,17 @@ function renderSavedPlansList() {
     const drillCount = (p.slots || []).reduce((a, s) => a + (s.drills || []).length, 0);
     const totalMins = (p.slots || []).reduce((a, s) =>
       a + (s.drills || []).reduce((b, sd) => b + (parseInt(sd.mins) || 0), 0), 0);
+    const isShared = p.scope === 'team';
     return `<div class="plan-list-item ${currentPlan && currentPlan.id === p.id ? 'active' : ''}" onclick="loadPlan('${p.id}')">
       <div style="flex:1;min-width:0;">
-        <div class="plan-list-name">${p.name || '—'}</div>
+        <div class="plan-list-name">${p.name || '—'}${isShared ? ' <span style="font-size:9px;color:var(--blue,#2E75B6);font-family:DM Mono,monospace;">🌐</span>' : ''}</div>
         <div class="plan-list-date">${p.date || ''}${p.theme ? ' · ' + p.theme : ''}</div>
         <div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);margin-top:2px;">${drillCount} Drills · ${totalMins} min</div>
       </div>
-      <button class="btn btn-danger btn-sm" onclick="deletePlan('${p.id}',event)" style="flex-shrink:0;">✕</button>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button class="btn btn-ghost btn-sm" onclick="toggleSharePlan('${p.id}')" title="${p.scope==='team'?(currentLang==='en'?'Unshare':'Zurückziehen'):(currentLang==='en'?'Share':'Teilen')}" style="font-size:11px;">${'scope' in p && p.scope === 'team' ? '🌐' : '🔗'}</button>
+        <button class="btn btn-danger btn-sm" onclick="deletePlan('${p.id}',event)">✕</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -5168,11 +5604,57 @@ function _doLogin(val) {
   updateUserBadge();
   if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(val);
   if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(val);
+  setTimeout(seedDefaultTemplates, 1500); // seed after templates listener fires
   closeUserModal();
 }
 
+// ============================================================
 // INIT
 // ============================================================
+
+// Seed Montag/Mittwoch Templates für david (einmalig wenn myTemplates leer)
+function seedDefaultTemplates() {
+  if (currentUser !== 'david') return;
+  if (window.myTemplates && window.myTemplates.length > 0) return;
+  const defaults = [
+    {
+      id: 'tpl_montag',
+      name: 'Training Montag Pankstraße',
+      theme: 'Pankstraße',
+      notes: '',
+      totalTime: 90,
+      scope: 'personal',
+      createdBy: 'david',
+      createdAt: Date.now(),
+      slots: [
+        { id: 's1', label: 'Warmup', phase: 'warmup', durationMin: 20, drills: [], fixed: true },
+        { id: 's2', label: 'Stretching', phase: 'warmup', durationMin: 10, drills: [], fixed: true, noEdit: true },
+        { id: 's3', label: 'Hauptteil', phase: 'hauptteil', durationMin: 55, drills: [] },
+        { id: 's4', label: 'Ausdehnen', phase: 'abschluss', durationMin: 5, drills: [], fixed: true, noEdit: true },
+      ]
+    },
+    {
+      id: 'tpl_mittwoch',
+      name: 'Training Mittwoch Wiesenstraße',
+      theme: 'Wiesenstraße',
+      notes: '',
+      totalTime: 90,
+      scope: 'personal',
+      createdBy: 'david',
+      createdAt: Date.now(),
+      slots: [
+        { id: 's1', label: 'Warmup', phase: 'warmup', durationMin: 20, drills: [], fixed: true },
+        { id: 's2', label: 'Stretching', phase: 'warmup', durationMin: 10, drills: [], fixed: true, noEdit: true },
+        { id: 's3', label: 'Hauptteil', phase: 'hauptteil', durationMin: 55, drills: [] },
+        { id: 's4', label: 'Ausdehnen', phase: 'abschluss', durationMin: 5, drills: [], fixed: true, noEdit: true },
+      ]
+    }
+  ];
+  window.myTemplates = defaults;
+  if (typeof window.fbSaveTemplates === 'function') window.fbSaveTemplates(defaults);
+  renderPlansLibrary();
+}
+
 if (currentLang !== 'de') applyLang(); // Apply saved language before first render
 else applyUserModalLang(); // Init lang button in modal
 loadFromStorage();
