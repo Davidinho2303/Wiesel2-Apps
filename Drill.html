@@ -1562,7 +1562,12 @@ signInAnonymously(auth).then(async () => {
           <button class="btn btn-ghost btn-sm" onclick="newPlanTemplate('montag')" title="Training Pankstraße (nächster Montag)">📋 Mo Pankstraße</button>
           <button class="btn btn-ghost btn-sm" onclick="newPlanTemplate('mittwoch')" title="Training Wiesenstraße (nächster Mittwoch)">📋 Mi Wiesenstraße</button>
           <button class="btn btn-secondary" onclick="newPlan()">+ Leerer Plan</button>
-          <button class="btn btn-ghost btn-sm" id="plan-lock-btn" onclick="togglePlanLock()" title="Plan sperren/entsperren">🔓</button>
+          <button class="btn btn-ghost btn-sm" id="plan-lock-btn" onclick="togglePlanLock()" title="Plan sperren" style="padding:4px 8px;">
+            <svg id="plan-lock-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </button>
           <button class="btn btn-primary" onclick="savePlan()">💾 Speichern</button>
         </div>
       </div>
@@ -3300,13 +3305,22 @@ function togglePlanLock() {
   updatePlanLockUI();
   toast(currentPlan.locked
     ? (currentLang === 'en' ? '🔒 Plan locked' : '🔒 Plan gesperrt')
-    : (currentLang === 'en' ? '🔓 Plan unlocked' : '🔓 Plan entsperrt'));
+    : (currentLang === 'en' ? '🔓 Plan unlocked' : 'Plan entsperrt'));
 }
 
 function updatePlanLockUI() {
   const locked = currentPlan?.locked;
   const btn = document.getElementById('plan-lock-btn');
-  if (btn) btn.textContent = locked ? '🔒' : '🔓';
+  if (btn) {
+    btn.style.color = locked ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
+    btn.title = locked
+      ? (currentLang === 'en' ? 'Unlock plan' : 'Plan entsperren')
+      : (currentLang === 'en' ? 'Lock plan' : 'Plan sperren');
+    const icon = document.getElementById('plan-lock-icon');
+    if (icon) icon.innerHTML = locked
+      ? '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'
+      : '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>';
+  }
 
   // Eingabefelder im Plan-Header sperren
   ['plan-name','plan-date','plan-theme'].forEach(id => {
