@@ -1148,13 +1148,48 @@ async function loadDrillsFromFirestore() {
 async function migrateIfNeeded() {
   try {
     const metaSnap = await getDoc(META_DOC);
-    if (metaSnap.exists() && metaSnap.data().drillsMigrated) {
-      // Check if already-migrated drills have createdAt — if not, re-migrate
-      const drillsSnap = await getDoc(DRILLS_DOC);
+    const meta = metaSnap.exists() ? metaSnap.data() : {};
+
+    // --- Einmalige User-Migration: alle bestehenden Drills + Pläne → david ---
+    if (!meta.userMigrated) {
+      setStatus('⏳ User-Migration...', 'var(--orange)');
+
+      // Drills: createdBy auf 'david' wenn noch 'seed' oder leer, scope auf 'team'
+      const drillsSnap = await getDoc(TEAM_DRILLS_DOC);
+      if (drillsSnap.exists()) {
+        const drills = (drillsSnap.data().drills || []).map(d => ({
+          ...d,
+          createdBy: d.createdBy && d.createdBy !== 'seed' ? d.createdBy : 'david',
+          scope: d.scope || 'team'
+        }));
+        await setDoc(TEAM_DRILLS_DOC, { drills, updatedAt: Date.now() });
+      }
+
+      // Pläne: aus teams/wiesel2/data/plans → users/david/data/plans
+      const oldPlansDoc = doc(db, 'teams', 'wiesel2', 'data', 'plans');
+      const plansSnap = await getDoc(oldPlansDoc);
+      if (plansSnap.exists()) {
+        const data = plansSnap.data();
+        const davidPlansDoc = doc(db, 'users', 'david', 'data', 'plans');
+        const existingDavidSnap = await getDoc(davidPlansDoc);
+        // Nur migrieren wenn david noch keine eigenen Pläne hat
+        if (!existingDavidSnap.exists() || !(existingDavidSnap.data().plans?.length > 0)) {
+          await setDoc(davidPlansDoc, { ...data, updatedAt: Date.now() });
+        }
+      }
+
+      await setDoc(META_DOC, { ...meta, userMigrated: true, userMigratedAt: Date.now() }, { merge: true });
+      setStatus('✓ Migration fertig', 'var(--green)');
+      setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
+      return;
+    }
+
+    // --- Original Seed-Migration ---
+    if (meta.drillsMigrated) {
+      const drillsSnap = await getDoc(TEAM_DRILLS_DOC);
       if (drillsSnap.exists()) {
         const existing = drillsSnap.data().drills || [];
-        if (existing.length > 0 && existing[0].createdAt) return; // already has timestamps
-        // Otherwise fall through to re-migrate
+        if (existing.length > 0 && existing[0].createdAt) return;
       } else {
         return;
       }
@@ -1162,7 +1197,7 @@ async function migrateIfNeeded() {
     if (!window.DRILLS_SEED || window.DRILLS_SEED.length === 0) return;
 
     setStatus('⏳ Migriere Drills...', 'var(--orange)');
-    await setDoc(DRILLS_DOC, { drills: window.DRILLS_SEED, updatedAt: Date.now() });
+    await setDoc(TEAM_DRILLS_DOC, { drills: window.DRILLS_SEED, updatedAt: Date.now() });
     await setDoc(META_DOC, { drillsMigrated: true, migratedAt: Date.now() }, { merge: true });
     setStatus('Migration fertig', 'var(--green)');
     setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
@@ -2964,11 +2999,30 @@ async function saveDrillFromModal() {
 
 function deleteDrill(drillId) {
   const d = window.DRILLS.find(x => x.id === drillId);
-  const name = d ? d.name : drillId;
-  if (!confirm((currentLang === 'en' ? 'Delete drill: ' : 'Drill löschen: ') + name + '?')) return;
+  if (!d) return;
+  const name = d.name;
+
+  // Berechtigungscheck
+  const canDelete = d.createdBy === currentUser || isAdmin();
+  if (!canDelete) {
+    toast(currentLang === 'en' ? 'No permission to delete this drill' : 'Keine Berechtigung zum Löschen');
+    return;
+  }
+
+  // Doppelte Bestätigung
+  const msg1 = currentLang === 'en'
+    ? `Delete drill "${name}"?`
+    : `Drill „${name}" löschen?`;
+  if (!confirm(msg1)) return;
+
+  const msg2 = currentLang === 'en'
+    ? `Are you sure? This cannot be undone.`
+    : `Sicher? Das kann nicht rückgängig gemacht werden.`;
+  if (!confirm(msg2)) return;
 
   window.DRILLS = window.DRILLS.filter(x => x.id !== drillId);
   if (typeof fbSaveDrills === 'function') fbSaveDrills(window.DRILLS);
+  closeDrillModal();
   applyBibFilters();
   toast(currentLang === 'en' ? 'Drill deleted' : 'Drill gelöscht');
 }
