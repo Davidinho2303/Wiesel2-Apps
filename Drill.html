@@ -1023,13 +1023,19 @@
     #drill-edit-modal {
       align-items: flex-start;
     }
+    .de-form-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .de-form-grid .form-group[style*="grid-column"] {
+      grid-column: 1 !important;
+    }
     .drill-picker-list { max-height: 40dvh; }
     .drill-picker-item { padding: 14px 12px; min-height: 52px; }
     .drill-picker-name { font-size: 14px; }
     .meta-grid { grid-template-columns: 1fr 1fr; }
 
     /* Fix: modal add-to-plan button always visible */
-    #modal-add-section { position: sticky; bottom: 0; background: var(--surface); padding-top: 12px; margin-top: 8px; }
+    #modal-add-section { padding-top: 12px; margin-top: 8px; }
 
     /* Fix: export buttons stack vertically, touch-friendly */
     .export-buttons { flex-direction: column; gap: 10px; padding: 14px; }
@@ -1834,7 +1840,7 @@ signInAnonymously(auth).then(async () => {
       <button class="modal-close" onclick="closeDrillEditModal()">×</button>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+    <div class="de-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
       <div class="form-group" style="grid-column:1/-1;">
         <label class="form-label">Name *</label>
         <input type="text" id="de-name" class="form-input" placeholder="z.B. Doppelpässe">
