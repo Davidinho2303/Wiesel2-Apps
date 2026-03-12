@@ -1149,6 +1149,27 @@ async function migrateIfNeeded() {
 }
 
 // ---- Drills in Firestore speichern
+window.fbRegisterUser = async (kuerzel) => {
+  try {
+    const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
+    const snap = await getDoc(userDoc);
+    if (!snap.exists()) {
+      await setDoc(userDoc, {
+        kuerzel,
+        isAdmin: kuerzel === 'david',
+        createdAt: Date.now(),
+        lastSeen: Date.now()
+      });
+      console.log('[USER] Registered:', kuerzel);
+    } else {
+      await setDoc(userDoc, { lastSeen: Date.now() }, { merge: true });
+      console.log('[USER] Updated lastSeen:', kuerzel);
+    }
+  } catch(e) {
+    console.warn('[USER] Register error:', e.message);
+  }
+};
+
 window.fbSaveDrills = async (drills) => {
   try {
     await setDoc(DRILLS_DOC, { drills, updatedAt: Date.now() });
@@ -4831,6 +4852,7 @@ function saveUserKuerzel() {
   currentUser = val;
   localStorage.setItem('wiesel2_user', val);
   updateUserBadge();
+  if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(val);
   closeUserModal();
 }
 
@@ -4847,7 +4869,11 @@ document.getElementById('plan-date').value = formatDate(new Date());
 // App fully ready — apply any cloud data that arrived before init
 window._appReady = true;
 updateUserBadge();
-if (!currentUser) openUserModal(true);
+if (currentUser) {
+  if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(currentUser);
+} else {
+  openUserModal(true);
+}
 console.log('[APP] _appReady set, pendingCloudPlans:', window.pendingCloudPlans?.length);
 if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
   const plans = window.pendingCloudPlans;
