@@ -1080,9 +1080,15 @@ window.fbUploadFile = async (file, path, onProgress) => {
     );
   });
 };
-const PLANS_DOC  = doc(db, 'teams', 'wiesel2', 'data', 'plans');
-const DRILLS_DOC = doc(db, 'teams', 'wiesel2', 'data', 'drills');
-const META_DOC   = doc(db, 'teams', 'wiesel2', 'data', 'meta');
+const TEAM_DRILLS_DOC = doc(db, 'teams', 'wiesel2', 'data', 'drills');
+const META_DOC        = doc(db, 'teams', 'wiesel2', 'data', 'meta');
+
+// Dynamic docs — depend on currentUser (set after login)
+function getPlansDoc()        { const u = window.currentUser || 'anonymous'; return doc(db, 'users', u, 'data', 'plans'); }
+function getPersonalDrillsDoc() { const u = window.currentUser || 'anonymous'; return doc(db, 'users', u, 'data', 'drills'); }
+
+// Aliases for backward compat
+const DRILLS_DOC = TEAM_DRILLS_DOC;
 
 let isSyncing = false;
 
@@ -1094,25 +1100,42 @@ const setStatus = (text, color) => {
 // ---- Drills aus Firestore laden
 async function loadDrillsFromFirestore() {
   try {
-    const snap = await getDoc(DRILLS_DOC);
-    if (snap.exists()) {
-      const data = snap.data();
-      if (Array.isArray(data.drills) && data.drills.length > 0) {
+    // Load team drills
+    const teamSnap = await getDoc(TEAM_DRILLS_DOC);
+    let teamDrills = [];
+    if (teamSnap.exists()) {
+      const data = teamSnap.data();
+      if (Array.isArray(data.drills)) {
         // Scope-Patch: fehlende scope-Felder auf 'team' setzen
         let needsPatch = false;
-        data.drills.forEach(d => {
-          if (!d.scope) { d.scope = 'team'; needsPatch = true; }
-        });
-        window.DRILLS = data.drills;
+        data.drills.forEach(d => { if (!d.scope) { d.scope = 'team'; needsPatch = true; } });
+        teamDrills = data.drills;
         if (needsPatch) {
-          console.log('[APP] Patching missing scope fields → saving to Firestore');
-          try { await setDoc(DRILLS_DOC, { drills: window.DRILLS, updatedAt: Date.now() }); } catch(e) { console.warn('Scope patch save error:', e); }
+          console.log('[APP] Patching missing scope fields');
+          try { await setDoc(TEAM_DRILLS_DOC, { drills: teamDrills, updatedAt: Date.now() }); } catch(e) {}
         }
-        try { renderBibliothek(window.DRILLS); } catch(e) {}
-        const navCount = document.getElementById('nav-count-bib');
-        if (navCount) navCount.textContent = window.DRILLS.length;
-        return true;
       }
+    }
+
+    // Load personal drills
+    let personalDrills = [];
+    if (window.currentUser) {
+      try {
+        const personalSnap = await getDoc(getPersonalDrillsDoc());
+        if (personalSnap.exists()) {
+          const data = personalSnap.data();
+          if (Array.isArray(data.drills)) personalDrills = data.drills;
+        }
+      } catch(e) { console.warn('Personal drills load error:', e.message); }
+    }
+
+    const allDrills = [...teamDrills, ...personalDrills];
+    if (allDrills.length > 0) {
+      window.DRILLS = allDrills;
+      try { renderBibliothek(window.DRILLS); } catch(e) {}
+      const navCount = document.getElementById('nav-count-bib');
+      if (navCount) navCount.textContent = window.DRILLS.length;
+      return true;
     }
     return false;
   } catch(e) {
@@ -1149,6 +1172,50 @@ async function migrateIfNeeded() {
 }
 
 // ---- Drills in Firestore speichern
+// Re-init user-specific Firestore listeners after login
+window.fbInitUserListeners = (kuerzel) => {
+  // Plans listener for this user
+  onSnapshot(getPlansDoc(), (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    if (!Array.isArray(data.plans)) return;
+    if (isSyncing) return;
+    window.savedPlans = data.plans;
+    if (data.drillMins && typeof data.drillMins === 'object') window.drillMins = data.drillMins;
+    if (typeof window.renderSavedPlansList === 'function') window.renderSavedPlansList();
+    if (typeof window.renderNavSavedPlans === 'function') window.renderNavSavedPlans();
+    if (typeof window.renderPlanOverview === 'function') window.renderPlanOverview();
+    setStatus('☁ Synced', 'var(--green)');
+    setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
+  }, err => { console.warn('Plans snapshot error:', err.message); setStatus('⚠ Offline', 'var(--orange)'); });
+
+  // Personal drills listener
+  onSnapshot(getPersonalDrillsDoc(), (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    if (!Array.isArray(data.drills)) return;
+    const teamDrills = (window.DRILLS || []).filter(d => d.scope !== 'personal');
+    window.DRILLS = [...teamDrills, ...data.drills];
+    try { renderBibliothek(window.DRILLS); } catch(e) {}
+    const navCount = document.getElementById('nav-count-bib');
+    if (navCount) navCount.textContent = window.DRILLS.length;
+  }, err => console.warn('Personal drills snapshot error:', err.message));
+
+  // Load plans immediately
+  loadDrillsFromFirestore();
+  getDocFromServer(getPlansDoc()).then(snap => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    if (Array.isArray(data.plans) && data.plans.length > 0) {
+      window.savedPlans = data.plans;
+      if (data.drillMins) window.drillMins = data.drillMins;
+      if (typeof window.renderSavedPlansList === 'function') window.renderSavedPlansList();
+      if (typeof window.renderNavSavedPlans === 'function') window.renderNavSavedPlans();
+      if (typeof window.renderPlanOverview === 'function') window.renderPlanOverview();
+    }
+  }).catch(e => console.warn('Plans init load:', e.message));
+};
+
 window.fbRegisterUser = async (kuerzel) => {
   try {
     const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
@@ -1172,7 +1239,12 @@ window.fbRegisterUser = async (kuerzel) => {
 
 window.fbSaveDrills = async (drills) => {
   try {
-    await setDoc(DRILLS_DOC, { drills, updatedAt: Date.now() });
+    const teamDrills     = drills.filter(d => d.scope !== 'personal');
+    const personalDrills = drills.filter(d => d.scope === 'personal');
+    await setDoc(TEAM_DRILLS_DOC, { drills: teamDrills, updatedAt: Date.now() });
+    if (personalDrills.length > 0) {
+      await setDoc(getPersonalDrillsDoc(), { drills: personalDrills, updatedAt: Date.now() });
+    }
   } catch(e) {
     console.warn('Drills save error:', e.message);
     setStatus('⚠ Drill-Speichern fehlgeschlagen', 'var(--red)');
@@ -1182,7 +1254,7 @@ window.fbSaveDrills = async (drills) => {
 // ---- Plans speichern
 window.fbSavePlans = async (plans, mins) => {
   try {
-    await setDoc(PLANS_DOC, { plans, drillMins: mins || {}, updatedAt: Date.now() });
+    await setDoc(getPlansDoc(), { plans, drillMins: mins || {}, updatedAt: Date.now() });
   } catch(e) {
     console.warn('Firebase save:', e.message);
     setStatus((window.currentLang||"de")==="en"?'⚠ Save failed':'⚠ Speichern fehlgeschlagen', 'var(--red)');
@@ -1207,9 +1279,9 @@ signInAnonymously(auth).then(async () => {
     }
   });
 
-  // Plans: erst direkt laden, dann live-listener
-  try {
-    const initSnap = await getDocFromServer(PLANS_DOC);
+  // Plans: erst direkt laden, dann live-listener (nur wenn User bereits bekannt)
+  if (window.currentUser) try {
+    const initSnap = await getDocFromServer(getPlansDoc());
     if (initSnap.exists()) {
       const data = initSnap.data();
       if (Array.isArray(data.plans) && data.plans.length > 0) {
@@ -1222,8 +1294,8 @@ signInAnonymously(auth).then(async () => {
     }
   } catch(e) { console.warn('Plans initial load:', e.message); }
 
-  // Plans live-listener
-  onSnapshot(PLANS_DOC, (snap) => {
+  // Plans live-listener (nur wenn User bereits bekannt)
+  if (window.currentUser) onSnapshot(getPlansDoc(), (snap) => {
     if (!snap.exists()) return;
     const data = snap.data();
     if (!Array.isArray(data.plans)) return;
@@ -1240,16 +1312,31 @@ signInAnonymously(auth).then(async () => {
     setStatus('⚠ Offline', 'var(--orange)');
   });
 
-  // Drills live-listener (Aenderungen von anderen Geraeten)
-  onSnapshot(DRILLS_DOC, (snap) => {
+  // Drills live-listener — team drills
+  onSnapshot(TEAM_DRILLS_DOC, (snap) => {
     if (!snap.exists()) return;
     const data = snap.data();
     if (!Array.isArray(data.drills)) return;
-    window.DRILLS = data.drills;
+    const personalDrills = (window.DRILLS || []).filter(d => d.scope === 'personal');
+    window.DRILLS = [...data.drills, ...personalDrills];
     try { renderBibliothek(window.DRILLS); } catch(e) {}
     const navCount = document.getElementById('nav-count-bib');
     if (navCount) navCount.textContent = window.DRILLS.length;
   }, err => console.warn('Drills snapshot error:', err.message));
+
+  // Personal drills live-listener (nur wenn User bereits bekannt)
+  if (window.currentUser) {
+    onSnapshot(getPersonalDrillsDoc(), (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (!Array.isArray(data.drills)) return;
+      const teamDrills = (window.DRILLS || []).filter(d => d.scope !== 'personal');
+      window.DRILLS = [...teamDrills, ...data.drills];
+      try { renderBibliothek(window.DRILLS); } catch(e) {}
+      const navCount = document.getElementById('nav-count-bib');
+      if (navCount) navCount.textContent = window.DRILLS.length;
+    }, err => console.warn('Personal drills snapshot error:', err.message));
+  }
 
 }).catch((err) => {
   console.warn('Auth error:', err.message);
@@ -1391,6 +1478,13 @@ signInAnonymously(auth).then(async () => {
           <input type="number" class="filter-input" id="bib-spieler" placeholder="z.B. 8" min="1" max="15" style="min-width:80px;" oninput="applyBibFilters()">
         </div>
         <button class="btn btn-ghost btn-sm" onclick="resetBibFilters()" style="align-self:flex-end;">Reset</button>
+        <div class="filter-group">
+          <span class="filter-label" id="bib-owner-label">Ersteller</span>
+          <select class="filter-select" id="bib-owner" onchange="applyBibFilters()">
+            <option value="" id="bib-owner-all">Alle</option>
+            <option value="mine" id="bib-owner-mine">Meine</option>
+          </select>
+        </div>
         <span class="filter-results" id="bib-result-count"></span>
       </div>
 
@@ -2888,9 +2982,12 @@ function applyBibFilters() {
   const spieler = parseInt(document.getElementById('bib-spieler').value) || 999;
 
   const filtered = window.DRILLS.filter(d => {
-    // Private Drills anderer User ausblenden (seed ist immer shared)
+    // Private Drills anderer User ausblenden
     const effectiveScope = d.scope || 'team';
     if (effectiveScope === 'personal' && d.createdBy !== currentUser) return false;
+    // Eigene Drills Filter
+    const owner = document.getElementById('bib-owner')?.value;
+    if (owner === 'mine' && d.createdBy !== currentUser) return false;
     const enName = (DRILL_NAMES_EN[d.id] || '').toLowerCase();
     const enCat = (CAT_EN[d.kat] || '').toLowerCase();
     if (search && !d.name.toLowerCase().includes(search) && !d.kat.toLowerCase().includes(search) && !enName.includes(search) && !enCat.includes(search)) return false;
@@ -2911,6 +3008,7 @@ function resetBibFilters() {
   document.getElementById('bib-spielphase').value = '';
   document.getElementById('bib-intens').value = '';
   document.getElementById('bib-spieler').value = '';
+  const ownerEl = document.getElementById('bib-owner'); if (ownerEl) ownerEl.value = '';
   renderBibliothek(window.DRILLS);
 }
 
@@ -4705,6 +4803,16 @@ function applyLang() {
   const umhint = document.getElementById('user-modal-google-hint');
   if (umhint) umhint.textContent = currentLang === 'en' ? 'Google Login coming soon' : 'Google Login kommt demnächst';
   applyUserModalLang();
+  const umwarn = document.getElementById('user-modal-warn');
+  if (umwarn) umwarn.textContent = currentLang === 'en'
+    ? '⚠️ Remember your name — until Google Login is available, it is your only access to your data.'
+    : '⚠️ Merke dir deinen Namen — solange es kein Google Login gibt, ist er dein einziger Zugang zu deinen Daten.';
+  const bibOwnerLabel = document.getElementById('bib-owner-label');
+  if (bibOwnerLabel) bibOwnerLabel.textContent = currentLang === 'en' ? 'Creator' : 'Ersteller';
+  const bibOwnerAll = document.getElementById('bib-owner-all');
+  if (bibOwnerAll) bibOwnerAll.textContent = currentLang === 'en' ? 'All' : 'Alle';
+  const bibOwnerMine = document.getElementById('bib-owner-mine');
+  if (bibOwnerMine) bibOwnerMine.textContent = currentLang === 'en' ? 'Mine' : 'Meine';
 
   // Scope dropdown labels
   const scopeLabel = document.getElementById('de-scope-label');
@@ -4860,9 +4968,11 @@ function saveUserKuerzel() {
   const val = (input ? input.value.trim() : '').toLowerCase().replace(/[^a-z0-9_-]/g,'');
   if (!val) { if (input) { input.style.borderColor='var(--red)'; setTimeout(()=>input.style.borderColor='',1000); } return; }
   currentUser = val;
+  window.currentUser = val; // expose to module scope
   localStorage.setItem('wiesel2_user', val);
   updateUserBadge();
   if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(val);
+  if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(val);
   closeUserModal();
 }
 
@@ -4880,6 +4990,7 @@ document.getElementById('plan-date').value = formatDate(new Date());
 
 // App fully ready — apply any cloud data that arrived before init
 window._appReady = true;
+window.currentUser = currentUser; // expose to module scope
 updateUserBadge();
 if (currentUser) {
   if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(currentUser);
@@ -4912,6 +5023,9 @@ window.renderPlanOverview   = renderPlanOverview;
       <div class="user-modal-logo">Wiesel 2 · Coaching App</div>
       <div class="user-modal-title" id="user-modal-title">🤖 Wer bist du?</div>
       <div class="user-modal-sub" id="user-modal-sub">Gib dein Kürzel ein um fortzufahren. Deine Drills und Pläne werden dir zugeordnet.</div>
+      <div style="background:#fff8e1;border:1px solid #f0c040;border-radius:8px;padding:10px 12px;font-size:12px;color:#7a5200;" id="user-modal-warn">
+        ⚠️ Merke dir deinen Namen — solange es kein Google Login gibt, ist er dein einziger Zugang zu deinen Daten.
+      </div>
       <hr class="user-modal-divider">
       <input type="text" id="user-modal-input" class="form-input"
         placeholder="z.B. david, moritz, jeff …"
