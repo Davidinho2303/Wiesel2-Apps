@@ -92,17 +92,28 @@
   }
   .user-badge:hover { border-color: var(--blue); color: var(--blue); }
   .user-modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    position: fixed; inset: 0;
+    background: var(--bg);
     z-index: 1000; display: flex; align-items: center; justify-content: center;
   }
   .user-modal-box {
-    background: var(--surface); border-radius: var(--radius);
-    border: 1px solid var(--border); padding: 24px;
-    width: 320px; max-width: 90vw;
-    display: flex; flex-direction: column; gap: 16px;
+    background: var(--surface); border-radius: 16px;
+    border: 1px solid var(--border); padding: 40px 32px;
+    width: 400px; max-width: 92vw;
+    display: flex; flex-direction: column; gap: 20px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.12);
   }
-  .user-modal-title { font-size: 16px; font-weight: 600; color: var(--text); }
-  .user-modal-sub { font-size: 12px; color: var(--text-subtle); margin-top: -8px; }
+  .user-modal-logo {
+    font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .user-modal-title { font-size: 22px; font-weight: 700; color: var(--text); }
+  .user-modal-sub { font-size: 13px; color: var(--text-subtle); margin-top: -8px; line-height: 1.5; }
+  .user-modal-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+  .user-modal-google-hint {
+    font-size: 11px; color: var(--text-subtle); text-align: center; margin-top: -8px;
+  }
 
   /* SIDEBAR */
   .sidebar {
@@ -1292,7 +1303,7 @@ signInAnonymously(auth).then(async () => {
   </nav>
 
   <!-- MAIN -->
-  <main class="main">
+  <main class="main" id="app-main">
 
     <!-- PAGE: BIBLIOTHEK -->
     <div class="page active" id="page-bibliothek">
@@ -2889,7 +2900,12 @@ function openDrillModal(drillId, fromPicker) {
   const d = window.DRILLS.find(x => x.id === drillId);
   if (!d) return;
   document.getElementById('modal-drill-name').textContent = getDrillName(d);
-  document.getElementById('modal-drill-cat').innerHTML = `<span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${tCat(d.kat)}</span>`;
+  const scopeBadgeText = (currentUser && d.createdBy === currentUser && d.scope === 'personal')
+    ? (currentLang==='en'?'Just me':'Nur ich')
+    : (currentLang==='en'?'Shared':'Geteilt');
+  const scopeBadgeClass = (currentUser && d.createdBy === currentUser && d.scope === 'personal') ? 'scope-mein' : 'scope-team';
+  const creatorLabel = d.createdBy ? `<span style="font-size:11px;color:var(--text-subtle);margin-left:8px;">🤖 ${d.createdBy}</span>` : '';
+  document.getElementById('modal-drill-cat').innerHTML = `<span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${tCat(d.kat)}</span><span class="drill-scope-badge ${scopeBadgeClass}" style="margin-left:6px;">${scopeBadgeText}</span>${creatorLabel}`;
 
   const L = ML[currentLang];
   const meta = [
@@ -4661,9 +4677,11 @@ function applyLang() {
   const umt = document.getElementById('user-modal-title');
   if (umt) umt.textContent = currentLang === 'en' ? '🤖 Who are you?' : '🤖 Wer bist du?';
   const ums = document.getElementById('user-modal-sub');
-  if (ums) ums.textContent = currentLang === 'en' ? 'Your handle is used to assign drills and plans to you.' : 'Dein Kürzel wird verwendet um Drills und Pläne dir zuzuordnen.';
+  if (ums) ums.textContent = currentLang === 'en' ? 'Enter your handle to continue. Your drills and plans will be assigned to you.' : 'Gib dein Kürzel ein um fortzufahren. Deine Drills und Pläne werden dir zugeordnet.';
   const umsave = document.getElementById('user-modal-save-btn');
-  if (umsave) umsave.textContent = currentLang === 'en' ? 'Save' : 'Speichern';
+  if (umsave) umsave.textContent = currentLang === 'en' ? 'Continue' : 'Weiter';
+  const umhint = document.getElementById('user-modal-google-hint');
+  if (umhint) umhint.textContent = currentLang === 'en' ? 'Google Login coming soon' : 'Google Login kommt demnächst';
 
   // Scope dropdown labels
   const scopeLabel = document.getElementById('de-scope-label');
@@ -4801,6 +4819,7 @@ function openUserModal(force) {
 }
 
 function closeUserModal() {
+  if (!currentUser) return; // Kein Schließen ohne User
   const modal = document.getElementById('user-modal');
   if (modal) modal.style.display = 'none';
 }
@@ -4828,7 +4847,7 @@ document.getElementById('plan-date').value = formatDate(new Date());
 // App fully ready — apply any cloud data that arrived before init
 window._appReady = true;
 updateUserBadge();
-if (!currentUser) openUserModal(true); // force = kein Abbrechen
+if (!currentUser) openUserModal(true);
 console.log('[APP] _appReady set, pendingCloudPlans:', window.pendingCloudPlans?.length);
 if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
   const plans = window.pendingCloudPlans;
@@ -4849,20 +4868,21 @@ window.renderNavSavedPlans  = renderNavSavedPlans;
 window.renderPlanOverview   = renderPlanOverview;
 </script>
 
-  <!-- USER KÜRZEL MODAL -->
-  <div class="user-modal-overlay" id="user-modal" style="display:none;">
+  <!-- USER LOGIN SCREEN -->
+  <div class="user-modal-overlay" id="user-modal" style="display:none;" onclick="if(event.target===this&&currentUser)closeUserModal()">
     <div class="user-modal-box">
+      <div class="user-modal-logo">Wiesel 2 · Coaching App</div>
       <div class="user-modal-title" id="user-modal-title">🤖 Wer bist du?</div>
-      <div class="user-modal-sub" id="user-modal-sub">Dein Kürzel wird verwendet um Drills und Pläne dir zuzuordnen.</div>
+      <div class="user-modal-sub" id="user-modal-sub">Gib dein Kürzel ein um fortzufahren. Deine Drills und Pläne werden dir zugeordnet.</div>
+      <hr class="user-modal-divider">
       <input type="text" id="user-modal-input" class="form-input"
         placeholder="z.B. david, moritz, jeff …"
         maxlength="20"
         style="font-size:16px;"
         onkeydown="if(event.key==='Enter')saveUserKuerzel()">
-      <div style="display:flex;gap:8px;justify-content:flex-end;">
-        <button class="btn btn-ghost btn-sm" id="user-modal-cancel-btn" onclick="closeUserModal()" id="user-modal-cancel-btn">Abbrechen</button>
-        <button class="btn btn-primary btn-sm" id="user-modal-save-btn" onclick="saveUserKuerzel()">Speichern</button>
-      </div>
+      <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" id="user-modal-save-btn" onclick="saveUserKuerzel()">Speichern</button>
+      <button class="btn btn-ghost btn-sm" id="user-modal-cancel-btn" onclick="closeUserModal()" style="display:none;"></button>
+      <div class="user-modal-google-hint" id="user-modal-google-hint">Google Login kommt demnächst</div>
     </div>
   </div>
 
