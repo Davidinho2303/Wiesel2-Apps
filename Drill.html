@@ -82,7 +82,27 @@
     color: var(--text-muted);
     font-weight: 300;
   }
-  .topbar-right { margin-left: auto; display: flex; gap: 8px; }
+  .topbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .user-badge {
+    display: flex; align-items: center; gap: 5px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 20px; padding: 4px 10px; cursor: pointer;
+    font-size: 12px; font-weight: 500; color: var(--text);
+    font-family: "DM Sans", sans-serif; transition: all 0.15s;
+  }
+  .user-badge:hover { border-color: var(--blue); color: var(--blue); }
+  .user-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    z-index: 1000; display: flex; align-items: center; justify-content: center;
+  }
+  .user-modal-box {
+    background: var(--surface); border-radius: var(--radius);
+    border: 1px solid var(--border); padding: 24px;
+    width: 320px; max-width: 90vw;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .user-modal-title { font-size: 16px; font-weight: 600; color: var(--text); }
+  .user-modal-sub { font-size: 12px; color: var(--text-subtle); margin-top: -8px; }
 
   /* SIDEBAR */
   .sidebar {
@@ -354,6 +374,14 @@
     transition: opacity 0.15s;
   }
   .drill-card:hover .drill-add-btn { opacity: 1; }
+  .drill-scope-badge {
+    display: inline-block; font-size: 9px; font-weight: 700;
+    padding: 1px 5px; border-radius: 4px; text-transform: uppercase;
+    letter-spacing: 0.05em; margin-left: 4px; vertical-align: middle;
+  }
+  .scope-basis  { background: #e8e8fe; color: #2b2b8b; }
+  .scope-mein   { background: #e8f8e8; color: #1a6b1a; }
+  .scope-team   { background: #fff3cd; color: #7a5200; }
 
   /* DETAIL MODAL */
   .modal-overlay {
@@ -1059,7 +1087,16 @@ async function loadDrillsFromFirestore() {
     if (snap.exists()) {
       const data = snap.data();
       if (Array.isArray(data.drills) && data.drills.length > 0) {
+        // Scope-Patch: fehlende scope-Felder auf 'team' setzen
+        let needsPatch = false;
+        data.drills.forEach(d => {
+          if (!d.scope) { d.scope = 'team'; needsPatch = true; }
+        });
         window.DRILLS = data.drills;
+        if (needsPatch) {
+          console.log('[APP] Patching missing scope fields → saving to Firestore');
+          try { await setDoc(DRILLS_DOC, { drills: window.DRILLS, updatedAt: Date.now() }); } catch(e) { console.warn('Scope patch save error:', e); }
+        }
         try { renderBibliothek(window.DRILLS); } catch(e) {}
         const navCount = document.getElementById('nav-count-bib');
         if (navCount) navCount.textContent = window.DRILLS.length;
@@ -1208,6 +1245,9 @@ signInAnonymously(auth).then(async () => {
         <span id="lang-flag">🇬🇧</span><span id="lang-label">EN</span>
       </button>
       <span id="sync-status" style="font-size:11px;color:var(--text-subtle);font-family:DM Mono,monospace;">☁ Cloud</span>
+      <button class="user-badge" id="user-badge-btn" onclick="openUserModal()">
+        <span>🤖</span><span id="user-badge-label">—</span>
+      </button>
     </div>
   </header>
 
@@ -1762,6 +1802,13 @@ signInAnonymously(auth).then(async () => {
       <div class="form-group">
         <label class="form-label">Externer Link (optional)</label>
         <input type="text" id="de-link" class="form-input" placeholder="https://playbasketball.de/…">
+      </div>
+      <div class="form-group">
+        <label class="form-label" id="de-scope-label">Sichtbarkeit</label>
+        <select class="form-input" id="de-scope">
+          <option value="team" id="de-scope-opt-team">Geteilt</option>
+          <option value="personal" id="de-scope-opt-personal">Nur ich</option>
+        </select>
       </div>
     </div>
 
@@ -2395,7 +2442,12 @@ function renderBibliothek(drills) {
   grid.innerHTML = drills.map(d => `
     <div class="drill-card" onclick="openDrillModal('${d.id}')">
       <div class="drill-card-header">
-        <div class="drill-card-name">${getDrillName(d)}</div>
+        <div class="drill-card-name">
+          ${getDrillName(d)}
+          ${d.createdBy === 'seed' ? `<span class="drill-scope-badge scope-basis">${currentLang==='en'?'Base':'Basis'}</span>` :
+            d.createdBy === currentUser ? `<span class="drill-scope-badge scope-mein">${currentLang==='en'?'Mine':'Mein'}</span>` :
+            `<span class="drill-scope-badge scope-team">${currentLang==='en'?'Team':'Team'}</span>`}
+        </div>
         <span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${tCat(d.kat)}</span>
       </div>
       <div class="drill-meta-row">
@@ -2558,6 +2610,7 @@ function openDrillEditModal(drillId) {
   _s('de-gamelike','checked',false); _s('de-abschluss','checked',false);
   _s('de-beschreibung','value',''); _s('de-variationen','value','');
   _s('de-coaching','value',''); _s('de-note','value','');
+  _s('de-scope','value','team');
   _s('de-bild','value',''); _s('de-video','value','');
   try { document.getElementById('de-bild-file').value = ''; } catch(e) {}
   try { document.getElementById('de-video-file').value = ''; } catch(e) {}
@@ -2605,6 +2658,7 @@ function openDrillEditModal(drillId) {
       document.getElementById('de-video-preview').style.display = 'block';
     }
     document.getElementById('de-link').value = d.externerLink || '';
+    document.getElementById('de-scope').value = d.scope || 'team';
   }
 
   document.getElementById('drill-edit-modal').classList.remove('hidden');
@@ -2741,19 +2795,19 @@ async function saveDrillFromModal() {
     bildUrl: window._deUploadedBildUrl !== undefined ? window._deUploadedBildUrl : document.getElementById('de-bild').value.trim(),
     videoUrl: window._deUploadedVideoUrl !== undefined ? window._deUploadedVideoUrl : document.getElementById('de-video').value.trim(),
     externerLink: document.getElementById('de-link').value.trim(),
-    scope: 'team',
+    scope: document.getElementById('de-scope').value || 'team',
     updatedAt: Date.now()
   };
 
   if (isNew) {
     drill.createdAt = Date.now();
-    drill.createdBy = 'user';
+    drill.createdBy = currentUser || 'unknown';
     window.DRILLS.push(drill);
   } else {
     const idx = window.DRILLS.findIndex(x => x.id === id);
     const existing = idx >= 0 ? window.DRILLS[idx] : null;
     drill.createdAt = existing?.createdAt || Date.now();
-    drill.createdBy = existing?.createdBy || 'user';
+    drill.createdBy = existing?.createdBy || currentUser || 'unknown';
     if (idx >= 0) window.DRILLS[idx] = drill;
     else window.DRILLS.push(drill);
   }
@@ -2787,6 +2841,9 @@ function applyBibFilters() {
   const spieler = parseInt(document.getElementById('bib-spieler').value) || 999;
 
   const filtered = window.DRILLS.filter(d => {
+    // Private Drills anderer User ausblenden (seed ist immer shared)
+    const effectiveScope = d.createdBy === 'seed' ? 'team' : (d.scope || 'team');
+    if (effectiveScope === 'personal' && d.createdBy !== currentUser) return false;
     const enName = (DRILL_NAMES_EN[d.id] || '').toLowerCase();
     const enCat = (CAT_EN[d.kat] || '').toLowerCase();
     if (search && !d.name.toLowerCase().includes(search) && !d.kat.toLowerCase().includes(search) && !enName.includes(search) && !enCat.includes(search)) return false;
@@ -4579,6 +4636,28 @@ function applyLang() {
   const trackKat = document.getElementById('tracking-kat');
   if (trackKat && trackKat.options[0]) trackKat.options[0].text = currentLang==='en'?'All Categories':'Alle Kategorien';
 
+  // Plan title (only update if showing default new plan title)
+  const planTitleEl = document.getElementById('plan-title-display');
+  if (planTitleEl && (planTitleEl.textContent === 'Neuer Trainingsplan' || planTitleEl.textContent === 'New Practice Plan')) {
+    planTitleEl.textContent = currentLang === 'en' ? 'New Practice Plan' : 'Neuer Trainingsplan';
+  }
+
+  // User modal labels
+  const umt = document.getElementById('user-modal-title');
+  if (umt) umt.textContent = currentLang === 'en' ? '🤖 Who are you?' : '🤖 Wer bist du?';
+  const ums = document.getElementById('user-modal-sub');
+  if (ums) ums.textContent = currentLang === 'en' ? 'Your handle is used to assign drills and plans to you.' : 'Dein Kürzel wird verwendet um Drills und Pläne dir zuzuordnen.';
+  const umsave = document.getElementById('user-modal-save-btn');
+  if (umsave) umsave.textContent = currentLang === 'en' ? 'Save' : 'Speichern';
+
+  // Scope dropdown labels
+  const scopeLabel = document.getElementById('de-scope-label');
+  if (scopeLabel) scopeLabel.textContent = currentLang === 'en' ? 'Visibility' : 'Sichtbarkeit';
+  const scopeTeam = document.getElementById('de-scope-opt-team');
+  if (scopeTeam) scopeTeam.textContent = currentLang === 'en' ? 'Shared' : 'Geteilt';
+  const scopePersonal = document.getElementById('de-scope-opt-personal');
+  if (scopePersonal) scopePersonal.textContent = currentLang === 'en' ? 'Just me' : 'Nur ich';
+
   // Page: Planung
   const planSub = document.querySelector('#page-planung .page-subtitle');
   if (planSub) planSub.textContent = T['plan-subtitle'][currentLang];
@@ -4682,6 +4761,45 @@ function applyLang() {
 }
 
 // ============================================================
+// ============================================================
+// USER SYSTEM
+// ============================================================
+let currentUser = localStorage.getItem('wiesel2_user') || null;
+const ADMINS = ['david'];
+
+function isAdmin() { return ADMINS.includes((currentUser||'').toLowerCase()); }
+
+function updateUserBadge() {
+  const el = document.getElementById('user-badge-label');
+  if (el) el.textContent = currentUser || '—';
+}
+
+function openUserModal(force) {
+  const modal = document.getElementById('user-modal');
+  if (!modal) return;
+  const cancelBtn = document.getElementById('user-modal-cancel-btn');
+  if (cancelBtn) cancelBtn.style.display = force ? 'none' : '';
+  const input = document.getElementById('user-modal-input');
+  if (input) input.value = currentUser || '';
+  modal.style.display = 'flex';
+  setTimeout(() => { if (input) input.focus(); }, 50);
+}
+
+function closeUserModal() {
+  const modal = document.getElementById('user-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function saveUserKuerzel() {
+  const input = document.getElementById('user-modal-input');
+  const val = (input ? input.value.trim() : '').toLowerCase().replace(/[^a-z0-9_-]/g,'');
+  if (!val) { if (input) { input.style.borderColor='var(--red)'; setTimeout(()=>input.style.borderColor='',1000); } return; }
+  currentUser = val;
+  localStorage.setItem('wiesel2_user', val);
+  updateUserBadge();
+  closeUserModal();
+}
+
 // INIT
 // ============================================================
 loadFromStorage();
@@ -4694,6 +4812,8 @@ document.getElementById('plan-date').value = formatDate(new Date());
 
 // App fully ready — apply any cloud data that arrived before init
 window._appReady = true;
+updateUserBadge();
+if (!currentUser) openUserModal(true); // force = kein Abbrechen
 console.log('[APP] _appReady set, pendingCloudPlans:', window.pendingCloudPlans?.length);
 if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
   const plans = window.pendingCloudPlans;
@@ -4713,6 +4833,23 @@ window.renderSavedPlansList = renderSavedPlansList;
 window.renderNavSavedPlans  = renderNavSavedPlans;
 window.renderPlanOverview   = renderPlanOverview;
 </script>
+
+  <!-- USER KÜRZEL MODAL -->
+  <div class="user-modal-overlay" id="user-modal" style="display:none;">
+    <div class="user-modal-box">
+      <div class="user-modal-title" id="user-modal-title">🤖 Wer bist du?</div>
+      <div class="user-modal-sub" id="user-modal-sub">Dein Kürzel wird verwendet um Drills und Pläne dir zuzuordnen.</div>
+      <input type="text" id="user-modal-input" class="form-input"
+        placeholder="z.B. david, moritz, jeff …"
+        maxlength="20"
+        style="font-size:16px;"
+        onkeydown="if(event.key==='Enter')saveUserKuerzel()">
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-ghost btn-sm" id="user-modal-cancel-btn" onclick="closeUserModal()" id="user-modal-cancel-btn">Abbrechen</button>
+        <button class="btn btn-primary btn-sm" id="user-modal-save-btn" onclick="saveUserKuerzel()">Speichern</button>
+      </div>
+    </div>
+  </div>
 
   <!-- DRILL JSON IMPORT MODAL -->
   <div class="modal-overlay" id="drill-import-modal" style="display:none;" onclick="if(event.target===this)closeDrillImportModal()">
