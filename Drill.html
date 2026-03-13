@@ -1299,6 +1299,9 @@ window.fbInitUserListeners = (kuerzel) => {
   }, err => console.warn('Personal drills snapshot error:', err.message));
   window._userListenerUnsubs.push(unsub2);
 
+  // Load saison
+  if (typeof fbLoadSaison === 'function') fbLoadSaison();
+
   // Load templates immediately
   getDocFromServer(getTemplatesDoc()).then(snap => {
     if (snap.exists()) {
@@ -1542,6 +1545,10 @@ signInAnonymously(auth).then(async () => {
       <span class="mnav-icon">🗂</span>
       <span class="mnav-label">Übersicht</span>
     </button>
+    <button class="mobile-nav-btn" id="mnav-saison" onclick="showPage('saison')" style="display:none;">
+      <span class="mnav-icon">📅</span>
+      <span class="mnav-label">Saison</span>
+    </button>
   </nav>
 
   <!-- SIDEBAR -->
@@ -1559,6 +1566,9 @@ signInAnonymously(auth).then(async () => {
     </div>
     <div class="nav-item" onclick="showPage('import-export')" id="nav-import-export">
       <span class="nav-icon">🗂</span> Pläne-Übersicht
+    </div>
+    <div class="nav-item" onclick="showPage('saison')" id="nav-saison" style="display:none;">
+      <span class="nav-icon">📅</span> Saisonplanung
     </div>
     <div class="nav-section-label" style="margin-top:12px;">Gespeicherte Pläne</div>
     <div id="nav-saved-plans"></div>
@@ -1651,6 +1661,7 @@ signInAnonymously(auth).then(async () => {
         <div>
           <div class="page-title" id="plan-title-display">Neuer Trainingsplan</div>
           <div class="page-subtitle" id="plan-subtitle-display">Zeitblöcke planen · Drills zuweisen · Exportieren</div>
+          <div id="plan-phase-badge" style="margin-top:4px;"></div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
 
@@ -1720,6 +1731,44 @@ signInAnonymously(auth).then(async () => {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- PAGE: SAISON -->
+    <div class="page" id="page-saison">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Saisonplanung</div>
+          <div class="page-subtitle">Makro- & Mikro-Planung · Phasen · Tracking</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-ghost btn-sm" id="saison-view-toggle" onclick="toggleSaisonView()">📅 Kalender</button>
+          <button class="btn btn-primary btn-sm" onclick="openPhaseModal(null)">+ Phase</button>
+        </div>
+      </div>
+
+      <!-- AKTUELLE PHASE BANNER -->
+      <div id="saison-current-phase" style="margin-bottom:16px;"></div>
+
+      <!-- KALENDER / LISTE TOGGLE -->
+      <div id="saison-calendar-view">
+        <div id="saison-calendar-nav" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <button class="btn btn-ghost btn-sm" onclick="saisonCalPrev()">‹</button>
+          <div id="saison-cal-label" style="font-weight:600;font-size:14px;min-width:140px;text-align:center;"></div>
+          <button class="btn btn-ghost btn-sm" onclick="saisonCalNext()">›</button>
+        </div>
+        <div id="saison-calendar" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;"></div>
+      </div>
+
+      <div id="saison-list-view" style="display:none;">
+        <!-- Phasen-Balken Zeitstrahl -->
+        <div id="saison-timeline" style="margin-bottom:20px;"></div>
+      </div>
+
+      <!-- PHASEN-LISTE mit Tracking -->
+      <div style="margin-top:20px;">
+        <div style="font-family:DM Mono,monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-subtle);margin-bottom:10px;">${T["saison-all-phases"][currentLang]}</div>
+        <div id="saison-phases-list" style="display:flex;flex-direction:column;gap:10px;"></div>
       </div>
     </div>
 
@@ -2734,6 +2783,7 @@ function showPage(page) {
   if (page === 'planung') renderPlansLibrary();
   if (page === 'tracking') renderTracking();
   if (page === 'import-export') { renderPlanOverview(); renderPlansLibrary(); }
+  if (page === 'saison') renderSaisonPage();
 }
 
 // ============================================================
@@ -3393,6 +3443,21 @@ function updatePlanDisplayHeader() {
   document.getElementById('plan-title-display').textContent = name;
   const sub = [currentPlan.date, currentPlan.theme].filter(Boolean).join(' · ');
   document.getElementById('plan-subtitle-display').textContent = sub || (currentLang === 'en' ? 'Plan time blocks · Assign drills · Export' : 'Zeitblöcke planen · Drills zuweisen · Exportieren');
+
+  // Phase badge
+  const phaseBadgeEl = document.getElementById('plan-phase-badge');
+  if (phaseBadgeEl) {
+    const phase = saisonPhases.find(p => p.id === currentPlan.phaseId)
+      || (!currentPlan.phaseId && currentPlan.date ? saisonPhases.find(p => currentPlan.date >= p.startDate && currentPlan.date <= p.endDate) : null);
+    if (phase && (window.currentUser === 'david' || isAdmin())) {
+      phaseBadgeEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 9px;border-radius:10px;background:${phase.color}22;color:${phase.color};font-weight:600;cursor:pointer;" onclick="openAssignPhaseModal('${currentPlan.id}',event)" title="${currentLang==='en'?'Change phase':'Phase ändern'}">📅 ${phase.name} ✎</span>`;
+    } else if (window.currentUser === 'david' || isAdmin()) {
+      const hasPhases = saisonPhases.length > 0;
+      phaseBadgeEl.innerHTML = hasPhases ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;" onclick="openAssignPhaseModal('${currentPlan.id}',event)">📅 ${currentLang==='en'?'Assign phase':'Phase zuweisen'}</button>` : '';
+    } else {
+      phaseBadgeEl.innerHTML = '';
+    }
+  }
   updatePlanLockUI();
 }
 
@@ -3439,6 +3504,7 @@ function updatePlanLockUI() {
 function savePlan() {
   if (!currentPlan) return;
   updatePlanMeta();
+  autoAssignOnSave(currentPlan);
   if (!currentPlan.name) currentPlan.name = 'Training ' + currentPlan.date;
   const idx = savedPlans.findIndex(p => p.id === currentPlan.id);
   if (idx >= 0) savedPlans[idx] = JSON.parse(JSON.stringify(currentPlan));
@@ -4765,6 +4831,7 @@ function renderSharedPlansList() {
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button class="btn btn-ghost btn-sm" onclick="loadSharedPlan('${p.id}')" title="${currentLang==='en'?'Load as copy':'Als Kopie laden'}">📋</button>
+        ${(window.currentUser==='david'||isAdmin())&&saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title="Phase zuweisen" style="font-size:11px;">📅</button>` : ''}
         ${canManage ? `<button class="btn btn-danger btn-sm" onclick="unshareAndDeletePlan('${p.id}',event)">✕</button>` : ''}
       </div>
     </div>`;
@@ -4787,6 +4854,7 @@ function renderMyTemplatesList() {
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button class="btn btn-ghost btn-sm" onclick="loadTemplate('${t.id}')" title="${currentLang==='en'?'Use template':'Template laden'}">▶</button>
+        ${(window.currentUser==='david'||isAdmin())&&saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignTemplateInfo('${t.id}',event)" title="Phase-Info" style="font-size:11px;">📅</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="toggleShareTemplate('${t.id}')" title="${isShared?(currentLang==='en'?'Unshare':'Zurückziehen'):(currentLang==='en'?'Share':'Teilen')}">${isShared?'🌐':'🔗'}</button>
         <button class="btn btn-ghost btn-sm" onclick="openTemplateModal('${t.id}')" title="${currentLang==='en'?'Edit':'Bearbeiten'}">✏️</button>
         <button class="btn btn-danger btn-sm" onclick="deleteTemplate('${t.id}',event)">✕</button>
@@ -4881,6 +4949,434 @@ function openExportPopup(context) {
   document.body.appendChild(overlay);
 }
 
+
+// ============================================================
+// SAISONPLANUNG
+// ============================================================
+let saisonPhases = [];
+let saisonCalMonth = new Date().getMonth();
+let saisonCalYear = new Date().getFullYear();
+let saisonView = 'calendar'; // 'calendar' | 'list'
+
+const PHASE_COLORS = ['#2E75B6','#1A6B3A','#B65C2E','#6B2EB6','#B6A02E','#2EB6A0','#B62E6B'];
+
+async function fbLoadSaison() {
+  if (typeof getDocFromServer === 'undefined') return;
+  try {
+    const u = window.currentUser || 'anonymous';
+    const ref = doc(db, 'users', u, 'data', 'seasons');
+    const snap = await getDocFromServer(ref);
+    if (snap.exists()) {
+      saisonPhases = snap.data().phases || [];
+      renderSaisonPage();
+    }
+  } catch(e) { console.warn('Saison load:', e.message); }
+}
+
+async function fbSaveSaison() {
+  if (typeof setDoc === 'undefined') return;
+  try {
+    const u = window.currentUser || 'anonymous';
+    const ref = doc(db, 'users', u, 'data', 'seasons');
+    await setDoc(ref, { phases: saisonPhases, updatedAt: Date.now() });
+  } catch(e) { console.warn('Saison save:', e.message); }
+}
+
+
+function saisonCalDayClick(dateStr) {
+  const phases = saisonPhases.filter(p => dateStr >= p.startDate && dateStr <= p.endDate);
+  const plans = (savedPlans||[]).filter(pl => pl.date === dateStr);
+  // Even for empty days: show a minimal popup if user is david/admin
+  const showForEmpty = (window.currentUser === 'david' || isAdmin());
+  if (phases.length === 0 && plans.length === 0 && !showForEmpty) return;
+
+  const existing = document.getElementById('cal-day-popup');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'cal-day-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+  const monthNames = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const d = new Date(dateStr + 'T00:00:00');
+  const label = `${d.getDate()}. ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+
+  const phaseHtml = phases.map(p => `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:${p.color}15;border-radius:6px;margin-bottom:6px;">
+    <div style="width:3px;height:28px;background:${p.color};border-radius:2px;flex-shrink:0;"></div>
+    <div>
+      <div style="font-size:13px;font-weight:600;color:var(--text);">${p.name}</div>
+      <div style="font-size:10px;color:var(--text-subtle);font-family:DM Mono,monospace;">${p.startDate} → ${p.endDate}</div>
+      ${p.ziele ? `<div style="font-size:11px;color:var(--text-subtle);margin-top:2px;">🎯 ${p.ziele}</div>` : ''}
+    </div>
+  </div>`).join('');
+
+  const planHtml = plans.map(pl => {
+    const drCnt = (pl.slots||[]).reduce((a,s)=>a+(s.drills||[]).length,0);
+    return `<div onclick="loadPlan('${pl.id}');document.getElementById('cal-day-popup').remove();" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:6px;cursor:pointer;margin-bottom:6px;transition:background .15s;" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='var(--surface2)'">
+      <div style="font-size:12px;flex:1;">
+        <div style="font-weight:600;color:var(--text);">${pl.name||pl.date||'—'}</div>
+        <div style="font-size:10px;color:var(--text-subtle);font-family:DM Mono,monospace;">${drCnt} Drills${pl.theme?' · '+pl.theme:''}</div>
+      </div>
+      <div style="font-size:11px;color:var(--blue,#2E75B6);">${T['cal-open'][currentLang]}</div>
+    </div>`;
+  }).join('');
+
+  overlay.innerHTML = `<div style="background:var(--surface);border-radius:12px;padding:20px;max-width:320px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.16);font-family:DM Sans,sans-serif;max-height:80vh;overflow-y:auto;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:12px;color:var(--text);">${label}</div>
+    ${phases.length>0?`<div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">${T['cal-phases-label'][currentLang]}</div>${phaseHtml}`:''}
+    ${phases.length===0 ? `<div style="font-size:12px;color:var(--text-subtle);padding:8px 0;">${currentLang==='en'?'No phase for this date.':'Keine Phase für dieses Datum.'}</div>` : ''}
+    ${plans.length>0?`<div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);margin-bottom:8px;margin-top:${phases.length?'12px':'0'};text-transform:uppercase;letter-spacing:.06em;">${T['cal-plans-label'][currentLang]}</div>${planHtml}`:''}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;flex-wrap:wrap;gap:8px;">
+      ${(window.currentUser==='david'||isAdmin()) ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="document.getElementById('cal-day-popup').remove();openPhaseModal(null)">+ ${currentLang==='en'?'New phase':'Neue Phase'}</button>` : '<span></span>'}
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cal-day-popup').remove()">${T['cal-close'][currentLang]}</button>
+    </div>
+  </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+function toggleSaisonView() {
+  saisonView = saisonView === 'calendar' ? 'list' : 'calendar';
+  document.getElementById('saison-calendar-view').style.display = saisonView === 'calendar' ? '' : 'none';
+  document.getElementById('saison-list-view').style.display = saisonView === 'list' ? '' : 'none';
+  document.getElementById('saison-view-toggle').textContent = saisonView === 'calendar' ? '☰ Liste' : '📅 Kalender';
+  if (saisonView === 'list') renderSaisonTimeline();
+  else renderSaisonCalendar();
+}
+
+function saisonCalPrev() { saisonCalMonth--; if (saisonCalMonth < 0) { saisonCalMonth = 11; saisonCalYear--; } renderSaisonCalendar(); }
+function saisonCalNext() { saisonCalMonth++; if (saisonCalMonth > 11) { saisonCalMonth = 0; saisonCalYear++; } renderSaisonCalendar(); }
+
+function renderSaisonPage() {
+  renderCurrentPhaseBanner();
+  renderSaisonCalendar();
+  renderSaisonPhasesList();
+}
+
+function getCurrentPhase() {
+  const today = new Date().toISOString().slice(0,10);
+  return saisonPhases.find(p => p.startDate <= today && p.endDate >= today) || null;
+}
+
+function renderCurrentPhaseBanner() {
+  const el = document.getElementById('saison-current-phase');
+  if (!el) return;
+  const phase = getCurrentPhase();
+  if (!phase) { el.innerHTML = ''; return; }
+  const daysLeft = Math.ceil((new Date(phase.endDate) - new Date()) / 86400000);
+  el.innerHTML = `<div style="background:${phase.color}22;border-left:4px solid ${phase.color};border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <div style="font-size:12px;font-weight:700;color:${phase.color};">${T["saison-cur-phase"][currentLang]}</div>
+    <div style="font-size:14px;font-weight:600;color:var(--text);">${phase.name}</div>
+    <div style="font-size:11px;color:var(--text-subtle);font-family:DM Mono,monospace;">${phase.startDate} → ${phase.endDate} · ${daysLeft} ${T["saison-days-left"][currentLang]}</div>
+    ${phase.ziele ? `<div style="font-size:12px;color:var(--text-subtle);flex-basis:100%;margin-top:4px;">🎯 ${phase.ziele}</div>` : ''}
+  </div>`;
+}
+
+function renderSaisonCalendar() {
+  const cal = document.getElementById('saison-calendar');
+  const label = document.getElementById('saison-cal-label');
+  if (!cal) return;
+
+  const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  label.textContent = `${months[saisonCalMonth]} ${saisonCalYear}`;
+
+  const firstDay = new Date(saisonCalYear, saisonCalMonth, 1).getDay();
+  const startOffset = (firstDay === 0) ? 6 : firstDay - 1; // Mo=0
+  const daysInMonth = new Date(saisonCalYear, saisonCalMonth + 1, 0).getDate();
+  const today = new Date().toISOString().slice(0,10);
+
+  // Training-Tage aus savedPlans
+  const trainingDays = new Set((savedPlans || []).map(p => p.date).filter(Boolean));
+
+  let html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border);">';
+  ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach(d => {
+    html += `<div style="padding:6px 4px;text-align:center;font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);font-weight:600;">${d}</div>`;
+  });
+  html += '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);">';
+
+  // Empty cells before first day
+  for (let i = 0; i < startOffset; i++) {
+    html += '<div style="padding:6px;min-height:40px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface2);"></div>';
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${saisonCalYear}-${String(saisonCalMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const isToday = dateStr === today;
+    const hasPlan = trainingDays.has(dateStr);
+
+    // Find phases for this day
+    const dayPhases = saisonPhases.filter(p => p.startDate <= dateStr && p.endDate >= dateStr);
+    const phaseBar = dayPhases.map(p => `<div style="height:3px;background:${p.color};border-radius:2px;margin-top:2px;"></div>`).join('');
+
+    const col = (startOffset + day - 1) % 7;
+    const isWeekend = col >= 5;
+
+    const dayPhaseIds = dayPhases.map(p=>p.id);
+    const dayPlanIds = (savedPlans||[]).filter(pl => pl.date===dateStr && (pl.phaseId ? dayPhaseIds.includes(pl.phaseId) : true)).map(pl=>pl.id);
+    const clickHandler = `onclick="saisonCalDayClick('${dateStr}')" style="cursor:pointer;" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='${isWeekend?'var(--surface2)':'var(--surface)'}'"`;
+    html += `<div ${clickHandler} style="padding:5px 4px;min-height:44px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:${isWeekend?'var(--surface2)':'var(--surface)'};">
+      <div style="font-size:12px;font-weight:${isToday?'700':'400'};color:${isToday?'var(--blue,#2E75B6)':'var(--text)'};background:${isToday?'var(--blue,#2E75B6)22':'none'};border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;">${day}</div>
+      ${hasPlan ? '<div style="width:6px;height:6px;background:var(--green,#1A6B3A);border-radius:50%;margin:2px auto 0;" title="Training"></div>' : ''}
+      ${phaseBar}
+    </div>`;
+  }
+
+  // Fill remaining cells
+  const totalCells = startOffset + daysInMonth;
+  const remaining = (7 - (totalCells % 7)) % 7;
+  for (let i = 0; i < remaining; i++) {
+    html += '<div style="padding:6px;min-height:40px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface2);"></div>';
+  }
+  html += '</div>';
+
+  // Legende
+  if (saisonPhases.length > 0) {
+    html += '<div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:8px;">';
+    saisonPhases.forEach(p => {
+      html += `<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-subtle);"><span style="display:inline-block;width:10px;height:10px;background:${p.color};border-radius:2px;"></span>${p.name}</span>`;
+    });
+    html += '<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-subtle);"><span style="display:inline-block;width:6px;height:6px;background:var(--green,#1A6B3A);border-radius:50%;"></span>Training</span>';
+    html += '</div>';
+  }
+
+  cal.innerHTML = html;
+}
+
+function renderSaisonTimeline() {
+  const el = document.getElementById('saison-timeline');
+  if (!el || saisonPhases.length === 0) { if(el) el.innerHTML = ''; return; }
+
+  const sorted = [...saisonPhases].sort((a,b) => a.startDate.localeCompare(b.startDate));
+  const minDate = new Date(sorted[0].startDate);
+  const maxDate = new Date(sorted[sorted.length-1].endDate);
+  const totalDays = (maxDate - minDate) / 86400000 || 1;
+
+  let html = '<div style="position:relative;height:48px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">';
+  sorted.forEach(p => {
+    const left = (new Date(p.startDate) - minDate) / 86400000 / totalDays * 100;
+    const width = (new Date(p.endDate) - new Date(p.startDate)) / 86400000 / totalDays * 100;
+    html += `<div style="position:absolute;left:${left}%;width:${Math.max(width,1)}%;height:100%;background:${p.color};opacity:0.85;display:flex;align-items:center;justify-content:center;overflow:hidden;" title="${p.name}">
+      <span style="font-size:10px;font-weight:600;color:#fff;white-space:nowrap;padding:0 4px;text-overflow:ellipsis;overflow:hidden;">${p.name}</span>
+    </div>`;
+  });
+  // Today marker
+  const todayOffset = (new Date() - minDate) / 86400000 / totalDays * 100;
+  if (todayOffset >= 0 && todayOffset <= 100) {
+    html += `<div style="position:absolute;left:${todayOffset}%;top:0;bottom:0;width:2px;background:#fff;opacity:0.8;"></div>`;
+  }
+  html += '</div>';
+  html += `<div style="display:flex;justify-content:space-between;font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);margin-top:4px;"><span>${sorted[0].startDate}</span><span>${sorted[sorted.length-1].endDate}</span></div>`;
+  el.innerHTML = html;
+}
+
+function renderSaisonPhasesList() {
+  const el = document.getElementById('saison-phases-list');
+  if (!el) return;
+  if (saisonPhases.length === 0) {
+    el.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-subtle);font-size:13px;">${T["saison-no-phases"][currentLang]}</div>`;
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0,10);
+  const sorted = [...saisonPhases].sort((a,b) => a.startDate.localeCompare(b.startDate));
+
+  el.innerHTML = sorted.map(p => {
+    const isActive = p.startDate <= today && p.endDate >= today;
+    const isPast = p.endDate < today;
+
+    // Trainings in dieser Phase zählen (Hybrid: phaseId ODER Datum)
+    const phasePlans = (savedPlans || []).filter(plan =>
+      plan.phaseId === p.id ||
+      (!plan.phaseId && plan.date && plan.date >= p.startDate && plan.date <= p.endDate)
+    );
+    const totalDays = Math.ceil((new Date(p.endDate) - new Date(p.startDate)) / 86400000) + 1;
+    const totalWeeks = Math.ceil(totalDays / 7);
+    const istTrainings = phasePlans.length;
+    const sollTrainings = (p.wochenZiel || 1) * totalWeeks;
+    const pct = Math.min(100, Math.round(istTrainings / Math.max(sollTrainings, 1) * 100));
+
+    // Kategorie-Tracking
+    const katCount = {};
+    phasePlans.forEach(plan => {
+      (plan.slots || []).forEach(slot => {
+        (slot.drills || []).forEach(sd => {
+          const drill = (window.DRILLS || []).find(d => d.id === sd.drillId);
+          const kat = drill?.kategorie || drill?.kat || '?';
+          katCount[kat] = (katCount[kat] || 0) + 1;
+        });
+      });
+    });
+    const totalDrills = Object.values(katCount).reduce((a,b) => a+b, 0);
+    const katBars = Object.entries(katCount).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([kat,cnt]) => {
+      const katPct = Math.round(cnt / Math.max(totalDrills,1) * 100);
+      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+        <div style="font-size:10px;color:var(--text-subtle);width:80px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${kat}</div>
+        <div style="flex:1;background:var(--surface2);border-radius:4px;height:6px;"><div style="width:${katPct}%;background:${p.color};height:100%;border-radius:4px;"></div></div>
+        <div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);width:28px;text-align:right;">${katPct}%</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="panel" style="border-left:4px solid ${p.color};opacity:${isPast?'0.7':'1'};">
+      <div style="padding:12px 14px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+              <div style="font-size:14px;font-weight:700;color:var(--text);">${p.name}</div>
+              ${isActive ? `<span style="font-size:9px;background:${p.color};color:#fff;padding:2px 7px;border-radius:10px;font-weight:600;">${T['saison-active'][currentLang]}</span>` : ''}
+              ${isPast ? `<span style="font-size:9px;color:var(--text-subtle);font-family:DM Mono,monospace;">${T['saison-done'][currentLang]}</span>` : ''}
+            </div>
+            <div style="font-size:11px;color:var(--text-subtle);font-family:DM Mono,monospace;">${p.startDate} → ${p.endDate} · ${totalWeeks} ${T['saison-weeks'][currentLang]}</div>
+            ${p.ziele ? `<div style="font-size:12px;color:var(--text-subtle);margin-top:4px;">🎯 ${p.ziele}</div>` : ''}
+          </div>
+          <div style="display:flex;gap:4px;flex-shrink:0;">
+            <button class="btn btn-ghost btn-sm" onclick="openPhaseModal('${p.id}')">✏️</button>
+            <button class="btn btn-danger btn-sm" onclick="deletePhase('${p.id}',event)">✕</button>
+          </div>
+        </div>
+
+        <!-- Trainings-Tracking -->
+        <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);margin-bottom:6px;">${T["saison-ist-soll"][currentLang]}</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;background:var(--surface2);border-radius:6px;height:8px;overflow:hidden;">
+                <div style="width:${pct}%;background:${p.color};height:100%;border-radius:6px;transition:width .3s;"></div>
+              </div>
+              <div style="font-size:11px;font-family:DM Mono,monospace;color:var(--text);white-space:nowrap;">${istTrainings} / ${sollTrainings}</div>
+            </div>
+            <div style="font-size:10px;color:var(--text-subtle);margin-top:3px;">${p.wochenZiel||1}x ${T["saison-per-week"][currentLang]}</div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);margin-bottom:6px;">${T["saison-top5"][currentLang]}</div>
+            ${totalDrills > 0 ? katBars : `<div style="font-size:11px;color:var(--text-subtle);">${T["saison-no-train"][currentLang]}</div>`}
+          </div>
+        </div>
+        ${phasePlans.length > 0 ? `<div style="margin-top:12px;">
+          <div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
+            <span>${T["saison-train-list"][currentLang]}</span>
+            <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 7px;" onclick="document.getElementById('phase-plans-${p.id}').style.display=document.getElementById('phase-plans-${p.id}').style.display==='none'?'':'none'">▾</button>
+          </div>
+          <div id="phase-plans-${p.id}" style="display:flex;flex-direction:column;gap:4px;margin-top:6px;">
+            ${phasePlans.sort((a,b)=>(b.date||'')>(a.date||'')?1:-1).map(pl => {
+              const drCnt = (pl.slots||[]).reduce((a,s)=>a+(s.drills||[]).length,0);
+              return `<div onclick="loadPlan('${pl.id}')" style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border-radius:6px;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='var(--surface2)'">
+                <div style="width:3px;height:28px;background:${p.color};border-radius:2px;flex-shrink:0;"></div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${pl.name||pl.date||'—'}</div>
+                  <div style="font-size:10px;color:var(--text-subtle);font-family:DM Mono,monospace;">${pl.date||''}${pl.theme?' · '+pl.theme:''} · ${drCnt} Drills</div>
+                </div>
+                <div style="font-size:10px;color:var(--blue,#2E75B6);">${T["cal-open"][currentLang]}</div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openPhaseModal(phaseId) {
+  const existing = phaseId ? saisonPhases.find(p => p.id === phaseId) : null;
+  const colorOpts = PHASE_COLORS.map((c,i) =>
+    `<label style="cursor:pointer;"><input type="radio" name="phase-color" value="${c}" ${(existing?.color||PHASE_COLORS[0])===c?'checked':''} style="display:none;">
+    <span style="display:inline-block;width:20px;height:20px;background:${c};border-radius:4px;border:2px solid ${(existing?.color||PHASE_COLORS[0])===c?'var(--text)':'transparent'};"></span></label>`
+  ).join('');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'phase-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;padding:24px;max-width:400px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:DM Sans,sans-serif;max-height:90vh;overflow-y:auto;">
+      <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text);">${existing?T['phase-modal-edit'][currentLang]:T['phase-modal-new'][currentLang]}</div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label class="form-label">${T['phase-name-label'][currentLang]} *</label>
+        <input type="text" id="phase-name" class="form-input" value="${existing?.name||''}" placeholder="${T['phase-name-ph'][currentLang]}">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div class="form-group">
+          <label class="form-label">Start *</label>
+          <input type="date" id="phase-start" class="form-input" value="${existing?.startDate||''}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ende *</label>
+          <input type="date" id="phase-end" class="form-input" value="${existing?.endDate||''}">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label class="form-label">${T['phase-wochenziel'][currentLang]}</label>
+        <input type="number" id="phase-wochenziel" class="form-input" value="${existing?.wochenZiel||2}" min="1" max="7" style="width:80px;">
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label class="form-label">${T['phase-ziele-label'][currentLang]}</label>
+        <textarea id="phase-ziele" class="form-input" rows="2" style="resize:vertical;">${existing?.ziele||''}</textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:16px;">
+        <label class="form-label">${T['phase-color-label'][currentLang]}</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">${colorOpts}</div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-ghost" onclick="document.getElementById('phase-modal-overlay').remove()">${T['phase-cancel'][currentLang]}</button>
+        <button class="btn btn-primary" onclick="savePhaseFromModal('${phaseId||''}')">${T['phase-save'][currentLang]}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('phase-name').focus();
+}
+
+function savePhaseFromModal(phaseId) {
+  const name = document.getElementById('phase-name').value.trim();
+  const startDate = document.getElementById('phase-start').value;
+  const endDate = document.getElementById('phase-end').value;
+  if (!name || !startDate || !endDate) { toast('Name und Zeitraum erforderlich'); return; }
+  if (startDate > endDate) { toast('Start muss vor Ende liegen'); return; }
+
+  const colorEl = document.querySelector('input[name="phase-color"]:checked');
+  const color = colorEl?.value || PHASE_COLORS[0];
+
+  const phase = {
+    id: phaseId || 'phase_' + Date.now(),
+    name,
+    startDate,
+    endDate,
+    wochenZiel: parseInt(document.getElementById('phase-wochenziel').value) || 2,
+    ziele: document.getElementById('phase-ziele').value.trim(),
+    color,
+    createdBy: window.currentUser,
+    createdAt: phaseId ? (saisonPhases.find(p=>p.id===phaseId)?.createdAt || Date.now()) : Date.now(),
+    updatedAt: Date.now()
+  };
+
+  if (phaseId) {
+    const idx = saisonPhases.findIndex(p => p.id === phaseId);
+    if (idx >= 0) saisonPhases[idx] = phase; else saisonPhases.push(phase);
+  } else {
+    saisonPhases.push(phase);
+  }
+
+  fbSaveSaison();
+  document.getElementById('phase-modal-overlay').remove();
+  renderSaisonPage();
+  toast(phaseId ? T['phase-saved'][currentLang] : T['phase-created'][currentLang]);
+}
+
+function deletePhase(phaseId, e) {
+  if (e) e.stopPropagation();
+  showConfirm(T['phase-delete-q'][currentLang], () => {
+    saisonPhases = saisonPhases.filter(p => p.id !== phaseId);
+    fbSaveSaison();
+    renderSaisonPage();
+    toast(T['phase-deleted'][currentLang]);
+  });
+}
+
+function updateSaisonVisibility() {
+  const isd = window.currentUser === 'david' || isAdmin();
+  const mnav = document.getElementById('mnav-saison');
+  const dnav = document.getElementById('nav-saison');
+  if (mnav) mnav.style.display = isd ? '' : 'none';
+  if (dnav) dnav.style.display = isd ? '' : 'none';
+}
+
 function closeExportPopup() {
   const el = document.getElementById('export-popup-overlay');
   if (el) el.remove();
@@ -4903,6 +5399,81 @@ function duplicatePlan(planId, e) {
   fbSavePlans && fbSavePlans();
   renderSavedPlansList();
   toast(currentLang === 'en' ? '📋 Plan duplicated' : '📋 Plan dupliziert');
+}
+
+
+// ---- Phase-Zuordnung ----
+function autoAssignPhaseId(plan) {
+  if (!plan.date) return plan.phaseId || null;
+  const hit = saisonPhases.find(p => plan.date >= p.startDate && plan.date <= p.endDate);
+  return hit ? hit.id : (plan.phaseId || null);
+}
+
+
+function openAssignTemplateInfo(tplId, event) {
+  if (event) event.stopPropagation();
+  const tpl = (window.myTemplates || []).find(t => t.id === tplId);
+  if (!tpl) return;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML = `<div style="background:var(--surface);border-radius:12px;padding:22px;max-width:320px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.16);font-family:DM Sans,sans-serif;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Template: ${tpl.name}</div>
+    <div style="font-size:12px;color:var(--text-subtle);margin-bottom:14px;">Templates selbst werden keiner Phase zugeordnet. Wenn du dieses Template lädst und den Plan speicherst, wird er anhand seines Datums automatisch einer Phase zugewiesen.</div>
+    ${saisonPhases.length > 0 ? '<div style="font-size:11px;color:var(--text-subtle);">Aktive Phasen:<br>' + saisonPhases.map(p=>`<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:8px;background:${p.color}22;color:${p.color};font-size:11px;font-weight:600;">${p.name} (${p.startDate}→${p.endDate})</span>`).join('') + '</div>' : ''}
+    <div style="margin-top:16px;text-align:right;"><button class="btn btn-primary" onclick="this.closest('div[style]').remove()">OK</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function assignPlanToPhase(planId, phaseId) {
+  const idx = savedPlans.findIndex(p => p.id === planId);
+  if (idx >= 0) {
+    savedPlans[idx].phaseId = phaseId || null;
+    saveToStorage();
+    renderSavedPlansList();
+    renderSaisonPhasesList();
+    if (document.getElementById('page-saison')?.classList.contains('active')) renderSaisonPage();
+    toast(phaseId ? T['assign-ok'][currentLang] : T['assign-removed'][currentLang]);
+  }
+}
+
+function openAssignPhaseModal(planId, event) {
+  if (event) event.stopPropagation();
+  const existing = document.getElementById('assign-phase-overlay');
+  if (existing) existing.remove();
+  const plan = savedPlans.find(p => p.id === planId);
+  if (!plan) return;
+
+  const autoPhase = saisonPhases.find(p => plan.date && plan.date >= p.startDate && plan.date <= p.endDate);
+  const opts = saisonPhases.map(p => {
+    const sel = plan.phaseId === p.id ? 'selected' : '';
+    const auto = autoPhase?.id === p.id ? ' (auto)' : '';
+    return `<option value="${p.id}" ${sel}>${p.name}${auto} · ${p.startDate}→${p.endDate}</option>`;
+  }).join('');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'assign-phase-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML = `<div style="background:var(--surface);border-radius:12px;padding:22px;max-width:340px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.16);font-family:DM Sans,sans-serif;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px;">${T['assign-title'][currentLang]}</div>
+    <div style="font-size:11px;color:var(--text-subtle);margin-bottom:14px;">${plan.name||plan.date||plan.id}</div>
+    ${autoPhase && plan.phaseId !== autoPhase.id ? `<div style="font-size:11px;color:var(--blue,#2E75B6);background:var(--blue,#2E75B6)15;border-radius:6px;padding:7px 10px;margin-bottom:10px;">💡 ${T['assign-auto-hint'][currentLang]} <b>${autoPhase.name}</b> (${plan.date})</div>` : ''}
+    ${saisonPhases.length === 0 ? `<div style="font-size:12px;color:var(--text-subtle);margin-bottom:14px;">${T['assign-no-phases'][currentLang]}</div>` : `<select id="assign-phase-select" class="form-input" style="width:100%;margin-bottom:14px;"><option value="">${T['assign-none'][currentLang]}</option>${opts}</select>`}
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+      <button class="btn btn-ghost" onclick="document.getElementById('assign-phase-overlay').remove()">${T['phase-cancel'][currentLang]}</button>
+      ${autoPhase && plan.phaseId !== autoPhase.id ? `<button class="btn btn-ghost" onclick="assignPlanToPhase('${planId}','${autoPhase.id}');document.getElementById('assign-phase-overlay').remove()">${T['assign-auto-btn'][currentLang]}</button>` : ''}
+      ${saisonPhases.length > 0 ? `<button class="btn btn-primary" onclick="assignPlanToPhase('${planId}',document.getElementById('assign-phase-select').value);document.getElementById('assign-phase-overlay').remove()">${T['assign-save'][currentLang]}</button>` : ''}
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+// Auto-assign bei savePlan wenn noch keine phaseId
+function autoAssignOnSave(plan) {
+  if (!plan.phaseId && plan.date) {
+    const hit = saisonPhases.find(p => plan.date >= p.startDate && plan.date <= p.endDate);
+    if (hit) plan.phaseId = hit.id;
+  }
 }
 
 function renderSavedPlansList() {
@@ -4939,12 +5510,13 @@ function renderSavedPlansList() {
     const isShared = p.scope === 'team';
     return `<div class="plan-list-item ${currentPlan && currentPlan.id === p.id ? 'active' : ''}" onclick="loadPlan('${p.id}')">
       <div style="flex:1;min-width:0;">
-        <div class="plan-list-name">${p.name || '—'}${isShared ? ' <span style="font-size:9px;color:var(--blue,#2E75B6);font-family:DM Mono,monospace;">🌐</span>' : ''}</div>
+        <div class="plan-list-name">${p.name || '—'}${isShared ? ' <span style="font-size:9px;color:var(--blue,#2E75B6);font-family:DM Mono,monospace;">🌐</span>' : ''}${p.phaseId ? (() => { const ph = saisonPhases.find(x=>x.id===p.phaseId); return ph ? ` <span style="font-size:9px;font-family:DM Mono,monospace;padding:1px 5px;border-radius:8px;background:${ph.color}22;color:${ph.color};font-weight:600;">${ph.name}</span>` : ''; })() : ''}</div>
         <div class="plan-list-date">${p.date || ''}${p.theme ? ' · ' + p.theme : ''}</div>
         <div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);margin-top:2px;">${drillCount} Drills · ${totalMins} min</div>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button class="btn btn-ghost btn-sm" onclick="duplicatePlan('${p.id}',event)" title="${currentLang==='en'?'Duplicate':'Duplizieren'}" style="font-size:11px;">⧉</button>
+        ${(window.currentUser==='david'||isAdmin())&&saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title="Phase zuweisen" style="font-size:11px;">📅</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="toggleSharePlan('${p.id}')" title="${p.scope==='team'?(currentLang==='en'?'Unshare':'Zurückziehen'):(currentLang==='en'?'Share':'Teilen')}" style="font-size:11px;">${'scope' in p && p.scope === 'team' ? '🌐' : '🔗'}</button>
         <button class="btn btn-danger btn-sm" onclick="deletePlan('${p.id}',event)">✕</button>
       </div>
@@ -5409,6 +5981,72 @@ const T = {
   'mnav-tracking':    { de: 'Tracking', en: 'Tracking' },
   'mnav-overview':    { de: 'Übersicht', en: 'Overview' },
 
+  // MOBILE NAV - SAISON
+  'mnav-saison':      { de: 'Saison', en: 'Season' },
+
+  // SAISON PAGE
+  'saison-title':     { de: 'Saisonplanung', en: 'Season Planning' },
+  'saison-subtitle':  { de: 'Makro- & Mikro-Planung · Phasen · Tracking', en: 'Macro & Micro Planning · Phases · Tracking' },
+  'saison-btn-cal':   { de: '📅 Kalender', en: '📅 Calendar' },
+  'saison-btn-list':  { de: '☰ Liste', en: '☰ List' },
+  'saison-btn-new':   { de: '+ Phase', en: '+ Phase' },
+  'saison-cur-phase': { de: 'AKTUELLE PHASE', en: 'CURRENT PHASE' },
+  'saison-all-phases':{ de: 'Alle Phasen', en: 'All Phases' },
+  'saison-no-phases': { de: 'Noch keine Phasen. Mit „+ Phase" starten.', en: 'No phases yet. Start with "+ Phase".' },
+  'saison-active':    { de: 'AKTIV', en: 'ACTIVE' },
+  'saison-done':      { de: 'abgeschlossen', en: 'completed' },
+  'saison-weeks':     { de: 'Wochen', en: 'weeks' },
+  'saison-ist-soll':  { de: 'TRAININGS IST / SOLL', en: 'SESSIONS ACTUAL / TARGET' },
+  'saison-per-week':  { de: 'x/Woche geplant', en: 'x/week planned' },
+  'saison-top5':      { de: 'KATEGORIEN (TOP 5)', en: 'CATEGORIES (TOP 5)' },
+  'saison-no-train':  { de: 'Noch keine Trainings', en: 'No sessions yet' },
+  'saison-train-list':{ de: 'TRAININGS IN DIESER PHASE', en: 'SESSIONS IN THIS PHASE' },
+  'saison-days-left': { de: 'Tage', en: 'days left' },
+
+  // PHASE MODAL
+  'phase-modal-new':  { de: 'Neue Phase', en: 'New Phase' },
+  'phase-modal-edit': { de: 'Phase bearbeiten', en: 'Edit Phase' },
+  'phase-name-label': { de: 'Name', en: 'Name' },
+  'phase-name-ph':    { de: 'z.B. Hinrunde, Vorbereitung …', en: 'e.g. First Half, Pre-Season …' },
+  'phase-wochenziel': { de: 'Trainings/Woche (Ziel)', en: 'Sessions/Week (Target)' },
+  'phase-ziele-label':{ de: 'Ziele / Fokus', en: 'Goals / Focus' },
+  'phase-color-label':{ de: 'Farbe', en: 'Colour' },
+  'phase-cancel':     { de: 'Abbrechen', en: 'Cancel' },
+  'phase-save':       { de: 'Speichern', en: 'Save' },
+  'phase-delete-q':   { de: 'Phase löschen?', en: 'Delete phase?' },
+  'phase-saved':      { de: 'Phase gespeichert', en: 'Phase saved' },
+  'phase-created':    { de: 'Phase erstellt', en: 'Phase created' },
+  'phase-deleted':    { de: 'Phase gelöscht', en: 'Phase deleted' },
+
+  // PHASE ASSIGN
+  'assign-title':     { de: 'Phase zuweisen', en: 'Assign Phase' },
+  'assign-none':      { de: '— keine Phase —', en: '— no phase —' },
+  'assign-auto-hint': { de: 'Auto:', en: 'Auto:' },
+  'assign-auto-btn':  { de: 'Auto übernehmen', en: 'Use Auto' },
+  'assign-save':      { de: 'Speichern', en: 'Save' },
+  'assign-ok':        { de: '📅 Phase zugewiesen', en: '📅 Phase assigned' },
+  'assign-removed':   { de: 'Phase-Zuordnung entfernt', en: 'Phase assignment removed' },
+  'assign-no-phases': { de: 'Noch keine Phasen angelegt. Erst in der Saisonplanung Phasen erstellen.', en: 'No phases yet. Create them in Season Planning first.' },
+
+  // TEMPLATE SHARING
+  'tpl-share-btn':    { de: '🔗', en: '🔗' },
+  'tpl-unshare-btn':  { de: '🌐', en: '🌐' },
+  'tpl-shared-badge': { de: '🌐 Geteilt', en: '🌐 Shared' },
+  'tpl-use':          { de: '▶ Template laden', en: '▶ Use Template' },
+  'tpl-edit':         { de: 'Bearbeiten', en: 'Edit' },
+
+  // PLAN SHARING
+  'plan-share-btn':   { de: '🔗', en: '🔗' },
+  'plan-unshare-btn': { de: '🌐', en: '🌐' },
+  'plan-dup-btn':     { de: '⧉', en: '⧉' },
+  'plan-phase-btn':   { de: '📅', en: '📅' },
+
+  // CAL POPUP
+  'cal-phases-label': { de: 'Phasen', en: 'Phases' },
+  'cal-plans-label':  { de: 'Trainings', en: 'Sessions' },
+  'cal-open':         { de: '→ öffnen', en: '→ open' },
+  'cal-close':        { de: 'Schließen', en: 'Close' },
+
   // TOAST / MISC
   'sync-cloud':       { de: '☁ Cloud', en: '☁ Cloud' },
   'no-plan':          { de: 'Erst einen Plan erstellen oder laden', en: 'First create or load a plan' },
@@ -5725,6 +6363,26 @@ function applyLang() {
     if (ovSort.options[2]) ovSort.options[2].text = currentLang==='en'?'A–Z':'Alphabetisch';
   }
 
+  // Mobile nav - saison
+  const mnavSaison = document.getElementById('mnav-saison');
+  if (mnavSaison) { const lbl = mnavSaison.querySelector('.mnav-label'); if(lbl) lbl.textContent = T['mnav-saison'][currentLang]; }
+  // Sidebar nav
+  const navSaison = document.getElementById('nav-saison');
+  if (navSaison) navSaison.innerHTML = `<span class="nav-icon">📅</span> ${currentLang==='en'?'Season Planning':'Saisonplanung'}`;
+
+  // Page: Saison
+  const saisonTitle = document.querySelector('#page-saison .page-title');
+  if (saisonTitle) saisonTitle.textContent = T['saison-title'][currentLang];
+  const saisonSub = document.querySelector('#page-saison .page-subtitle');
+  if (saisonSub) saisonSub.textContent = T['saison-subtitle'][currentLang];
+  const saisonViewBtn = document.getElementById('saison-view-toggle');
+  if (saisonViewBtn) saisonViewBtn.textContent = saisonView==='calendar' ? T['saison-btn-list'][currentLang] : T['saison-btn-cal'][currentLang];
+  const saisonNewBtn = document.querySelector('#page-saison .btn-primary');
+  if (saisonNewBtn) saisonNewBtn.textContent = T['saison-btn-new'][currentLang];
+
+  // Re-render saison if visible (to update all inline strings)
+  if (document.getElementById('page-saison')?.classList.contains('active')) renderSaisonPage();
+
   // Re-render dynamic content
   applyBibFilters();
   if (currentPlan) renderSlots();
@@ -5816,6 +6474,7 @@ function _doLogin(val) {
   try { renderSavedPlansList(); } catch(e) {}
   try { renderNavSavedPlans(); } catch(e) {}
   updateUserBadge();
+  updateSaisonVisibility();
   if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(val);
   if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(val);
   setTimeout(seedDefaultTemplates, 1500);
@@ -5876,6 +6535,7 @@ function seedDefaultTemplates() {
 if (currentLang !== 'de') applyLang(); // Apply saved language before first render
 else applyUserModalLang(); // Init lang button in modal
 loadFromStorage();
+updateSaisonVisibility();
 renderBibliothek(window.DRILLS);
 document.getElementById('nav-count-bib').textContent = window.DRILLS.length;
 newPlan();
