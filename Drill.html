@@ -1309,6 +1309,7 @@ window.fbInitUserListeners = (kuerzel) => {
       if (t.length > 0) {
         window.myTemplates = t;
         window._templatesLoadedFromFirestore = true;
+        if (typeof renderPlanTemplateStrip === "function") renderPlanTemplateStrip();
         try { renderPlansLibrary(); } catch(e) {}
       }
     }
@@ -1480,6 +1481,7 @@ signInAnonymously(auth).then(async () => {
       if (!snap.exists()) return;
       window.myTemplates = snap.data().templates || [];
       if (window.myTemplates.length > 0) window._templatesLoadedFromFirestore = true;
+      if (typeof renderPlanTemplateStrip === "function") renderPlanTemplateStrip();
       try { renderPlansLibrary(); } catch(e) {}
     }, err => console.warn('Templates snapshot:', err.message));
 
@@ -1677,6 +1679,9 @@ signInAnonymously(auth).then(async () => {
           <button class="btn btn-primary" onclick="savePlan()">💾 Speichern</button>
         </div>
       </div>
+
+      <!-- TEMPLATE STRIP -->
+      <div id="plan-template-strip" style="margin-bottom:12px;"></div>
 
       <div class="plan-header-form">
         <div class="form-group">
@@ -3416,19 +3421,32 @@ function newPlan() {
   updateSidebarExportState();
 }
 
+function buildAutoName(dateStr, theme) {
+  if (!dateStr) return '';
+  const de = new Date(dateStr + 'T12:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return theme ? de + ' — ' + theme : de;
+}
+
 function updatePlanMeta() {
   if (!currentPlan) return;
   const newDate = document.getElementById('plan-date').value;
-  // If title contains old date in DE format, update it automatically
-  if (newDate && currentPlan.date && newDate !== currentPlan.date) {
-    const oldDE = new Date(currentPlan.date + 'T12:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const newDE = new Date(newDate + 'T12:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const nameEl = document.getElementById('plan-name');
-    if (nameEl.value.includes(oldDE)) {
-      nameEl.value = nameEl.value.replace(oldDE, newDE);
+  const nameEl = document.getElementById('plan-name');
+  const themeEl = document.getElementById('plan-theme');
+  const theme = themeEl.value.trim();
+
+  if (newDate && newDate !== currentPlan.date) {
+    nameEl.value = buildAutoName(newDate, theme);
+  } else if (theme !== (currentPlan.theme || '').trim()) {
+    const baseDate = currentPlan.date || newDate;
+    if (baseDate) {
+      const expectedBase = new Date(baseDate + 'T12:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      if (nameEl.value.startsWith(expectedBase) || nameEl.value === '') {
+        nameEl.value = buildAutoName(baseDate, theme);
+      }
     }
   }
-  currentPlan.name = document.getElementById('plan-name').value;
+
+  currentPlan.name = nameEl.value;
   currentPlan.date = newDate;
   currentPlan.theme = document.getElementById('plan-theme').value;
   currentPlan.notes = document.getElementById('plan-notes').value;
@@ -3612,8 +3630,7 @@ function loadTemplate(tplId, fromShared) {
   if (!tpl) return;
   const weekday = tpl.weekday || null;
   const datum = weekday ? getNextWeekday(weekday) : new Date();
-  const datumStr = formatDateDE(datum);
-  const name = tpl.name.replace(/\d{2}\.\d{2}\.\d{4}/, datumStr) || tpl.name;
+  const name = buildAutoName(formatDate(datum), tpl.theme || '');
   currentPlan = {
     id: 'plan_' + Date.now(),
     name,
@@ -3668,6 +3685,7 @@ function deleteTemplate(tplId, e) {
     window.myTemplates = (window.myTemplates || []).filter(t => t.id !== tplId);
     if (typeof window.fbSaveTemplates === 'function') window.fbSaveTemplates(window.myTemplates);
     renderMyTemplatesList();
+    renderPlanTemplateStrip();
     toast(currentLang === 'en' ? 'Template deleted' : 'Template gelöscht');
   });
 }
@@ -4836,6 +4854,21 @@ function renderSharedPlansList() {
   }).join('');
 }
 
+function renderPlanTemplateStrip() {
+  const strip = document.getElementById('plan-template-strip');
+  if (!strip) return;
+  const all = [...(window.myTemplates || []), ...(window.sharedTemplates || []).filter(t => !window.myTemplates?.find(m => m.id === t.id))];
+  if (all.length === 0) { strip.innerHTML = ''; return; }
+  strip.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-subtle);margin-bottom:6px;">' + (currentLang==='en'?'Templates':'Templates') + '</div><div style="display:flex;flex-wrap:wrap;gap:6px;">' +
+    all.map(t => {
+      const weekday = t.weekday || null;
+      const datum = weekday ? getNextWeekday(weekday) : new Date();
+      const datumDE = formatDateDE(datum);
+      const isShared = !window.myTemplates?.find(m => m.id === t.id);
+      return '<button class="btn btn-ghost btn-sm" style="font-size:11px;gap:4px;" onclick="loadTemplate(''+t.id+''' + (isShared?',true':'') + ')" title="'+datumDE+'">▶ '+(t.name||'').replace(/[<&]/g, c => ({'<':'&lt;','&':'&amp;'}[c]))+(weekday?(' <span style="color:var(--text-subtle)">'+datumDE+'</span>'):'')+'</button>';
+    }).join('') + '</div>';
+}
+
 function renderMyTemplatesList() {
   const container = document.getElementById('saved-plans-list');
   const templates = window.myTemplates || [];
@@ -5363,7 +5396,7 @@ function openPhaseModal(phaseId) {
   if (existingSw.length > 0) {
     existingSw.forEach(sw => addSchwerpunktRow(sw.kat, sw.gewichtung));
   }
-  document.getElementById('phase-name').focus();
+  if (window.innerWidth > 768) document.getElementById('phase-name').focus();
 }
 
 const DRILL_KATS = ['Passing','Ballhandling','Shooting','Transition','Defense','Rebounding','Offense','Post','Kondition','Plays'];
