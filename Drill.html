@@ -996,7 +996,7 @@
     .plan-builder { grid-template-columns: 1fr; gap: 14px; }
     .plan-header-form { grid-template-columns: 1fr; gap: 10px; }
     .form-input, .form-select { font-size: 16px; padding: 10px 12px; }
-    .plan-sidebar-panel { position: static; }
+    .plan-sidebar-panel { display: none; }
     .slot-drill-item { padding: 10px 12px; }
     .slot-drill-name { font-size: 14px; }
     .slot-drill-mins input { width: 42px; font-size: 14px; padding: 6px 4px; min-height: 36px; border-radius: 5px; }
@@ -1421,38 +1421,7 @@ signInAnonymously(auth).then(async () => {
     }
   });
 
-  // Plans: erst direkt laden, dann live-listener (nur wenn User bereits bekannt)
-  if (window.currentUser) try {
-    const initSnap = await getDocFromServer(getPlansDoc());
-    if (initSnap.exists()) {
-      const data = initSnap.data();
-      if (Array.isArray(data.plans) && data.plans.length > 0) {
-        window.savedPlans = data.plans;
-        if (data.drillMins) window.drillMins = data.drillMins;
-        if (typeof window.renderSavedPlansList === 'function') window.renderSavedPlansList();
-        if (typeof window.renderNavSavedPlans === 'function') window.renderNavSavedPlans();
-        if (typeof window.renderPlanOverview === 'function') window.renderPlanOverview();
-      }
-    }
-  } catch(e) { console.warn('Plans initial load:', e.message); }
-
-  // Plans live-listener (nur wenn User bereits bekannt)
-  if (window.currentUser) onSnapshot(getPlansDoc(), (snap) => {
-    if (!snap.exists()) return;
-    const data = snap.data();
-    if (!Array.isArray(data.plans)) return;
-    if (isSyncing) return;
-    window.savedPlans = data.plans;
-    if (data.drillMins && typeof data.drillMins === 'object') window.drillMins = data.drillMins;
-    if (typeof window.renderSavedPlansList === 'function') window.renderSavedPlansList();
-    if (typeof window.renderNavSavedPlans === 'function') window.renderNavSavedPlans();
-    if (typeof window.renderPlanOverview === 'function') window.renderPlanOverview();
-    setStatus('☁ Synced', 'var(--green)');
-    setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
-  }, (err) => {
-    console.warn('Snapshot error:', err.message);
-    setStatus('⚠ Offline', 'var(--orange)');
-  });
+  // Plans werden in fbInitUserListeners geladen (nach Login, wenn currentUser bekannt)
 
   // Shared Plans live-listener
   onSnapshot(SHARED_PLANS_DOC, (snap) => {
@@ -1583,7 +1552,7 @@ signInAnonymously(auth).then(async () => {
           <div class="page-title">Drill-Bibliothek</div>
           <div class="page-subtitle">Alle Drills — filterbar, durchsuchbar, klickbar für Details</div>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="openDrillImportModal()" title="Drills per JSON importieren">📥 Import</button>
+        <button class="btn btn-ghost btn-sm" onclick="openExportPopup('bibliothek')">⬆↓ Export / Import</button>
           <button class="btn btn-primary btn-sm" onclick="openDrillEditModal(null)">+ Neuer Drill</button>
       </div>
 
@@ -1666,6 +1635,7 @@ signInAnonymously(auth).then(async () => {
           <button class="btn btn-ghost btn-sm" onclick="newPlanTemplate('mittwoch')" title="Training Wiesenstraße (nächster Mittwoch)">📋 Mi Wiesenstraße</button>
           <button class="btn btn-secondary" onclick="newPlan()">+ Leerer Plan</button>
           <button class="btn btn-ghost btn-sm" onclick="saveCurrentPlanAsTemplate()" title="Als Template speichern">📋 Tpl.</button>
+          <button class="btn btn-ghost btn-sm" onclick="openExportPopup('planung')">⬆↓ Export / Import</button>
           <button class="btn btn-ghost btn-sm" id="plan-lock-btn" onclick="togglePlanLock()" title="Plan sperren" style="padding:4px 8px;">
             <svg id="plan-lock-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2"/>
@@ -1707,37 +1677,19 @@ signInAnonymously(auth).then(async () => {
           </div>
         </div>
         <div class="plan-sidebar-panel">
-          <div class="panel">
-            <!-- Tab Bar -->
-            <div style="display:flex;border-bottom:1px solid var(--border);">
-              <button class="plans-lib-tab active" id="plt-mine" onclick="setPlansTab('mine')" style="flex:1;padding:8px 4px;font-size:11px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--text);cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text);">Meine Pläne <span id="saved-plans-count" style="font-size:9px;background:var(--tag-bg);padding:1px 4px;border-radius:8px;color:var(--tag-text);">0</span></button>
-              <button class="plans-lib-tab" id="plt-shared" onclick="setPlansTab('shared')" style="flex:1;padding:8px 4px;font-size:11px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);">Geteilt <span id="shared-plans-count" style="font-size:9px;background:var(--tag-bg);padding:1px 4px;border-radius:8px;color:var(--tag-text);">0</span></button>
-              <button class="plans-lib-tab" id="plt-tpl-mine" onclick="setPlansTab('tpl-mine')" style="flex:1;padding:8px 4px;font-size:11px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);">Meine Tpl.</button>
-              <button class="plans-lib-tab" id="plt-tpl-shared" onclick="setPlansTab('tpl-shared')" style="flex:1;padding:8px 4px;font-size:11px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);">Geteilte Tpl.</button>
-            </div>
-            <!-- Search + Sort (nur für Pläne) -->
-            <div id="plans-search-bar" style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;gap:6px;">
-              <input type="text" id="plans-search" class="filter-input" placeholder="Suchen …" oninput="renderPlansLibrary()" style="flex:1;min-width:0;">
-              <select class="filter-select" id="plans-sort" onchange="renderPlansLibrary()" style="min-width:90px;">
-                <option value="date-desc">Neueste</option>
-                <option value="date-asc">Älteste</option>
-                <option value="name-asc">A–Z</option>
-              </select>
-            </div>
-            <!-- New Template Button (nur für eigene Templates) -->
-            <div id="tpl-new-bar" style="display:none;padding:8px 10px;border-bottom:1px solid var(--border);">
-              <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="openTemplateModal(null)">+ Neues Template</button>
-            </div>
-            <div id="saved-plans-list"><div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">Noch keine Pläne gespeichert.</div></div>
-          </div>
-          <div class="panel">
-            <div class="panel-title">Export</div>
-            <div class="export-buttons">
-              <button class="export-btn" onclick="exportWordPro()"><span class="export-icon">📄</span> Word-Dokument (.htm)</button>
-              <button class="export-btn" onclick="exportWhatsApp()"><span class="export-icon">💬</span> WhatsApp-Text kopieren</button>
-              <button class="export-btn" onclick="exportPDF()"><span class="export-icon">🖨</span> Drucken / PDF</button>
-              <button class="export-btn" onclick="exportJSON()"><span class="export-icon">⚙️</span> JSON (Backup)</button>
-              <button class="export-btn" onclick="showPage('import-export')"><span class="export-icon">📋</span> Alle Pläne → Übersicht</button>
+
+          <div class="panel" id="sidebar-export-panel">
+            <div class="panel-title">Export / Import</div>
+            <div style="padding:8px 10px;display:flex;flex-direction:column;gap:3px;">
+              <div style="font-family:DM Mono,monospace;font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);padding:2px 0 4px;">Aktueller Plan</div>
+              <button class="export-btn sidebar-plan-btn" style="padding:7px 10px;font-size:12px;" onclick="exportWordPro()"><span class="export-icon">📄</span> Word exportieren</button>
+              <button class="export-btn sidebar-plan-btn" style="padding:7px 10px;font-size:12px;" onclick="exportPDF()"><span class="export-icon">🖨</span> Drucken / PDF</button>
+              <button class="export-btn sidebar-plan-btn" style="padding:7px 10px;font-size:12px;" onclick="exportJSON()"><span class="export-icon">⚙️</span> JSON exportieren</button>
+              <button class="export-btn sidebar-plan-btn" style="padding:7px 10px;font-size:12px;" onclick="exportPlanCSV()"><span class="export-icon">📊</span> CSV exportieren</button>
+              <button class="export-btn sidebar-plan-btn" style="padding:7px 10px;font-size:12px;" onclick="exportWhatsApp()"><span class="export-icon">💬</span> WhatsApp</button>
+              <div style="font-family:DM Mono,monospace;font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);padding:8px 0 4px;">Import</div>
+              <label class="export-btn" style="padding:7px 10px;font-size:12px;cursor:pointer;"><span class="export-icon">📂</span> JSON importieren<input type="file" accept=".json" onchange="importFromFile(event)" style="display:none;"></label>
+              <label class="export-btn" style="padding:7px 10px;font-size:12px;cursor:pointer;"><span class="export-icon">📂</span> CSV importieren<input type="file" accept=".csv" onchange="importPlansCSV(event)" style="display:none;"></label>
             </div>
           </div>
           <div class="panel">
@@ -1793,16 +1745,36 @@ signInAnonymously(auth).then(async () => {
     <div class="page" id="page-import-export">
       <div class="page-header">
         <div>
-          <div class="page-title">Pläne-Übersicht & Export</div>
-          <div class="page-subtitle">Alle gespeicherten Trainingspläne — filtern, drucken, exportieren</div>
+          <div class="page-title">Pläne-Übersicht</div>
+          <div class="page-subtitle">Bibliothek, Übersicht, Export & Import</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
-            📂 JSON importieren
-            <input type="file" accept=".json" onchange="importFromFile(event)" style="display:none;">
-          </label>
-          <button class="btn btn-secondary" onclick="exportAllPlansJSON()">⬇ Alle als JSON</button>
-          <button class="btn btn-primary" onclick="printFilteredPlans()">🖨 Gefilterte Pläne drucken</button>
+          <button class="btn btn-ghost btn-sm" onclick="openExportPopup('import-export')">⬆↓ Export / Import</button>
+          <button class="btn btn-primary" onclick="printFilteredPlans()">🖨 Drucken</button>
+        </div>
+      </div>
+
+      <!-- BIBLIOTHEK: 4-Tab Panel -->
+      <div class="panel" style="margin-bottom:20px;">
+        <div style="display:flex;border-bottom:1px solid var(--border);overflow-x:auto;">
+          <button class="plans-lib-tab active" id="plt-mine" onclick="setPlansTab('mine')" style="flex:1;min-width:80px;padding:10px 6px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--text);cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text);white-space:nowrap;">Meine Pläne <span id="saved-plans-count" style="font-size:9px;background:var(--tag-bg);padding:1px 4px;border-radius:8px;color:var(--tag-text);">0</span></button>
+          <button class="plans-lib-tab" id="plt-shared" onclick="setPlansTab('shared')" style="flex:1;min-width:80px;padding:10px 6px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);white-space:nowrap;">Geteilt <span id="shared-plans-count" style="font-size:9px;background:var(--tag-bg);padding:1px 4px;border-radius:8px;color:var(--tag-text);">0</span></button>
+          <button class="plans-lib-tab" id="plt-tpl-mine" onclick="setPlansTab('tpl-mine')" style="flex:1;min-width:80px;padding:10px 6px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);white-space:nowrap;">Meine Tpl.</button>
+          <button class="plans-lib-tab" id="plt-tpl-shared" onclick="setPlansTab('tpl-shared')" style="flex:1;min-width:80px;padding:10px 6px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);white-space:nowrap;">Geteilte Tpl.</button>
+        </div>
+        <div id="plans-search-bar" style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;gap:6px;">
+          <input type="text" id="plans-search" class="filter-input" placeholder="Suchen …" oninput="renderPlansLibrary()" style="flex:1;min-width:0;">
+          <select class="filter-select" id="plans-sort" onchange="renderPlansLibrary()" style="min-width:90px;">
+            <option value="date-desc">Neueste</option>
+            <option value="date-asc">Älteste</option>
+            <option value="name-asc">A–Z</option>
+          </select>
+        </div>
+        <div id="tpl-new-bar" style="display:none;padding:8px 12px;border-bottom:1px solid var(--border);">
+          <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="openTemplateModal(null)">+ Neues Template</button>
+        </div>
+        <div id="saved-plans-list" style="max-height:320px;overflow-y:auto;">
+          <div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">Lade Pläne …</div>
         </div>
       </div>
 
@@ -2644,6 +2616,16 @@ function removeConstraint(slotId, drillIdx, label, e) {
 
 // ============================================================
 let currentPlan = null;
+
+function updateSidebarExportState() {
+  const btns = document.querySelectorAll('.sidebar-plan-btn');
+  const active = !!currentPlan;
+  btns.forEach(b => {
+    b.disabled = !active;
+    b.style.opacity = active ? '' : '0.4';
+    b.style.pointerEvents = active ? '' : 'none';
+  });
+}
 let savedPlans = [];
 window.myTemplates = [];
 window.sharedPlans = [];
@@ -2719,7 +2701,7 @@ function showPage(page) {
   if (main) main.scrollTop = 0;
   if (page === 'planung') renderPlansLibrary();
   if (page === 'tracking') renderTracking();
-  if (page === 'import-export') renderPlanOverview();
+  if (page === 'import-export') { renderPlanOverview(); renderPlansLibrary(); }
 }
 
 // ============================================================
@@ -3364,6 +3346,8 @@ function newPlan() {
     theme: '',
     notes: '',
     totalTime: 90,
+    scope: 'personal',
+    createdBy: window.currentUser || '',
     slots: [
       { id: 's1', label: 'Warmup', phase: 'warmup', durationMin: 20, drills: [], fixed: true },
       { id: 's2', label: 'Stretching', phase: 'warmup', durationMin: 10, drills: [], fixed: true, noEdit: true },
@@ -3379,6 +3363,7 @@ function newPlan() {
   renderSlots();
   updateTimeSummary();
   updatePlanDisplayHeader();
+  updateSidebarExportState();
 }
 
 function updatePlanMeta() {
@@ -3488,6 +3473,7 @@ function loadPlan(planId) {
   updateTimeSummary();
   updatePlanDisplayHeader();
   showPage('planung');
+  updateSidebarExportState();
 }
 
 // ---- Plan teilen
@@ -3714,7 +3700,7 @@ function deletePlan(planId, e) {
 
   const doDelete = () => {
     savedPlans = savedPlans.filter(p => p.id !== planId);
-    if (currentPlan && currentPlan.id === planId) currentPlan = null;
+    if (currentPlan && currentPlan.id === planId) { currentPlan = null; updateSidebarExportState(); }
     saveToStorage();
     renderSavedPlansList();
     renderNavSavedPlans();
@@ -4395,6 +4381,109 @@ function exportJSON() {
   toast(currentLang==='en'?'⚙️ JSON exported':'⚙️ JSON exportiert');
 }
 
+function exportPlanCSV() {
+  if (!currentPlan) return;
+  const rows = [['Slot','Drill','Minuten','Kategorie','Spieler','Constraints']];
+  (currentPlan.slots || []).forEach(slot => {
+    (slot.drills || []).forEach(sd => {
+      const drill = (window.DRILLS || []).find(d => d.id === sd.drillId) || {};
+      rows.push([
+        slot.label || '',
+        drill.name || sd.drillId || '',
+        sd.durationMin || '',
+        drill.kategorie || '',
+        drill.spieler || '',
+        (sd.constraints || []).join('; ')
+      ]);
+    });
+  });
+  const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
+  downloadText(csv, sanitizeFilename(currentPlan.name || 'plan') + '.csv');
+  toast('CSV exportiert');
+}
+
+function exportAllPlansWord() {
+  const plans = typeof getFilteredOverviewPlans === 'function' ? getFilteredOverviewPlans() : savedPlans;
+  if (!plans.length) { toast('Keine Pläne'); return; }
+  const parts = plans.map(p => buildWordHTMLPro(p));
+  // Kombiniere alle Pläne in ein Dokument mit Seitenumbruch
+  const combined = parts.join('<div style="page-break-after:always;"></div>');
+  // Wrap in vollständiges HTML-Dokument
+  const fullHtml = parts[0].replace(/<body[^>]*>[\s\S]*<\/body>/, `<body>${combined}</body>`);
+  downloadText(fullHtml, 'wiesel2_alle_plaene.htm');
+  toast('📄 Word exportiert');
+}
+
+function exportAllPlansCSV() {
+  const rows = [['Plan','Datum','Thema','Slot','Drill','Minuten','Kategorie','Constraints']];
+  savedPlans.forEach(plan => {
+    (plan.slots || []).forEach(slot => {
+      (slot.drills || []).forEach(sd => {
+        const drill = (window.DRILLS || []).find(d => d.id === sd.drillId) || {};
+        rows.push([
+          plan.name || '',
+          plan.date || '',
+          plan.theme || '',
+          slot.label || '',
+          drill.name || sd.drillId || '',
+          sd.durationMin || '',
+          drill.kategorie || '',
+          (sd.constraints || []).join('; ')
+        ]);
+      });
+    });
+  });
+  const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
+  downloadText(csv, 'wiesel2_alle_plaene.csv');
+  toast('CSV exportiert');
+}
+
+function exportMyDrillsCSV() {
+  const myDrills = (window.DRILLS || []).filter(d => d.createdBy === window.currentUser);
+  const rows = [['ID','Name','Kategorie','Spieler','Dauer','Schwierigkeit','Beschreibung']];
+  myDrills.forEach(d => {
+    rows.push([d.id||'', d.name||'', d.kategorie||'', d.spieler||'', d.dauer||'', d.schwierigkeit||'', (d.beschreibung||'').replace(/\n/g,' ')]);
+  });
+  const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
+  downloadText(csv, 'wiesel2_meine_drills.csv');
+  toast('Drills CSV exportiert');
+}
+
+function exportMyDrillsJSON() {
+  const myDrills = (window.DRILLS || []).filter(d => d.createdBy === window.currentUser);
+  downloadText(JSON.stringify(myDrills, null, 2), 'wiesel2_meine_drills.json');
+  toast('Drills JSON exportiert');
+}
+
+function importPlansCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const lines = e.target.result.split('\n').filter(l => l.trim());
+      const header = lines[0].split(',').map(c => c.replace(/^"|"$/g,'').trim());
+      const nameIdx = header.indexOf('Plan'), dateIdx = header.indexOf('Datum');
+      if (nameIdx < 0) { toast('⚠ CSV: Spalte "Plan" fehlt'); return; }
+      const planMap = {};
+      lines.slice(1).forEach(line => {
+        const cols = line.match(/("(?:[^"]|"")*"|[^,]*)/g).map(c => c.replace(/^"|"$/g,'').replace(/""/g,'"'));
+        const name = cols[nameIdx] || 'Importiert';
+        const date = cols[dateIdx] || '';
+        if (!planMap[name]) {
+          planMap[name] = { id: 'plan_' + Date.now() + '_' + Math.random().toString(36).slice(2,6), name, date, slots: [{ id: 's1', label: 'Importiert', drills: [] }], theme: '', notes: '' };
+        }
+      });
+      const plans = Object.values(planMap);
+      plans.forEach(p => { if (!savedPlans.find(x => x.id === p.id)) savedPlans.unshift(p); });
+      saveToStorage();
+      renderSavedPlansList();
+      toast('✓ ' + plans.length + ' Plan(e) aus CSV importiert');
+    } catch(err) { toast('⚠ CSV Fehler: ' + err.message); }
+  };
+  reader.readAsText(file);
+}
+
 function exportAllPlansJSON() {
   const json = JSON.stringify(savedPlans, null, 2);
   downloadText(json, 'wiesel2_alle_plaene.json');
@@ -4698,6 +4787,90 @@ function renderSharedTemplatesList() {
   }).join('');
 }
 
+// ============================================================
+// EXPORT / IMPORT POPUP
+// ============================================================
+function openExportPopup(context) {
+  const existing = document.getElementById('export-popup-overlay');
+  if (existing) existing.remove();
+
+  const hasPlan = !!currentPlan;
+  const dis = (ok) => ok ? '' : 'disabled style="opacity:.4;pointer-events:none;"';
+  const sep = (label) => `<div style="font-family:DM Mono,monospace;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-subtle);padding:10px 0 5px;">${label}</div>`;
+
+  let items = '';
+
+  if (context === 'planung') {
+    const planLabel = hasPlan ? ` — ${currentPlan.name || currentPlan.date || ''}` : '';
+    items += sep('Aktueller Plan' + planLabel);
+    items += `<button class="export-btn" onclick="exportWordPro();closeExportPopup()" ${dis(hasPlan)}><span class="export-icon">📄</span> Word exportieren</button>`;
+    items += `<button class="export-btn" onclick="exportPDF();closeExportPopup()" ${dis(hasPlan)}><span class="export-icon">🖨</span> Drucken / PDF</button>`;
+    items += `<button class="export-btn" onclick="exportJSON();closeExportPopup()" ${dis(hasPlan)}><span class="export-icon">⚙️</span> JSON exportieren</button>`;
+    items += `<button class="export-btn" onclick="exportPlanCSV();closeExportPopup()" ${dis(hasPlan)}><span class="export-icon">📊</span> CSV exportieren</button>`;
+    items += `<button class="export-btn" onclick="exportWhatsApp();closeExportPopup()" ${dis(hasPlan)}><span class="export-icon">💬</span> WhatsApp</button>`;
+    items += sep('Import');
+    items += `<label class="export-btn" style="cursor:pointer;"><span class="export-icon">📂</span> JSON importieren<input type="file" accept=".json" onchange="importFromFile(event);closeExportPopup()" style="display:none;"></label>`;
+    items += `<label class="export-btn" style="cursor:pointer;"><span class="export-icon">📂</span> CSV importieren<input type="file" accept=".csv" onchange="importPlansCSV(event);closeExportPopup()" style="display:none;"></label>`;
+  }
+
+  if (context === 'import-export') {
+    items += sep('Gefilterte Pläne');
+    items += `<button class="export-btn" onclick="exportAllPlansWord();closeExportPopup()"><span class="export-icon">📄</span> Word exportieren</button>`;
+    items += `<button class="export-btn" onclick="printFilteredPlans();closeExportPopup()"><span class="export-icon">🖨</span> Drucken / PDF</button>`;
+    items += `<button class="export-btn" onclick="exportAllPlansJSON();closeExportPopup()"><span class="export-icon">⚙️</span> JSON exportieren</button>`;
+    items += `<button class="export-btn" onclick="exportAllPlansCSV();closeExportPopup()"><span class="export-icon">📊</span> CSV exportieren</button>`;
+    items += sep('Import');
+    items += `<label class="export-btn" style="cursor:pointer;"><span class="export-icon">📂</span> JSON importieren<input type="file" accept=".json" onchange="importFromFile(event);closeExportPopup()" style="display:none;"></label>`;
+    items += `<label class="export-btn" style="cursor:pointer;"><span class="export-icon">📂</span> CSV importieren<input type="file" accept=".csv" onchange="importPlansCSV(event);closeExportPopup()" style="display:none;"></label>`;
+  }
+
+  if (context === 'bibliothek') {
+    items += sep('Meine Drills');
+    items += `<button class="export-btn" onclick="exportMyDrillsJSON();closeExportPopup()"><span class="export-icon">⚙️</span> JSON exportieren</button>`;
+    items += `<button class="export-btn" onclick="exportMyDrillsCSV();closeExportPopup()"><span class="export-icon">📊</span> CSV exportieren</button>`;
+    items += sep('Import');
+    items += `<button class="export-btn" onclick="openDrillImportModal();closeExportPopup()"><span class="export-icon">📥</span> Drills importieren (JSON/CSV)</button>`;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'export-popup-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:9998;display:flex;align-items:flex-end;justify-content:center;';
+  overlay.onclick = (e) => { if (e.target === overlay) closeExportPopup(); };
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-width:480px;box-shadow:0 -4px 24px rgba(0,0,0,0.15);font-family:DM Sans,sans-serif;overflow-y:auto;max-height:80vh;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:14px;font-weight:700;color:var(--text);">Export / Import</div>
+        <button onclick="closeExportPopup()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-subtle);line-height:1;">×</button>
+      </div>
+      <div class="export-buttons" style="padding:0;gap:6px;">${items}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function closeExportPopup() {
+  const el = document.getElementById('export-popup-overlay');
+  if (el) el.remove();
+}
+
+function duplicatePlan(planId, e) {
+  if (e) e.stopPropagation();
+  const plan = savedPlans.find(p => p.id === planId);
+  if (!plan) return;
+  const copy = JSON.parse(JSON.stringify(plan));
+  copy.id = 'plan_' + Date.now();
+  copy.name = (copy.name || '') + (currentLang === 'en' ? ' (Copy)' : ' (Kopie)');
+  copy.scope = 'personal';
+  copy.locked = false;
+  copy.createdBy = window.currentUser;
+  copy.createdAt = new Date().toISOString();
+  copy.updatedAt = new Date().toISOString();
+  savedPlans.unshift(copy);
+  saveToStorage();
+  fbSavePlans && fbSavePlans();
+  renderSavedPlansList();
+  toast(currentLang === 'en' ? '📋 Plan duplicated' : '📋 Plan dupliziert');
+}
+
 function renderSavedPlansList() {
   const container = document.getElementById('saved-plans-list');
   document.getElementById('saved-plans-count').textContent = savedPlans.length;
@@ -4737,6 +4910,7 @@ function renderSavedPlansList() {
         <div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);margin-top:2px;">${drillCount} Drills · ${totalMins} min</div>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button class="btn btn-ghost btn-sm" onclick="duplicatePlan('${p.id}',event)" title="${currentLang==='en'?'Duplicate':'Duplizieren'}" style="font-size:11px;">⧉</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleSharePlan('${p.id}')" title="${p.scope==='team'?(currentLang==='en'?'Unshare':'Zurückziehen'):(currentLang==='en'?'Share':'Teilen')}" style="font-size:11px;">${'scope' in p && p.scope === 'team' ? '🌐' : '🔗'}</button>
         <button class="btn btn-danger btn-sm" onclick="deletePlan('${p.id}',event)">✕</button>
       </div>
@@ -5671,6 +5845,8 @@ window.currentUser = currentUser; // expose to module scope
 updateUserBadge();
 if (currentUser) {
   if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(currentUser);
+  if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
+  setTimeout(seedDefaultTemplates, 1500);
 } else {
   setTimeout(() => openUserModal(true), 100);
 }
@@ -5712,7 +5888,7 @@ window.renderPlanOverview   = renderPlanOverview;
       ">Trotzdem fortfahren</button>
       <hr class="user-modal-divider">
       <input type="text" id="user-modal-input" oninput="document.getElementById('user-modal-exists-warn').style.display='none';document.getElementById('user-modal-continue-btn').style.display='none';" class="form-input"
-        placeholder="z.B. david, moritz, jeff …"
+        placeholder="z.B. günther, hannelore, udo …"
         maxlength="20"
         style="font-size:16px;"
         onkeydown="if(event.key==='Enter')saveUserKuerzel()">
