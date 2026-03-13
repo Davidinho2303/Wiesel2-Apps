@@ -6771,20 +6771,33 @@ function kiSetMode(mode) {
   tabImg.style.color = mode === 'image' ? 'var(--text)' : 'var(--text-subtle)';
 }
 
-function kiImageChosen(input) {
+async function kiImageChosen(input) {
   const file = input.files[0];
   if (!file) return;
   kiImageMime = file.type || 'image/jpeg';
-  const reader = new FileReader();
-  reader.onload = e => {
-    kiImageBase64 = e.target.result.split(',')[1];
+  const status = document.getElementById('ki-status');
+  status.textContent = '⏳ Bild laden…';
+  try {
+    // Use arrayBuffer — more reliable on iOS PWA than FileReader.readAsDataURL
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    kiImageBase64 = btoa(binary);
+    const objectUrl = URL.createObjectURL(file);
     const preview = document.getElementById('ki-image-preview');
     const img = document.getElementById('ki-image-preview-img');
-    img.src = e.target.result;
+    img.src = objectUrl;
     preview.style.display = 'block';
     document.getElementById('ki-image-dropzone').style.display = 'none';
-  };
-  reader.readAsDataURL(file);
+    status.textContent = '';
+  } catch(e) {
+    status.textContent = '⚠ Bild konnte nicht geladen werden';
+    console.error('kiImageChosen error:', e);
+  }
 }
 
 function kiClearImage() {
