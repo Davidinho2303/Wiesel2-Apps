@@ -1299,6 +1299,18 @@ window.fbInitUserListeners = (kuerzel) => {
   }, err => console.warn('Personal drills snapshot error:', err.message));
   window._userListenerUnsubs.push(unsub2);
 
+  // Load templates immediately
+  getDocFromServer(getTemplatesDoc()).then(snap => {
+    if (snap.exists()) {
+      const t = snap.data().templates || [];
+      if (t.length > 0) {
+        window.myTemplates = t;
+        window._templatesLoadedFromFirestore = true;
+        try { renderPlansLibrary(); } catch(e) {}
+      }
+    }
+  }).catch(e => console.warn('Templates init load:', e.message));
+
   // Load plans immediately
   loadDrillsFromFirestore();
   getDocFromServer(getPlansDoc()).then(snap => {
