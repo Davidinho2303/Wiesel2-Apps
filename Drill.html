@@ -3139,18 +3139,15 @@ function dePreviewVideo() {
   } else { preview.style.display = 'none'; }
 }
 
-function deBildFileChosen(input) {
+async function deBildFileChosen(input) {
   const file = input.files[0];
   if (!file) return;
   document.getElementById('de-bild-filename').textContent = file.name;
   document.getElementById('de-bild').value = '';
-  // Local preview
-  const reader = new FileReader();
-  reader.onload = e => {
-    document.getElementById('de-bild-img').src = e.target.result;
-    document.getElementById('de-bild-preview').style.display = 'block';
-  };
-  reader.readAsDataURL(file);
+  // Use createObjectURL — works reliably on iOS PWA for preview
+  const url = URL.createObjectURL(file);
+  document.getElementById('de-bild-img').src = url;
+  document.getElementById('de-bild-preview').style.display = 'block';
 }
 
 function deVideoFileChosen(input) {
@@ -4681,8 +4678,27 @@ function importFromFile(event) {
 // ============================================================
 // UTILS
 // ============================================================
+function isIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
 function downloadText(content, filename) {
-  // Zuverlässigster Weg: text/plain MIME + data-URI Fallback
+  if (isIOS()) {
+    // iOS: open in new tab, user can share/save from there
+    const isHTML = filename.endsWith('.htm') || filename.endsWith('.html');
+    const mime = isHTML ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank');
+    if (!w) {
+      // PWA blocks window.open — show copy fallback
+      showTextFallback(content, filename);
+    } else {
+      toast('📱 Seite öffnet — Teilen → "In Dateien" zum Speichern');
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
+    return;
+  }
   try {
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -4694,7 +4710,6 @@ function downloadText(content, filename) {
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   } catch(e) {
-    // Fallback: data-URI
     const uri = 'data:text/plain;charset=utf-8,' + encodeURIComponent(content);
     const a = document.createElement('a');
     a.href = uri;
@@ -4703,6 +4718,19 @@ function downloadText(content, filename) {
     a.click();
     document.body.removeChild(a);
   }
+}
+
+function showTextFallback(content, filename) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:560px;max-height:75vh;display:flex;flex-direction:column;gap:10px;">
+      <div style="font-weight:600;font-size:14px;">📄 ${filename} — Inhalt kopieren</div>
+      <textarea readonly style="flex:1;min-height:180px;font-family:monospace;font-size:11px;padding:10px;border:1px solid #ddd;border-radius:8px;resize:none;">${content.replace(/</g,'&lt;')}</textarea>
+      <button onclick="this.closest('div').parentElement.remove()" style="padding:12px;background:#1a1916;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Schließen</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('textarea').select();
 }
 
 function downloadFile(blob, filename) {
@@ -4831,6 +4859,18 @@ function printFilteredPlans() {
 }
 
 function openPrintBlob(html) {
+  if (isIOS()) {
+    // iOS PWA: inject into new tab via data URI (blob URLs blocked in PWA)
+    const encoded = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+    const w = window.open(encoded, '_blank');
+    if (!w) {
+      // Still blocked — render inline in overlay with print button
+      showPrintOverlay(html);
+    } else {
+      toast('📱 Seite öffnet — Teilen → Drucken');
+    }
+    return;
+  }
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -4840,7 +4880,20 @@ function openPrintBlob(html) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 15000);
-  toast(currentLang==='en'?'🖨 Ctrl+P to print / Save as PDF':'🖨 Strg+P zum Drucken / Als PDF speichern');
+  toast(currentLang='en'?'🖨 Ctrl+P to print / Save as PDF':'🖨 Strg+P zum Drucken / Als PDF speichern');
+}
+
+function showPrintOverlay(html) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:9999;display:flex;flex-direction:column;';
+  overlay.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #eee;background:#fff;">
+      <button onclick="this.closest('[style]').remove()" style="padding:8px 14px;background:#1a1916;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;">✕ Schließen</button>
+      <span style="font-size:12px;color:#666;">📱 Teilen-Button → Drucken zum Speichern als PDF</span>
+    </div>
+    <iframe srcdoc="" style="flex:1;border:none;width:100%;"></iframe>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('iframe').srcdoc = html;
 }
 
 // ============================================================
