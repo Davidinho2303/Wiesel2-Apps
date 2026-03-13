@@ -1587,6 +1587,7 @@ signInAnonymously(auth).then(async () => {
           <div class="page-subtitle">Alle Drills — filterbar, durchsuchbar, klickbar für Details</div>
         </div>
         <button class="btn btn-ghost btn-sm" onclick="openExportPopup('bibliothek')">⬆↓ Export / Import</button>
+          <button class="btn btn-ghost btn-sm" onclick="openKiImportModal()">🤖 KI-Import</button>
           <button class="btn btn-primary btn-sm" onclick="openDrillEditModal(null)">+ Neuer Drill</button>
       </div>
 
@@ -2004,6 +2005,66 @@ signInAnonymously(auth).then(async () => {
 </div>
 
 <!-- DRILL ERSTELLEN / BEARBEITEN MODAL -->
+
+<!-- KI DRILL IMPORT MODAL -->
+<div class="modal-overlay hidden" id="ki-import-modal" onclick="if(event.target===this)closeKiImportModal()">
+  <div class="modal" style="max-width:700px;max-height:90vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <div class="modal-title">🤖 KI Drill-Erkennung</div>
+      <button class="modal-close" onclick="closeKiImportModal()">×</button>
+    </div>
+    <div style="padding:16px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px;">
+      <!-- INPUT -->
+      <div id="ki-input-section">
+        <!-- Mode Tabs -->
+        <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:12px;">
+          <button id="ki-tab-text" onclick="kiSetMode('text')" style="padding:7px 16px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--text);cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text);">✏️ Text</button>
+          <button id="ki-tab-image" onclick="kiSetMode('image')" style="padding:7px 16px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);">📷 Bild</button>
+        </div>
+        <!-- Text Mode -->
+        <div id="ki-mode-text">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Beschreibe einen oder mehrere Drills frei formuliert.</div>
+          <textarea id="ki-input-text" class="form-input" rows="6" style="resize:vertical;font-family:DM Sans,sans-serif;font-size:13px;" placeholder="z.B.:&#10;Shell Drill: 4-on-4 Defense Positioning, Halbfeld, 8 Spieler, Defense live, kompetitiv&#10;&#10;Leiter Dribbling — Warmup, 1 Spieler, Ballhandling, niedrige Intensität"></textarea>
+        </div>
+        <!-- Image Mode -->
+        <div id="ki-mode-image" style="display:none;">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Foto von Whiteboard, Drill-Sheet oder handgeschriebenem Zettel — Claude liest die Drills aus.</div>
+          <label id="ki-image-dropzone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed var(--border);border-radius:var(--radius);padding:28px;cursor:pointer;background:var(--surface2);transition:border-color 0.15s;" onclick="document.getElementById('ki-image-file').click()">
+            <span style="font-size:28px;">📷</span>
+            <span style="font-size:13px;color:var(--text-subtle);">Bild wählen oder hierher ziehen</span>
+            <span style="font-size:11px;color:var(--text-subtle);">JPG, PNG, WEBP</span>
+            <input type="file" id="ki-image-file" accept="image/*" style="display:none;" onchange="kiImageChosen(this)">
+          </label>
+          <div id="ki-image-preview" style="display:none;margin-top:10px;position:relative;">
+            <img id="ki-image-preview-img" style="max-width:100%;max-height:220px;border-radius:var(--radius);object-fit:contain;border:1px solid var(--border);">
+            <button onclick="kiClearImage()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;">×</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+          <button class="btn btn-primary" id="ki-analyze-btn" onclick="runKiAnalysis()">🤖 Analysieren</button>
+          <span id="ki-status" style="font-size:12px;color:var(--text-muted);"></span>
+        </div>
+      </div>
+      <!-- RESULTS -->
+      <div id="ki-results-section" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="font-family:DM Mono,monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-subtle);">Erkannte Drills — prüfen & anpassen</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="kiSelectAll(true)">Alle</button>
+            <button class="btn btn-ghost btn-sm" onclick="kiSelectAll(false)">Keine</button>
+          </div>
+        </div>
+        <div id="ki-drill-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+        <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;align-items:center;">
+          <span id="ki-save-status" style="font-size:12px;color:var(--text-muted);"></span>
+          <button class="btn btn-ghost btn-sm" onclick="kiBackToInput()">← Zurück</button>
+          <button class="btn btn-primary" onclick="kiSaveSelected()">💾 Ausgewählte speichern</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="drill-edit-modal" onclick="if(event.target===this)closeDrillEditModal()">
   <div class="modal" style="max-width:640px;">
     <div class="modal-header">
@@ -6677,6 +6738,278 @@ if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
   setTimeout(() => { const el2 = document.getElementById('sync-status'); if (el2) { el2.textContent = '☁ Cloud'; el2.style.color = 'var(--text-subtle)'; }}, 2000);
   console.log('[APP] pending plans applied:', plans.length);
 }
+
+// ============================================================
+// KI DRILL IMPORT
+// ============================================================
+let kiDrillCandidates = [];
+let kiImageBase64 = null;
+let kiImageMime = 'image/jpeg';
+let kiMode = 'text';
+
+function openKiImportModal() {
+  document.getElementById('ki-import-modal').classList.remove('hidden');
+  document.getElementById('ki-input-section').style.display = 'block';
+  document.getElementById('ki-results-section').style.display = 'none';
+  document.getElementById('ki-input-text').value = '';
+  document.getElementById('ki-status').textContent = '';
+  kiDrillCandidates = [];
+  kiImageBase64 = null;
+  kiMode = 'text';
+  kiSetMode('text');
+}
+
+function kiSetMode(mode) {
+  kiMode = mode;
+  document.getElementById('ki-mode-text').style.display = mode === 'text' ? 'block' : 'none';
+  document.getElementById('ki-mode-image').style.display = mode === 'image' ? 'block' : 'none';
+  const tabText = document.getElementById('ki-tab-text');
+  const tabImg = document.getElementById('ki-tab-image');
+  tabText.style.borderBottomColor = mode === 'text' ? 'var(--text)' : 'transparent';
+  tabText.style.color = mode === 'text' ? 'var(--text)' : 'var(--text-subtle)';
+  tabImg.style.borderBottomColor = mode === 'image' ? 'var(--text)' : 'transparent';
+  tabImg.style.color = mode === 'image' ? 'var(--text)' : 'var(--text-subtle)';
+}
+
+function kiImageChosen(input) {
+  const file = input.files[0];
+  if (!file) return;
+  kiImageMime = file.type || 'image/jpeg';
+  const reader = new FileReader();
+  reader.onload = e => {
+    kiImageBase64 = e.target.result.split(',')[1];
+    const preview = document.getElementById('ki-image-preview');
+    const img = document.getElementById('ki-image-preview-img');
+    img.src = e.target.result;
+    preview.style.display = 'block';
+    document.getElementById('ki-image-dropzone').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function kiClearImage() {
+  kiImageBase64 = null;
+  document.getElementById('ki-image-preview').style.display = 'none';
+  document.getElementById('ki-image-dropzone').style.display = 'flex';
+  document.getElementById('ki-image-file').value = '';
+}
+
+function closeKiImportModal() {
+  document.getElementById('ki-import-modal').classList.add('hidden');
+}
+
+function kiBackToInput() {
+  document.getElementById('ki-results-section').style.display = 'none';
+  document.getElementById('ki-input-section').style.display = 'block';
+}
+
+function kiSelectAll(val) {
+  document.querySelectorAll('.ki-drill-check').forEach(cb => cb.checked = val);
+}
+
+async function runKiAnalysis() {
+  const btn = document.getElementById('ki-analyze-btn');
+  const status = document.getElementById('ki-status');
+
+  if (kiMode === 'text') {
+    const text = document.getElementById('ki-input-text').value.trim();
+    if (!text) return;
+  } else {
+    if (!kiImageBase64) { status.textContent = '⚠ Kein Bild gewählt'; return; }
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Analysiere…';
+  status.textContent = '';
+
+  const schema = `Extrahiere alle Basketball-Drills aus dem Input. Gib ein JSON-Array zurück (nur JSON, kein Markdown, keine Erklärung).
+Jedes Objekt hat diese Felder:
+- name: string (Pflicht)
+- kat: einer von: Passing | Ballhandling | Shooting | Transition | Defense | Rebounding | Offense | Post | Kondition | Plays
+- intensity: niedrig | mittel | hoch
+- phase: Array, Werte aus: Warmup | Hauptteil
+- spielphase: Array, Werte aus: Technik | SO | OT | DT | SD
+- minSpieler: number
+- feld: Halbfeld | Ganzfeld
+- bälle: string (z.B. "1", "2+", "variabel")
+- material: string (z.B. "keine", "Hütchen")
+- defense: nein | ja (live) | ja (eingeschränkt) | eingeschränkt | optional
+- competitive: nein | ja | optional
+- gamelike: boolean
+- abschluss: boolean
+- beschreibung: string (kurze Zusammenfassung des Drills, auf Deutsch)
+- variationen: string (leer wenn keine genannt)
+- coachingPunkte: string (leer wenn keine genannt)
+
+Wenn ein Wert unklar ist, wähle den sinnvollsten Default. Mehrere Drills = mehrere Objekte im Array.`;
+
+  const userContent = kiMode === 'image'
+    ? [
+        { type: 'image', source: { type: 'base64', media_type: kiImageMime, data: kiImageBase64 } },
+        { type: 'text', text: 'Extrahiere alle Basketball-Drills aus diesem Bild als JSON-Array.' }
+      ]
+    : document.getElementById('ki-input-text').value.trim();
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        system: schema,
+        messages: [{ role: 'user', content: userContent }]
+      })
+    });
+    const data = await resp.json();
+    const raw = (data.content || []).map(b => b.text || '').join('');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    let drills;
+    try { drills = JSON.parse(clean); } catch(e) {
+      status.textContent = '⚠ Parsing-Fehler — bitte Text präzisieren';
+      btn.disabled = false; btn.textContent = '🤖 Analysieren';
+      return;
+    }
+    if (!Array.isArray(drills) || drills.length === 0) {
+      status.textContent = '⚠ Keine Drills erkannt';
+      btn.disabled = false; btn.textContent = '🤖 Analysieren';
+      return;
+    }
+    kiDrillCandidates = drills.map((d, i) => ({ ...d, _id: 'ki_' + Date.now() + '_' + i, _selected: true }));
+    renderKiResults();
+    document.getElementById('ki-input-section').style.display = 'none';
+    document.getElementById('ki-results-section').style.display = 'block';
+  } catch(e) {
+    status.textContent = '⚠ API-Fehler: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = '🤖 Analysieren';
+}
+
+function renderKiResults() {
+  const list = document.getElementById('ki-drill-list');
+  const SPIELPHASEN = ['Technik','SO','OT','DT','SD'];
+  list.innerHTML = kiDrillCandidates.map((d, idx) => `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px;display:flex;gap:10px;">
+      <input type="checkbox" class="ki-drill-check" data-idx="${idx}" ${d._selected?'checked':''} style="margin-top:3px;flex-shrink:0;" onchange="kiDrillCandidates[${idx}]._selected=this.checked">
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label" style="font-size:10px;">Name *</label>
+            <input type="text" class="form-input" style="font-size:13px;font-weight:600;" value="${(d.name||'').replace(/"/g,'&quot;')}" oninput="kiDrillCandidates[${idx}].name=this.value">
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size:10px;">Kategorie</label>
+            <select class="form-select" style="font-size:12px;" onchange="kiDrillCandidates[${idx}].kat=this.value">
+              ${['Passing','Ballhandling','Shooting','Transition','Defense','Rebounding','Offense','Post','Kondition','Plays'].map(k=>`<option ${d.kat===k?'selected':''}>${k}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size:10px;">Intensität</label>
+            <select class="form-select" style="font-size:12px;" onchange="kiDrillCandidates[${idx}].intensity=this.value">
+              ${['niedrig','mittel','hoch'].map(v=>`<option ${d.intensity===v?'selected':''}>${v}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size:10px;">Phase</label>
+            <div style="display:flex;gap:8px;padding-top:4px;">
+              <label style="font-size:12px;display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" ${(d.phase||[]).includes('Warmup')?'checked':''} onchange="kiToggleArr(${idx},'phase','Warmup',this.checked)"> Warmup</label>
+              <label style="font-size:12px;display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" ${(d.phase||[]).includes('Hauptteil')?'checked':''} onchange="kiToggleArr(${idx},'phase','Hauptteil',this.checked)"> Hauptteil</label>
+            </div>
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label" style="font-size:10px;">Spielphase</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:2px;">
+              ${SPIELPHASEN.map(sp=>`<label style="font-size:11px;display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" ${(d.spielphase||[]).includes(sp)?'checked':''} onchange="kiToggleArr(${idx},'spielphase','${sp}',this.checked)"> ${sp}</label>`).join('')}
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size:10px;">Min. Spieler</label>
+            <input type="number" class="form-input" style="font-size:12px;" value="${d.minSpieler||4}" min="1" max="20" oninput="kiDrillCandidates[${idx}].minSpieler=parseInt(this.value)||4">
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size:10px;">Feld</label>
+            <select class="form-select" style="font-size:12px;" onchange="kiDrillCandidates[${idx}].feld=this.value">
+              <option ${d.feld==='Halbfeld'?'selected':''}>Halbfeld</option>
+              <option ${d.feld==='Ganzfeld'?'selected':''}>Ganzfeld</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size:10px;">Defense</label>
+            <select class="form-select" style="font-size:12px;" onchange="kiDrillCandidates[${idx}].defense=this.value">
+              ${['nein','ja (live)','ja (eingeschränkt)','eingeschränkt','optional'].map(v=>`<option ${d.defense===v?'selected':''}>${v}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size:10px;">Competitive</label>
+            <select class="form-select" style="font-size:12px;" onchange="kiDrillCandidates[${idx}].competitive=this.value">
+              ${['nein','ja','optional'].map(v=>`<option ${d.competitive===v?'selected':''}>${v}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:1/-1;display:flex;gap:16px;padding-top:2px;">
+            <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" ${d.gamelike?'checked':''} onchange="kiDrillCandidates[${idx}].gamelike=this.checked"> Gamelike</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" ${d.abschluss?'checked':''} onchange="kiDrillCandidates[${idx}].abschluss=this.checked"> Abschluss</label>
+          </div>
+          ${d.beschreibung ? `<div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label" style="font-size:10px;">Beschreibung</label>
+            <textarea class="form-input" rows="2" style="font-size:12px;resize:vertical;" oninput="kiDrillCandidates[${idx}].beschreibung=this.value">${d.beschreibung||''}</textarea>
+          </div>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function kiToggleArr(idx, field, val, checked) {
+  const arr = kiDrillCandidates[idx][field] || [];
+  if (checked) { if (!arr.includes(val)) arr.push(val); }
+  else { const i = arr.indexOf(val); if (i > -1) arr.splice(i, 1); }
+  kiDrillCandidates[idx][field] = arr;
+}
+
+async function kiSaveSelected() {
+  const selected = kiDrillCandidates.filter(d => d._selected && d.name);
+  if (selected.length === 0) { toast('Keine Drills ausgewählt'); return; }
+  const status = document.getElementById('ki-save-status');
+  status.textContent = `Speichere ${selected.length} Drill(s)…`;
+  let saved = 0;
+  for (const d of selected) {
+    const drill = {
+      id: 'drill_ki_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+      name: d.name,
+      kat: d.kat || 'Passing',
+      intensity: d.intensity || 'mittel',
+      phase: d.phase || [],
+      spielphase: d.spielphase || [],
+      minSpieler: d.minSpieler || 4,
+      feld: d.feld || 'Halbfeld',
+      bälle: d.bälle || '1',
+      material: d.material || 'keine',
+      defense: d.defense || 'nein',
+      competitive: d.competitive || 'nein',
+      gamelike: !!d.gamelike,
+      abschluss: !!d.abschluss,
+      beschreibung: d.beschreibung || '',
+      variationen: d.variationen || '',
+      coachingPunkte: d.coachingPunkte || '',
+      note: d.note || '',
+      scope: 'team',
+      createdBy: currentUser || 'david',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    window.DRILLS = [...(window.DRILLS || []), drill];
+    if (typeof window.fbSaveDrill === 'function') await window.fbSaveDrill(drill);
+    saved++;
+  }
+  applyBibFilters();
+  status.textContent = `✓ ${saved} Drill(s) gespeichert`;
+  setTimeout(() => {
+    closeKiImportModal();
+    toast(`✓ ${saved} Drill(s) importiert`);
+  }, 800);
+}
+
 
 // Expose functions for module script (Firebase onSnapshot)
 window.renderSavedPlansList = renderSavedPlansList;
