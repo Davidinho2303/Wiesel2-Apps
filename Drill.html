@@ -4859,15 +4859,20 @@ function renderPlanTemplateStrip() {
   if (!strip) return;
   const all = [...(window.myTemplates || []), ...(window.sharedTemplates || []).filter(t => !window.myTemplates?.find(m => m.id === t.id))];
   if (all.length === 0) { strip.innerHTML = ''; return; }
-  strip.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-subtle);margin-bottom:6px;">' + (currentLang==='en'?'Templates':'Templates') + '</div><div style="display:flex;flex-wrap:wrap;gap:6px;">' +
-    all.map(t => {
-      const weekday = t.weekday || null;
-      const datum = weekday ? getNextWeekday(weekday) : new Date();
-      const datumDE = formatDateDE(datum);
-      const isShared = !window.myTemplates?.find(m => m.id === t.id);
-      return '<button class="btn btn-ghost btn-sm" style="font-size:11px;gap:4px;" onclick="loadTemplate(''+t.id+''' + (isShared?',true':'') + ')" title="'+datumDE+'">▶ '+(t.name||'').replace(/[<&]/g, c => ({'<':'&lt;','&':'&amp;'}[c]))+(weekday?(' <span style="color:var(--text-subtle)">'+datumDE+'</span>'):'')+'</button>';
-    }).join('') + '</div>';
+  const label = currentLang === 'en' ? 'Templates' : 'Templates';
+  const btns = all.map(t => {
+    const weekday = t.weekday || null;
+    const datum = weekday ? getNextWeekday(weekday) : new Date();
+    const datumDE = formatDateDE(datum);
+    const isShared = !window.myTemplates?.find(m => m.id === t.id);
+    const fnCall = isShared ? `loadTemplate('${t.id}',true)` : `loadTemplate('${t.id}')`;
+    const safeName = (t.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const dateBadge = weekday ? ` <span style="color:var(--text-subtle);font-size:10px;">${datumDE}</span>` : '';
+    return `<button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="${fnCall}" title="${datumDE}">▶ ${safeName}${dateBadge}</button>`;
+  }).join('');
+  strip.innerHTML = `<div style="font-family:DM Mono,monospace;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-subtle);margin-bottom:6px;">${label}</div><div style="display:flex;flex-wrap:wrap;gap:6px;">${btns}</div>`;
 }
+
 
 function renderMyTemplatesList() {
   const container = document.getElementById('saved-plans-list');
