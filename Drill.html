@@ -1262,9 +1262,16 @@ async function migrateIfNeeded() {
 
 // ---- Drills in Firestore speichern
 // Re-init user-specific Firestore listeners after login
+// Track active user listeners for cleanup
+window._userListenerUnsubs = window._userListenerUnsubs || [];
+
 window.fbInitUserListeners = (kuerzel) => {
+  // Unsubscribe alle vorherigen User-Listener
+  (window._userListenerUnsubs || []).forEach(unsub => { try { unsub(); } catch(e) {} });
+  window._userListenerUnsubs = [];
+
   // Plans listener for this user
-  onSnapshot(getPlansDoc(), (snap) => {
+  const unsub1 = onSnapshot(getPlansDoc(), (snap) => {
     if (!snap.exists()) return;
     const data = snap.data();
     if (!Array.isArray(data.plans)) return;
@@ -1277,9 +1284,10 @@ window.fbInitUserListeners = (kuerzel) => {
     setStatus('☁ Synced', 'var(--green)');
     setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
   }, err => { console.warn('Plans snapshot error:', err.message); setStatus('⚠ Offline', 'var(--orange)'); });
+  window._userListenerUnsubs.push(unsub1);
 
   // Personal drills listener
-  onSnapshot(getPersonalDrillsDoc(), (snap) => {
+  const unsub2 = onSnapshot(getPersonalDrillsDoc(), (snap) => {
     if (!snap.exists()) return;
     const data = snap.data();
     if (!Array.isArray(data.drills)) return;
@@ -1289,6 +1297,7 @@ window.fbInitUserListeners = (kuerzel) => {
     const navCount = document.getElementById('nav-count-bib');
     if (navCount) navCount.textContent = window.DRILLS.length;
   }, err => console.warn('Personal drills snapshot error:', err.message));
+  window._userListenerUnsubs.push(unsub2);
 
   // Load plans immediately
   loadDrillsFromFirestore();
@@ -1455,6 +1464,7 @@ signInAnonymously(auth).then(async () => {
     onSnapshot(getTemplatesDoc(), (snap) => {
       if (!snap.exists()) return;
       window.myTemplates = snap.data().templates || [];
+      if (window.myTemplates.length > 0) window._templatesLoadedFromFirestore = true;
       try { renderPlansLibrary(); } catch(e) {}
     }, err => console.warn('Templates snapshot:', err.message));
 
@@ -2645,13 +2655,18 @@ let pickerTargetPhase = null;
 // ============================================================
 // LOCALSTORAGE
 // ============================================================
+function getStorageKey(base) {
+  const u = window.currentUser || localStorage.getItem('wiesel2_kuerzel') || 'anon';
+  return base + '_' + u;
+}
+
 function loadFromStorage() {
   try {
-    const stored = localStorage.getItem('wiesel2_plans');
+    const stored = localStorage.getItem(getStorageKey('wiesel2_plans'));
     if (stored) savedPlans = JSON.parse(stored);
   } catch(e) { savedPlans = []; }
   try {
-    const mins = localStorage.getItem('wiesel2_drillMins');
+    const mins = localStorage.getItem(getStorageKey('wiesel2_drillMins'));
     if (mins) drillMins = JSON.parse(mins);
   } catch(e) { drillMins = {}; }
 }
@@ -2665,8 +2680,8 @@ function saveToStorage() {
       });
     });
   });
-  try { localStorage.setItem('wiesel2_plans', JSON.stringify(savedPlans)); } catch(e) {}
-  try { localStorage.setItem('wiesel2_drillMins', JSON.stringify(drillMins)); } catch(e) {}
+  try { localStorage.setItem(getStorageKey('wiesel2_plans'), JSON.stringify(savedPlans)); } catch(e) {}
+  try { localStorage.setItem(getStorageKey('wiesel2_drillMins'), JSON.stringify(drillMins)); } catch(e) {}
   if (typeof fbSavePlans === 'function') {
     if (typeof fbSetSyncing === 'function') fbSetSyncing(true);
     const el = document.getElementById('sync-status');
@@ -5741,10 +5756,17 @@ function _doLogin(val) {
   currentUser = val;
   window.currentUser = val;
   localStorage.setItem('wiesel2_user', val);
+  // Reset plans to avoid showing previous user's data before Firestore loads
+  savedPlans = [];
+  window._templatesLoadedFromFirestore = false;
+  window.myTemplates = [];
+  loadFromStorage(); // load this user's cached plans
+  try { renderSavedPlansList(); } catch(e) {}
+  try { renderNavSavedPlans(); } catch(e) {}
   updateUserBadge();
   if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(val);
   if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(val);
-  setTimeout(seedDefaultTemplates, 1500); // seed after templates listener fires
+  setTimeout(seedDefaultTemplates, 1500);
   closeUserModal();
 }
 
@@ -5756,6 +5778,8 @@ function _doLogin(val) {
 function seedDefaultTemplates() {
   if (currentUser !== 'david') return;
   if (window.myTemplates && window.myTemplates.length > 0) return;
+  // Nur seeden wenn wirklich noch nichts da ist (verhindert Überschreiben nach Firestore-Load)
+  if (window._templatesLoadedFromFirestore) return;
   const defaults = [
     {
       id: 'tpl_montag',
@@ -5791,7 +5815,7 @@ function seedDefaultTemplates() {
     }
   ];
   window.myTemplates = defaults;
-  if (typeof window.fbSaveTemplates === 'function') window.fbSaveTemplates(defaults);
+  // Nicht automatisch in Firestore speichern — nur beim expliziten Teilen
   renderPlansLibrary();
 }
 
