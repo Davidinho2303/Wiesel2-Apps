@@ -1154,7 +1154,7 @@ async function loadDrillsFromFirestore() {
     const allDrills = [...teamDrills, ...personalDrills];
     if (allDrills.length > 0) {
       window.DRILLS = allDrills;
-      try { renderBibliothek(window.DRILLS); } catch(e) {}
+      try { applyBibFilters(); } catch(e) {}
       const navCount = document.getElementById('nav-count-bib');
       if (navCount) navCount.textContent = window.DRILLS.length;
       return true;
@@ -1285,7 +1285,7 @@ window.fbInitUserListeners = (kuerzel) => {
     if (!Array.isArray(data.drills)) return;
     const teamDrills = (window.DRILLS || []).filter(d => d.scope !== 'personal');
     window.DRILLS = [...teamDrills, ...data.drills];
-    try { renderBibliothek(window.DRILLS); } catch(e) {}
+    try { applyBibFilters(); } catch(e) {}
     const navCount = document.getElementById('nav-count-bib');
     if (navCount) navCount.textContent = window.DRILLS.length;
   }, err => console.warn('Personal drills snapshot error:', err.message));
@@ -1415,7 +1415,7 @@ signInAnonymously(auth).then(async () => {
   loadDrillsFromFirestore().then(loaded => {
     if (!loaded && window.DRILLS_SEED) {
       window.DRILLS = window.DRILLS_SEED;
-      try { renderBibliothek(window.DRILLS); } catch(e) {}
+      try { applyBibFilters(); } catch(e) {}
       const navCount = document.getElementById('nav-count-bib');
       if (navCount) navCount.textContent = window.DRILLS.length;
     }
@@ -1444,7 +1444,7 @@ signInAnonymously(auth).then(async () => {
     if (!Array.isArray(data.drills)) return;
     const personalDrills = (window.DRILLS || []).filter(d => d.scope === 'personal');
     window.DRILLS = [...data.drills, ...personalDrills];
-    try { renderBibliothek(window.DRILLS); } catch(e) {}
+    try { applyBibFilters(); } catch(e) {}
     const navCount = document.getElementById('nav-count-bib');
     if (navCount) navCount.textContent = window.DRILLS.length;
   }, err => console.warn('Drills snapshot error:', err.message));
@@ -1464,7 +1464,7 @@ signInAnonymously(auth).then(async () => {
       if (!Array.isArray(data.drills)) return;
       const teamDrills = (window.DRILLS || []).filter(d => d.scope !== 'personal');
       window.DRILLS = [...teamDrills, ...data.drills];
-      try { renderBibliothek(window.DRILLS); } catch(e) {}
+      try { applyBibFilters(); } catch(e) {}
       const navCount = document.getElementById('nav-count-bib');
       if (navCount) navCount.textContent = window.DRILLS.length;
     }, err => console.warn('Personal drills snapshot error:', err.message));
@@ -1475,7 +1475,7 @@ signInAnonymously(auth).then(async () => {
   setStatus('⚠ Offline', 'var(--orange)');
   if (window.DRILLS_SEED) {
     window.DRILLS = window.DRILLS_SEED;
-    try { renderBibliothek(window.DRILLS); } catch(e) {}
+    try { applyBibFilters(); } catch(e) {}
     const navCount = document.getElementById('nav-count-bib');
     if (navCount) navCount.textContent = window.DRILLS.length;
   }
@@ -1631,8 +1631,7 @@ signInAnonymously(auth).then(async () => {
           <div class="page-subtitle" id="plan-subtitle-display">Zeitblöcke planen · Drills zuweisen · Exportieren</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-ghost btn-sm" onclick="newPlanTemplate('montag')" title="Training Pankstraße (nächster Montag)">📋 Mo Pankstraße</button>
-          <button class="btn btn-ghost btn-sm" onclick="newPlanTemplate('mittwoch')" title="Training Wiesenstraße (nächster Mittwoch)">📋 Mi Wiesenstraße</button>
+
           <button class="btn btn-secondary" onclick="newPlan()">+ Leerer Plan</button>
           <button class="btn btn-ghost btn-sm" onclick="saveCurrentPlanAsTemplate()" title="Als Template speichern">📋 Tpl.</button>
           <button class="btn btn-ghost btn-sm" onclick="openExportPopup('planung')">⬆↓ Export / Import</button>
@@ -3193,7 +3192,7 @@ function resetBibFilters() {
   document.getElementById('bib-intens').value = '';
   document.getElementById('bib-spieler').value = '';
   const ownerEl = document.getElementById('bib-owner'); if (ownerEl) ownerEl.value = '';
-  renderBibliothek(window.DRILLS);
+  applyBibFilters();
 }
 
 // ============================================================
@@ -3305,38 +3304,6 @@ function formatDateDE(date) {
   return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-function newPlanTemplate(typ) {
-  const isMontag = typ === 'montag';
-  const weekday = isMontag ? 1 : 3;
-  const ort = isMontag ? 'Pankstraße' : 'Wiesenstraße';
-  const datum = getNextWeekday(weekday);
-  const datumStr = formatDateDE(datum);
-  const title = `Training ${datumStr} ${ort}`;
-
-  currentPlan = {
-    id: 'plan_' + Date.now(),
-    name: title,
-    date: formatDate(datum),
-    theme: ort,
-    notes: '',
-    totalTime: 90,
-    slots: [
-      { id: 's1', label: 'Warmup', phase: 'warmup', durationMin: 20, drills: [], fixed: true },
-      { id: 's2', label: 'Stretching', phase: 'warmup', durationMin: 10, drills: [], fixed: true, noEdit: true },
-      { id: 's3', label: 'Hauptteil', phase: 'hauptteil', durationMin: 55, drills: [] },
-      { id: 's4', label: 'Ausdehnen', phase: 'abschluss', durationMin: 5, drills: [], fixed: true, noEdit: true },
-    ]
-  };
-  document.getElementById('plan-name').value = title;
-  document.getElementById('plan-date').value = formatDate(datum);
-  document.getElementById('plan-theme').value = ort;
-  document.getElementById('plan-notes').value = '';
-  document.getElementById('plan-total-time').value = '90';
-  renderSlots();
-  updateTimeSummary();
-  updatePlanDisplayHeader();
-  toast('📋 ' + title);
-}
 
 function newPlan() {
   currentPlan = {
@@ -3557,7 +3524,7 @@ function loadTemplate(tplId, fromShared) {
     theme: tpl.theme || '',
     notes: tpl.notes || '',
     totalTime: tpl.totalTime || 90,
-    scope: 'team',
+    scope: 'personal',
     createdBy: currentUser,
     createdAt: Date.now(),
     slots: JSON.parse(JSON.stringify(tpl.slots || []))
@@ -5285,8 +5252,7 @@ const T = {
   // PLAN PAGE
   'plan-title-new':   { de: 'Neuer Trainingsplan', en: 'New Practice Plan' },
   'plan-subtitle':    { de: 'Zeitblöcke planen · Drills zuweisen · Exportieren', en: 'Plan time blocks · Assign drills · Export' },
-  'btn-mo':           { de: '📋 Mo Pankstraße', en: '📋 Mon Pankstraße' },
-  'btn-mi':           { de: '📋 Mi Wiesenstraße', en: '📋 Wed Wiesenstraße' },
+
   'btn-empty':        { de: '+ Leerer Plan', en: '+ Empty Plan' },
   'btn-save':         { de: '💾 Speichern', en: '💾 Save' },
   'label-title':      { de: 'Titel', en: 'Title' },
