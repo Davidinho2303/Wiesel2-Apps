@@ -3449,13 +3449,11 @@ function updatePlanDisplayHeader() {
   if (phaseBadgeEl) {
     const phase = saisonPhases.find(p => p.id === currentPlan.phaseId)
       || (!currentPlan.phaseId && currentPlan.date ? saisonPhases.find(p => currentPlan.date >= p.startDate && currentPlan.date <= p.endDate) : null);
-    if (phase && (window.currentUser === 'david' || isAdmin())) {
+    if (phase) {
       phaseBadgeEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 9px;border-radius:10px;background:${phase.color}22;color:${phase.color};font-weight:600;cursor:pointer;" onclick="openAssignPhaseModal('${currentPlan.id}',event)" title="${currentLang==='en'?'Change phase':'Phase ändern'}">📅 ${phase.name} ✎</span>`;
-    } else if (window.currentUser === 'david' || isAdmin()) {
+    } else {
       const hasPhases = saisonPhases.length > 0;
       phaseBadgeEl.innerHTML = hasPhases ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;" onclick="openAssignPhaseModal('${currentPlan.id}',event)">📅 ${currentLang==='en'?'Assign phase':'Phase zuweisen'}</button>` : '';
-    } else {
-      phaseBadgeEl.innerHTML = '';
     }
   }
   updatePlanLockUI();
@@ -4831,7 +4829,7 @@ function renderSharedPlansList() {
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button class="btn btn-ghost btn-sm" onclick="loadSharedPlan('${p.id}')" title="${currentLang==='en'?'Load as copy':'Als Kopie laden'}">📋</button>
-        ${(window.currentUser==='david'||isAdmin())&&saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title="Phase zuweisen" style="font-size:11px;">📅</button>` : ''}
+        ${saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title="Phase zuweisen" style="font-size:11px;">📅</button>` : ''}
         ${canManage ? `<button class="btn btn-danger btn-sm" onclick="unshareAndDeletePlan('${p.id}',event)">✕</button>` : ''}
       </div>
     </div>`;
@@ -4854,7 +4852,7 @@ function renderMyTemplatesList() {
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button class="btn btn-ghost btn-sm" onclick="loadTemplate('${t.id}')" title="${currentLang==='en'?'Use template':'Template laden'}">▶</button>
-        ${(window.currentUser==='david'||isAdmin())&&saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignTemplateInfo('${t.id}',event)" title="Phase-Info" style="font-size:11px;">📅</button>` : ''}
+        ${saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignTemplateInfo('${t.id}',event)" title="Phase-Info" style="font-size:11px;">📅</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="toggleShareTemplate('${t.id}')" title="${isShared?(currentLang==='en'?'Unshare':'Zurückziehen'):(currentLang==='en'?'Share':'Teilen')}">${isShared?'🌐':'🔗'}</button>
         <button class="btn btn-ghost btn-sm" onclick="openTemplateModal('${t.id}')" title="${currentLang==='en'?'Edit':'Bearbeiten'}">✏️</button>
         <button class="btn btn-danger btn-sm" onclick="deleteTemplate('${t.id}',event)">✕</button>
@@ -4969,6 +4967,8 @@ async function fbLoadSaison() {
     if (snap.exists()) {
       saisonPhases = snap.data().phases || [];
       renderSaisonPage();
+      // Badge im Trainingsplan nachziehen falls bereits offen
+      if (typeof updatePlanDisplayHeader === 'function') updatePlanDisplayHeader();
     }
   } catch(e) { console.warn('Saison load:', e.message); }
 }
@@ -4986,9 +4986,12 @@ async function fbSaveSaison() {
 function saisonCalDayClick(dateStr) {
   const phases = saisonPhases.filter(p => dateStr >= p.startDate && dateStr <= p.endDate);
   const plans = (savedPlans||[]).filter(pl => pl.date === dateStr);
-  // Even for empty days: show a minimal popup if user is david/admin
-  const showForEmpty = (window.currentUser === 'david' || isAdmin());
-  if (phases.length === 0 && plans.length === 0 && !showForEmpty) return;
+
+  // Leerer Tag ohne Phase/Plan → direkt Phasen-Modal mit Datum vorausgefüllt
+  if (phases.length === 0 && plans.length === 0) {
+    openPhaseModalWithDate(dateStr);
+    return;
+  }
 
   const existing = document.getElementById('cal-day-popup');
   if (existing) existing.remove();
@@ -5003,11 +5006,12 @@ function saisonCalDayClick(dateStr) {
 
   const phaseHtml = phases.map(p => `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:${p.color}15;border-radius:6px;margin-bottom:6px;">
     <div style="width:3px;height:28px;background:${p.color};border-radius:2px;flex-shrink:0;"></div>
-    <div>
+    <div style="flex:1;min-width:0;">
       <div style="font-size:13px;font-weight:600;color:var(--text);">${p.name}</div>
       <div style="font-size:10px;color:var(--text-subtle);font-family:DM Mono,monospace;">${p.startDate} → ${p.endDate}</div>
       ${p.ziele ? `<div style="font-size:11px;color:var(--text-subtle);margin-top:2px;">🎯 ${p.ziele}</div>` : ''}
     </div>
+    <button class="btn btn-ghost btn-sm" style="font-size:11px;flex-shrink:0;" onclick="document.getElementById('cal-day-popup').remove();openPhaseModal('${p.id}')">✎</button>
   </div>`).join('');
 
   const planHtml = plans.map(pl => {
@@ -5024,15 +5028,26 @@ function saisonCalDayClick(dateStr) {
   overlay.innerHTML = `<div style="background:var(--surface);border-radius:12px;padding:20px;max-width:320px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.16);font-family:DM Sans,sans-serif;max-height:80vh;overflow-y:auto;">
     <div style="font-size:15px;font-weight:700;margin-bottom:12px;color:var(--text);">${label}</div>
     ${phases.length>0?`<div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">${T['cal-phases-label'][currentLang]}</div>${phaseHtml}`:''}
-    ${phases.length===0 ? `<div style="font-size:12px;color:var(--text-subtle);padding:8px 0;">${currentLang==='en'?'No phase for this date.':'Keine Phase für dieses Datum.'}</div>` : ''}
     ${plans.length>0?`<div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);margin-bottom:8px;margin-top:${phases.length?'12px':'0'};text-transform:uppercase;letter-spacing:.06em;">${T['cal-plans-label'][currentLang]}</div>${planHtml}`:''}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;flex-wrap:wrap;gap:8px;">
-      ${(window.currentUser==='david'||isAdmin()) ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="document.getElementById('cal-day-popup').remove();openPhaseModal(null)">+ ${currentLang==='en'?'New phase':'Neue Phase'}</button>` : '<span></span>'}
+      <button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="document.getElementById('cal-day-popup').remove();openPhaseModalWithDate('${dateStr}')">+ ${currentLang==='en'?'New phase':'Neue Phase'}</button>
       <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cal-day-popup').remove()">${T['cal-close'][currentLang]}</button>
     </div>
   </div>`;
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
+}
+
+// Phasen-Modal mit vorausgefülltem Startdatum öffnen
+function openPhaseModalWithDate(dateStr) {
+  openPhaseModal(null);
+  // Nach DOM-Aufbau Datum setzen
+  requestAnimationFrame(() => {
+    const startEl = document.getElementById('phase-start');
+    const endEl = document.getElementById('phase-end');
+    if (startEl && !startEl.value) startEl.value = dateStr;
+    if (endEl && !endEl.value) endEl.value = dateStr;
+  });
 }
 function toggleSaisonView() {
   saisonView = saisonView === 'calendar' ? 'list' : 'calendar';
@@ -5207,12 +5222,30 @@ function renderSaisonPhasesList() {
       });
     });
     const totalDrills = Object.values(katCount).reduce((a,b) => a+b, 0);
-    const katBars = Object.entries(katCount).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([kat,cnt]) => {
-      const katPct = Math.round(cnt / Math.max(totalDrills,1) * 100);
-      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
-        <div style="font-size:10px;color:var(--text-subtle);width:80px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${kat}</div>
-        <div style="flex:1;background:var(--surface2);border-radius:4px;height:6px;"><div style="width:${katPct}%;background:${p.color};height:100%;border-radius:4px;"></div></div>
-        <div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);width:28px;text-align:right;">${katPct}%</div>
+    // Schwerpunkte-Fokus
+    const schwerpunkte = p.schwerpunkte || [];
+    const hasFokus = schwerpunkte.length > 0;
+
+    // Merge: alle relevanten Kats = Fokus-Kats + Top-IST-Kats
+    const fokusKats = schwerpunkte.map(s => s.kat);
+    const topIstKats = Object.entries(katCount).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k])=>k);
+    const allKats = [...new Set([...fokusKats, ...topIstKats])].slice(0,6);
+
+    const katBars = allKats.map(kat => {
+      const cnt = katCount[kat] || 0;
+      const istPct = Math.round(cnt / Math.max(totalDrills,1) * 100);
+      const sw = schwerpunkte.find(s => s.kat === kat);
+      const sollPct = sw?.gewichtung ?? null;
+      const isFokus = !!sw;
+      return `<div style="margin-bottom:5px;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+          <div style="font-size:10px;color:${isFokus?'var(--text)':'var(--text-subtle)'};width:84px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:${isFokus?'600':'400'};">${kat}${isFokus&&!sollPct?' 🎯':''}</div>
+          <div style="flex:1;position:relative;background:var(--surface2);border-radius:4px;height:7px;">
+            <div style="width:${istPct}%;background:${p.color};height:100%;border-radius:4px;opacity:0.9;"></div>
+            ${sollPct ? `<div style="position:absolute;top:-2px;left:${sollPct}%;width:2px;height:11px;background:var(--text);border-radius:1px;opacity:0.5;" title="Ziel: ${sollPct}%"></div>` : ''}
+          </div>
+          <div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);width:52px;text-align:right;">${istPct}%${sollPct?` / ${sollPct}%`:''}</div>
+        </div>
       </div>`;
     }).join('');
 
@@ -5247,8 +5280,8 @@ function renderSaisonPhasesList() {
             <div style="font-size:10px;color:var(--text-subtle);margin-top:3px;">${p.wochenZiel||1}x ${T["saison-per-week"][currentLang]}</div>
           </div>
           <div>
-            <div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);margin-bottom:6px;">${T["saison-top5"][currentLang]}</div>
-            ${totalDrills > 0 ? katBars : `<div style="font-size:11px;color:var(--text-subtle);">${T["saison-no-train"][currentLang]}</div>`}
+            <div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);margin-bottom:6px;">${hasFokus ? (currentLang==='en'?'CATEGORIES · IST / TARGET':'KATEGORIEN · IST / ZIEL') : T["saison-top5"][currentLang]}</div>
+            ${totalDrills > 0 ? katBars : (hasFokus ? `<div style="font-size:10px;color:var(--text-subtle);">${schwerpunkte.map(s=>`<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 6px;border-radius:8px;background:${p.color}22;color:${p.color};font-size:10px;font-weight:600;">${s.kat}${s.gewichtung?' '+s.gewichtung+'%':' 🎯'}</span>`).join('')}</div>` : `<div style="font-size:11px;color:var(--text-subtle);">${T["saison-no-train"][currentLang]}</div>`)}
           </div>
         </div>
         ${phasePlans.length > 0 ? `<div style="margin-top:12px;">
@@ -5314,13 +5347,50 @@ function openPhaseModal(phaseId) {
         <label class="form-label">${T['phase-color-label'][currentLang]}</label>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">${colorOpts}</div>
       </div>
+      <div class="form-group" style="margin-bottom:16px;">
+        <label class="form-label">${currentLang==='en'?'Focus Categories (optional %)':'Schwerpunkte (optional mit %-Ziel)'}</label>
+        <div id="phase-schwerpunkte-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="addSchwerpunktRow()" style="font-size:11px;">+ ${currentLang==='en'?'Add Category':'Kategorie hinzufügen'}</button>
+      </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button class="btn btn-ghost" onclick="document.getElementById('phase-modal-overlay').remove()">${T['phase-cancel'][currentLang]}</button>
         <button class="btn btn-primary" onclick="savePhaseFromModal('${phaseId||''}')">${T['phase-save'][currentLang]}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  // Schwerpunkte-Rows initialisieren
+  const existingSw = existing?.schwerpunkte || [];
+  if (existingSw.length > 0) {
+    existingSw.forEach(sw => addSchwerpunktRow(sw.kat, sw.gewichtung));
+  }
   document.getElementById('phase-name').focus();
+}
+
+const DRILL_KATS = ['Passing','Ballhandling','Shooting','Transition','Defense','Rebounding','Offense','Post','Kondition','Plays'];
+
+function addSchwerpunktRow(kat='', gewichtung='') {
+  const list = document.getElementById('phase-schwerpunkte-list');
+  if (!list) return;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;gap:6px;';
+  row.innerHTML = `
+    <select class="form-input sw-kat" style="flex:1;font-size:13px;">
+      ${DRILL_KATS.map(k => `<option value="${k}" ${k===kat?'selected':''}>${k}</option>`).join('')}
+    </select>
+    <input type="number" class="form-input sw-pct" placeholder="%" min="0" max="100" value="${gewichtung||''}" style="width:64px;font-size:13px;" title="Ziel-Anteil in % (optional)">
+    <button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()" style="padding:4px 8px;font-size:12px;">✕</button>`;
+  list.appendChild(row);
+}
+
+function getSchwerpunkte() {
+  const rows = document.querySelectorAll('#phase-schwerpunkte-list > div');
+  const result = [];
+  rows.forEach(row => {
+    const kat = row.querySelector('.sw-kat')?.value;
+    const pct = row.querySelector('.sw-pct')?.value;
+    if (kat) result.push({ kat, gewichtung: pct ? parseInt(pct) : null });
+  });
+  return result;
 }
 
 function savePhaseFromModal(phaseId) {
@@ -5340,6 +5410,7 @@ function savePhaseFromModal(phaseId) {
     endDate,
     wochenZiel: parseInt(document.getElementById('phase-wochenziel').value) || 2,
     ziele: document.getElementById('phase-ziele').value.trim(),
+    schwerpunkte: getSchwerpunkte(),
     color,
     createdBy: window.currentUser,
     createdAt: phaseId ? (saisonPhases.find(p=>p.id===phaseId)?.createdAt || Date.now()) : Date.now(),
@@ -5370,11 +5441,10 @@ function deletePhase(phaseId, e) {
 }
 
 function updateSaisonVisibility() {
-  const isd = window.currentUser === 'david' || isAdmin();
   const mnav = document.getElementById('mnav-saison');
   const dnav = document.getElementById('nav-saison');
-  if (mnav) mnav.style.display = isd ? '' : 'none';
-  if (dnav) dnav.style.display = isd ? '' : 'none';
+  if (mnav) mnav.style.display = '';
+  if (dnav) dnav.style.display = '';
 }
 
 function closeExportPopup() {
@@ -5415,13 +5485,15 @@ function openAssignTemplateInfo(tplId, event) {
   const tpl = (window.myTemplates || []).find(t => t.id === tplId);
   if (!tpl) return;
   const overlay = document.createElement('div');
+  overlay.id = 'tpl-phase-info-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
   overlay.innerHTML = `<div style="background:var(--surface);border-radius:12px;padding:22px;max-width:320px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.16);font-family:DM Sans,sans-serif;">
     <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Template: ${tpl.name}</div>
     <div style="font-size:12px;color:var(--text-subtle);margin-bottom:14px;">Templates selbst werden keiner Phase zugeordnet. Wenn du dieses Template lädst und den Plan speicherst, wird er anhand seines Datums automatisch einer Phase zugewiesen.</div>
     ${saisonPhases.length > 0 ? '<div style="font-size:11px;color:var(--text-subtle);">Aktive Phasen:<br>' + saisonPhases.map(p=>`<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:8px;background:${p.color}22;color:${p.color};font-size:11px;font-weight:600;">${p.name} (${p.startDate}→${p.endDate})</span>`).join('') + '</div>' : ''}
-    <div style="margin-top:16px;text-align:right;"><button class="btn btn-primary" onclick="this.closest('div[style]').remove()">OK</button></div>
+    <div style="margin-top:16px;text-align:right;"><button class="btn btn-primary" onclick="document.getElementById('tpl-phase-info-overlay').remove()">OK</button></div>
   </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
 }
 
@@ -5516,7 +5588,7 @@ function renderSavedPlansList() {
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button class="btn btn-ghost btn-sm" onclick="duplicatePlan('${p.id}',event)" title="${currentLang==='en'?'Duplicate':'Duplizieren'}" style="font-size:11px;">⧉</button>
-        ${(window.currentUser==='david'||isAdmin())&&saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title="Phase zuweisen" style="font-size:11px;">📅</button>` : ''}
+        ${saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title="Phase zuweisen" style="font-size:11px;">📅</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="toggleSharePlan('${p.id}')" title="${p.scope==='team'?(currentLang==='en'?'Unshare':'Zurückziehen'):(currentLang==='en'?'Share':'Teilen')}" style="font-size:11px;">${'scope' in p && p.scope === 'team' ? '🌐' : '🔗'}</button>
         <button class="btn btn-danger btn-sm" onclick="deletePlan('${p.id}',event)">✕</button>
       </div>
