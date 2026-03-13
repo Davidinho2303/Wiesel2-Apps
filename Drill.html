@@ -1791,6 +1791,12 @@ signInAnonymously(auth).then(async () => {
             <option value="name-asc">A–Z</option>
           </select>
         </div>
+        <div id="shared-filter-bar" style="display:none;padding:8px 12px;border-bottom:1px solid var(--border);display:none;gap:6px;">
+          <select class="filter-select" id="shared-user-filter" onchange="renderPlansLibrary()" style="flex:1;">
+            <option value="">Alle User</option>
+          </select>
+          <input type="text" id="shared-search" class="filter-input" placeholder="Suchen …" oninput="renderPlansLibrary()" style="flex:1;min-width:0;">
+        </div>
         <div id="tpl-new-bar" style="display:none;padding:8px 12px;border-bottom:1px solid var(--border);">
           <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="openTemplateModal(null)">+ Neues Template</button>
         </div>
@@ -3540,7 +3546,7 @@ function loadTemplate(tplId, fromShared) {
   const list = fromShared ? (window.sharedTemplates || []) : (window.myTemplates || []);
   const tpl = list.find(t => t.id === tplId);
   if (!tpl) return;
-  const weekday = (tpl.theme || '').includes('Pankstraße') ? 1 : (tpl.theme || '').includes('Wiesenstraße') ? 3 : null;
+  const weekday = tpl.weekday || null;
   const datum = weekday ? getNextWeekday(weekday) : new Date();
   const datumStr = formatDateDE(datum);
   const name = tpl.name.replace(/\d{2}\.\d{2}\.\d{4}/, datumStr) || tpl.name;
@@ -3633,6 +3639,18 @@ function openTemplateModal(tplId, fromPlan) {
         <label class="form-label">${currentLang==='en'?'Location/Theme':'Ort/Thema'}</label>
         <input type="text" id="tpl-theme-input" class="form-input" value="${theme}" placeholder="z.B. Pankstraße">
       </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label class="form-label">${currentLang==='en'?'Auto-Date (weekday)':'Auto-Datum (Wochentag)'}</label>
+        <select id="tpl-weekday-input" class="form-select">
+          <option value="" ${!existing?.weekday?'selected':''}>— ${currentLang==='en'?'None (use today)':'Keiner (heute)'}</option>
+          <option value="1" ${existing?.weekday===1?'selected':''}>Montag</option>
+          <option value="2" ${existing?.weekday===2?'selected':''}>Dienstag</option>
+          <option value="3" ${existing?.weekday===3?'selected':''}>Mittwoch</option>
+          <option value="4" ${existing?.weekday===4?'selected':''}>Donnerstag</option>
+          <option value="5" ${existing?.weekday===5?'selected':''}>Freitag</option>
+          <option value="6" ${existing?.weekday===6?'selected':''}>Samstag</option>
+        </select>
+      </div>
       <div class="form-group" style="margin-bottom:16px;">
         <label class="form-label">Scope</label>
         <select id="tpl-scope-input" class="form-select">
@@ -3654,12 +3672,14 @@ function saveTemplateFromModal(tplId, fromPlanId) {
   if (!name) { document.getElementById('tpl-name-input').style.borderColor='var(--red)'; return; }
   const theme = document.getElementById('tpl-theme-input').value.trim();
   const scope = document.getElementById('tpl-scope-input').value;
+  const weekdayRaw = document.getElementById('tpl-weekday-input').value;
+  const weekday = weekdayRaw ? parseInt(weekdayRaw) : null;
   const existing = tplId ? (window.myTemplates || []).find(t => t.id === tplId) : null;
   const fromPlan = fromPlanId ? savedPlans.find(p => p.id === fromPlanId) : currentPlan;
 
   const tpl = {
     id: existing?.id || 'tpl_' + Date.now(),
-    name, theme, scope,
+    name, theme, scope, weekday,
     notes: existing?.notes || fromPlan?.notes || '',
     totalTime: existing?.totalTime || fromPlan?.totalTime || 90,
     createdBy: currentUser,
@@ -4698,8 +4718,20 @@ function setPlansTab(tab) {
   if (active) { active.style.borderBottomColor = 'var(--text)'; active.style.color = 'var(--text)'; active.style.fontWeight = '600'; }
   const searchBar = document.getElementById('plans-search-bar');
   const tplBar = document.getElementById('tpl-new-bar');
-  if (searchBar) searchBar.style.display = (tab === 'tpl-mine' || tab === 'tpl-shared') ? 'none' : 'flex';
+  if (searchBar) searchBar.style.display = (tab === 'tpl-mine' || tab === 'tpl-shared' || tab === 'shared') ? 'none' : 'flex';
   if (tplBar) tplBar.style.display = tab === 'tpl-mine' ? 'block' : 'none';
+  const sharedBar = document.getElementById('shared-filter-bar');
+  if (sharedBar) {
+    const show = tab === 'shared' || tab === 'tpl-shared';
+    sharedBar.style.display = show ? 'flex' : 'none';
+    if (show) {
+      const items = tab === 'shared' ? (window.sharedPlans || []) : (window.sharedTemplates || []);
+      const users = [...new Set(items.map(x => x.createdBy).filter(Boolean))].sort();
+      const sel = document.getElementById('shared-user-filter');
+      const cur = sel?.value || '';
+      if (sel) sel.innerHTML = `<option value="">Alle User</option>` + users.map(u => `<option value="${u}" ${u===cur?'selected':''}>${u}</option>`).join('');
+    }
+  }
   renderPlansLibrary();
 }
 
@@ -4713,7 +4745,11 @@ function renderPlansLibrary() {
 function renderSharedPlansList() {
   const container = document.getElementById('saved-plans-list');
   document.getElementById('shared-plans-count').textContent = (window.sharedPlans || []).length;
-  const plans = window.sharedPlans || [];
+  const userFilter = document.getElementById('shared-user-filter')?.value || '';
+  const search = (document.getElementById('shared-search')?.value || '').toLowerCase();
+  let plans = window.sharedPlans || [];
+  if (userFilter) plans = plans.filter(p => p.createdBy === userFilter);
+  if (search) plans = plans.filter(p => (p.name||'').toLowerCase().includes(search) || (p.theme||'').toLowerCase().includes(search) || (p.date||'').includes(search));
   if (plans.length === 0) {
     container.innerHTML = `<div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">${currentLang==='en'?'No shared plans.':'Keine geteilten Pläne.'}</div>`;
     return;
@@ -4761,7 +4797,11 @@ function renderMyTemplatesList() {
 
 function renderSharedTemplatesList() {
   const container = document.getElementById('saved-plans-list');
-  const templates = window.sharedTemplates || [];
+  const userFilter = document.getElementById('shared-user-filter')?.value || '';
+  const search = (document.getElementById('shared-search')?.value || '').toLowerCase();
+  let templates = window.sharedTemplates || [];
+  if (userFilter) templates = templates.filter(t => t.createdBy === userFilter);
+  if (search) templates = templates.filter(t => (t.name||'').toLowerCase().includes(search) || (t.theme||'').toLowerCase().includes(search));
   if (templates.length === 0) {
     container.innerHTML = `<div style="padding:12px 14px;font-size:12px;color:var(--text-subtle);">${currentLang==='en'?'No shared templates.':'Keine geteilten Templates.'}</div>`;
     return;
@@ -5797,6 +5837,7 @@ function seedDefaultTemplates() {
       id: 'tpl_montag',
       name: 'Training Montag Pankstraße',
       theme: 'Pankstraße',
+      weekday: 1,
       notes: '',
       totalTime: 90,
       scope: 'personal',
@@ -5813,6 +5854,7 @@ function seedDefaultTemplates() {
       id: 'tpl_mittwoch',
       name: 'Training Mittwoch Wiesenstraße',
       theme: 'Wiesenstraße',
+      weekday: 3,
       notes: '',
       totalTime: 90,
       scope: 'personal',
