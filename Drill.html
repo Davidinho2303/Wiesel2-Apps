@@ -953,14 +953,14 @@
     .topbar-right .btn { display: none; }
     .main {
       padding: 14px;
+      padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
       overflow-y: scroll;
       -webkit-overflow-scrolling: touch;
-      position: fixed;
-      top: 48px;
-      left: 0;
-      right: 0;
-      bottom: calc(60px + env(safe-area-inset-bottom, 0px));
-      padding-bottom: 20px;
+      /* 100dvh = dynamic viewport height (adjusts for Safari toolbar).
+         Minus topbar (48px) and bottom-nav visual height (60px).
+         safe-area-inset-bottom covers the home indicator on newer iPhones. */
+      height: calc(100dvh - 48px - 60px - env(safe-area-inset-bottom, 0px));
+      box-sizing: border-box;
     }
     .mobile-bottom-nav {
       display: flex !important;
