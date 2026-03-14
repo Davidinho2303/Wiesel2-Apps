@@ -2229,6 +2229,7 @@ signInAnonymously(auth).then(async () => {
             📁 Datei wählen
             <input type="file" id="de-bild-file" accept="image/*" style="display:none" onchange="deBildFileChosen(this)">
           </label>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="deClearBild()" style="color:var(--red);display:none;" id="de-bild-clear">✕ Entfernen</button>
           <span id="de-bild-filename" style="font-size:12px;color:var(--text-subtle);"></span>
           <div id="de-bild-progress" style="display:none;font-size:12px;color:var(--blue);">⏳ 0%</div>
         </div>
@@ -2245,6 +2246,7 @@ signInAnonymously(auth).then(async () => {
             📁 Datei wählen
             <input type="file" id="de-video-file" accept="video/*" style="display:none" onchange="deVideoFileChosen(this)">
           </label>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="deClearVideo()" style="color:var(--red);display:none;" id="de-video-clear">✕ Entfernen</button>
           <span id="de-video-filename" style="font-size:12px;color:var(--text-subtle);"></span>
           <div id="de-video-progress" style="display:none;font-size:12px;color:var(--blue);">⏳ 0%</div>
         </div>
@@ -3129,10 +3131,12 @@ function openDrillEditModal(drillId) {
     if (d.bildUrl) {
       document.getElementById('de-bild-img').src = d.bildUrl;
       document.getElementById('de-bild-preview').style.display = 'block';
+      document.getElementById('de-bild-clear').style.display = '';
     }
     if (d.videoUrl && !d.videoUrl.includes('youtube') && !d.videoUrl.includes('vimeo')) {
       document.getElementById('de-video-player').src = d.videoUrl;
       document.getElementById('de-video-preview').style.display = 'block';
+      document.getElementById('de-video-clear').style.display = '';
     }
     document.getElementById('de-link').value = d.externerLink || '';
     document.getElementById('de-scope').value = d.scope || 'team';
@@ -3161,6 +3165,8 @@ function openDrillEditModal(drillId) {
 
 // ---- Drill-Formular: Bild/Video Preview + Upload Helpers
 function dePreviewBild() {
+  const val = document.getElementById('de-bild').value.trim();
+  document.getElementById('de-bild-clear').style.display = val ? '' : 'none';
   const url = document.getElementById('de-bild').value.trim();
   const preview = document.getElementById('de-bild-preview');
   const img = document.getElementById('de-bild-img');
@@ -3169,6 +3175,8 @@ function dePreviewBild() {
 }
 
 function dePreviewVideo() {
+  const val = document.getElementById('de-video').value.trim();
+  document.getElementById('de-video-clear').style.display = val ? '' : 'none';
   const url = document.getElementById('de-video').value.trim();
   const preview = document.getElementById('de-video-preview');
   const vid = document.getElementById('de-video-player');
@@ -3176,6 +3184,24 @@ function dePreviewVideo() {
   if (url && !url.includes('youtube') && !url.includes('vimeo') && !url.includes('youtu.be')) {
     vid.src = url; preview.style.display = 'block';
   } else { preview.style.display = 'none'; }
+}
+
+function deClearBild() {
+  document.getElementById('de-bild').value = '';
+  document.getElementById('de-bild-filename').textContent = '';
+  document.getElementById('de-bild-preview').style.display = 'none';
+  document.getElementById('de-bild-img').src = '';
+  document.getElementById('de-bild-clear').style.display = 'none';
+  window._deUploadedBildUrl = '';
+}
+
+function deClearVideo() {
+  document.getElementById('de-video').value = '';
+  document.getElementById('de-video-filename').textContent = '';
+  document.getElementById('de-video-preview').style.display = 'none';
+  document.getElementById('de-video-player').src = '';
+  document.getElementById('de-video-clear').style.display = 'none';
+  window._deUploadedVideoUrl = '';
 }
 
 async function deBildFileChosen(input) {
@@ -3187,6 +3213,7 @@ async function deBildFileChosen(input) {
   const url = URL.createObjectURL(file);
   document.getElementById('de-bild-img').src = url;
   document.getElementById('de-bild-preview').style.display = 'block';
+  document.getElementById('de-bild-clear').style.display = '';
 }
 
 function deVideoFileChosen(input) {
@@ -7110,6 +7137,12 @@ function renderKiResults() {
             <label class="form-label" style="font-size:10px;">Beschreibung</label>
             <textarea class="form-input" rows="2" style="font-size:12px;resize:vertical;" oninput="kiDrillCandidates[${idx}].beschreibung=this.value">${d.beschreibung||''}</textarea>
           </div>` : ''}
+          ${kiMode === 'image' && kiImageBase64 ? `<div class="form-group" style="grid-column:1/-1;">
+            <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" ${d._attachImage !== false ? 'checked' : ''} onchange="kiDrillCandidates[${idx}]._attachImage=this.checked">
+              📷 Analysebild an diesen Drill anhängen
+            </label>
+          </div>` : ''}
         </div>
       </div>
     </div>
@@ -7129,7 +7162,28 @@ async function kiSaveSelected() {
   const status = document.getElementById('ki-save-status');
   status.textContent = (currentLang==='en'?`Saving ${selected.length} drill(s)…`:`Speichere ${selected.length} Drill(s)…`);
   let saved = 0;
+
+  // Upload image once if any drill wants it attached
+  let uploadedImageUrl = '';
+  const needsUpload = kiMode === 'image' && kiImageBase64 && selected.some(d => d._attachImage !== false);
+  if (needsUpload && typeof window.fbUploadFile === 'function') {
+    try {
+      status.textContent = currentLang==='en'?'⏳ Uploading image…':'⏳ Bild hochladen…';
+      // Convert base64 to Blob
+      const byteChars = atob(kiImageBase64);
+      const byteArr = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([byteArr], { type: kiImageMime });
+      const ext = kiImageMime.split('/')[1] || 'jpg';
+      const path = `drills/ki_${Date.now()}.${ext}`;
+      uploadedImageUrl = await window.fbUploadFile(blob, path, null);
+    } catch(e) {
+      console.warn('KI image upload failed:', e.message);
+    }
+  }
+
   for (const d of selected) {
+    const bildUrl = (d._attachImage !== false && uploadedImageUrl) ? uploadedImageUrl : '';
     const drill = {
       id: 'drill_ki_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
       name: d.name,
@@ -7149,6 +7203,7 @@ async function kiSaveSelected() {
       variationen: d.variationen || '',
       coachingPunkte: d.coachingPunkte || '',
       note: d.note || '',
+      bildUrl,
       scope: 'team',
       createdBy: currentUser || 'david',
       createdAt: Date.now(),
