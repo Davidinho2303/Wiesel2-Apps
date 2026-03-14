@@ -2905,6 +2905,11 @@ function renderBibliothek(drills) {
     </div>
   `).join('');
 
+  // iOS PWA repaint fix — force layout recalc after innerHTML set
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+    grid.style.opacity = '0.99';
+    requestAnimationFrame(() => { grid.style.opacity = '1'; });
+  }
 }
 
 
