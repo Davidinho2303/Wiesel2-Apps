@@ -1103,18 +1103,23 @@ window.fbUploadFile = async (file, path, onProgress) => {
     );
   });
 };
-const TEAM_DRILLS_DOC = doc(db, 'teams', 'wiesel2', 'data', 'drills');
-const META_DOC        = doc(db, 'teams', 'wiesel2', 'data', 'meta');
+// Dynamic docs — depend on currentTeam (set after login)
+function getTeamDrillsDoc()      { const t = window.currentTeam || 'wiesel2'; return doc(db, 'teams', t, 'data', 'drills'); }
+function getMetaDoc()            { const t = window.currentTeam || 'wiesel2'; return doc(db, 'teams', t, 'data', 'meta'); }
+function getSharedPlansDoc()     { const t = window.currentTeam || 'wiesel2'; return doc(db, 'teams', t, 'data', 'sharedPlans'); }
+function getSharedTemplatesDoc() { const t = window.currentTeam || 'wiesel2'; return doc(db, 'teams', t, 'data', 'sharedTemplates'); }
 
 // Dynamic docs — depend on currentUser (set after login)
 function getPlansDoc()          { const u = window.currentUser || 'anonymous'; return doc(db, 'users', u, 'data', 'plans'); }
 function getPersonalDrillsDoc() { const u = window.currentUser || 'anonymous'; return doc(db, 'users', u, 'data', 'drills'); }
 function getTemplatesDoc()      { const u = window.currentUser || 'anonymous'; return doc(db, 'users', u, 'data', 'planTemplates'); }
-const SHARED_PLANS_DOC      = doc(db, 'teams', 'wiesel2', 'data', 'sharedPlans');
-const SHARED_TEMPLATES_DOC  = doc(db, 'teams', 'wiesel2', 'data', 'sharedPlanTemplates');
 
 // Aliases for backward compat
-const DRILLS_DOC = TEAM_DRILLS_DOC;
+function TEAM_DRILLS_DOC()     { return getTeamDrillsDoc(); }
+function META_DOC()            { return getMetaDoc(); }
+function SHARED_PLANS_DOC()    { return getSharedPlansDoc(); }
+function SHARED_TEMPLATES_DOC(){ return getSharedTemplatesDoc(); }
+function DRILLS_DOC()          { return getTeamDrillsDoc(); }
 
 let isSyncing = false;
 
@@ -1127,7 +1132,7 @@ const setStatus = (text, color) => {
 async function loadDrillsFromFirestore() {
   try {
     // Load team drills
-    const teamSnap = await getDoc(TEAM_DRILLS_DOC);
+    const teamSnap = await getDoc(getTeamDrillsDoc());
     let teamDrills = [];
     if (teamSnap.exists()) {
       const data = teamSnap.data();
@@ -1138,7 +1143,7 @@ async function loadDrillsFromFirestore() {
         teamDrills = data.drills;
         if (needsPatch) {
           console.log('[APP] Patching missing scope fields');
-          try { await setDoc(TEAM_DRILLS_DOC, { drills: teamDrills, updatedAt: Date.now() }); } catch(e) {}
+          try { await setDoc(getTeamDrillsDoc(), { drills: teamDrills, updatedAt: Date.now() }); } catch(e) {}
         }
       }
     }
@@ -1173,7 +1178,7 @@ async function loadDrillsFromFirestore() {
 // ---- Einmalige Migration: hardcoded Seed → Firestore
 async function migrateIfNeeded() {
   try {
-    const metaSnap = await getDoc(META_DOC);
+    const metaSnap = await getDoc(getMetaDoc());
     const meta = metaSnap.exists() ? metaSnap.data() : {};
 
     // --- Einmalige User-Migration: alle bestehenden Drills + Pläne → david ---
@@ -1181,14 +1186,14 @@ async function migrateIfNeeded() {
       setStatus('⏳ User-Migration...', 'var(--orange)');
 
       // Drills: createdBy auf 'david' wenn noch 'seed' oder leer, scope auf 'team'
-      const drillsSnap = await getDoc(TEAM_DRILLS_DOC);
+      const drillsSnap = await getDoc(getTeamDrillsDoc());
       if (drillsSnap.exists()) {
         const drills = (drillsSnap.data().drills || []).map(d => ({
           ...d,
           createdBy: d.createdBy && d.createdBy !== 'seed' ? d.createdBy : 'david',
           scope: d.scope || 'team'
         }));
-        await setDoc(TEAM_DRILLS_DOC, { drills, updatedAt: Date.now() });
+        await setDoc(getTeamDrillsDoc(), { drills, updatedAt: Date.now() });
       }
 
       // Pläne: aus teams/wiesel2/data/plans → users/david/data/plans
@@ -1218,7 +1223,7 @@ async function migrateIfNeeded() {
         }
       }
 
-      await setDoc(META_DOC, { ...meta, userMigrated: true, plansMigrated: true, userMigratedAt: Date.now() }, { merge: true });
+      await setDoc(getMetaDoc(), { ...meta, userMigrated: true, plansMigrated: true, userMigratedAt: Date.now() }, { merge: true });
       return; // Migration done
       setStatus('✓ Migration fertig', 'var(--green)');
       setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
@@ -1238,13 +1243,13 @@ async function migrateIfNeeded() {
         }));
         await setDoc(davidPlansDoc, { ...data, plans, updatedAt: Date.now() });
       }
-      await setDoc(META_DOC, { ...meta, plansMigrated: true }, { merge: true });
+      await setDoc(getMetaDoc(), { ...meta, plansMigrated: true }, { merge: true });
       console.log('[MIGRATE] plans patched with createdBy+scope');
     }
 
     // --- Original Seed-Migration ---
     if (meta.drillsMigrated) {
-      const drillsSnap = await getDoc(TEAM_DRILLS_DOC);
+      const drillsSnap = await getDoc(getTeamDrillsDoc());
       if (drillsSnap.exists()) {
         const existing = drillsSnap.data().drills || [];
         if (existing.length > 0 && existing[0].createdAt) return;
@@ -1255,8 +1260,8 @@ async function migrateIfNeeded() {
     if (!window.DRILLS_SEED || window.DRILLS_SEED.length === 0) return;
 
     setStatus('⏳ Migriere Drills...', 'var(--orange)');
-    await setDoc(TEAM_DRILLS_DOC, { drills: window.DRILLS_SEED, updatedAt: Date.now() });
-    await setDoc(META_DOC, { drillsMigrated: true, migratedAt: Date.now() }, { merge: true });
+    await setDoc(getTeamDrillsDoc(), { drills: window.DRILLS_SEED, updatedAt: Date.now() });
+    await setDoc(getMetaDoc(), { drillsMigrated: true, migratedAt: Date.now() }, { merge: true });
     setStatus('Migration fertig', 'var(--green)');
     setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
   } catch(e) {
@@ -1267,6 +1272,47 @@ async function migrateIfNeeded() {
 // ---- Drills in Firestore speichern
 // Re-init user-specific Firestore listeners after login
 // Track active user listeners for cleanup
+window._teamListenerUnsubs = window._teamListenerUnsubs || [];
+
+window.fbInitTeamListeners = (teamId) => {
+  // Unsubscribe alte Team-Listener
+  (window._teamListenerUnsubs || []).forEach(unsub => { try { unsub(); } catch(e) {} });
+  window._teamListenerUnsubs = [];
+
+  // Shared Plans
+  const unsub1 = onSnapshot(getSharedPlansDoc(), (snap) => {
+    if (!snap.exists()) return;
+    window.sharedPlans = snap.data().plans || [];
+    try { renderPlansLibrary(); } catch(e) {}
+  }, err => console.warn('SharedPlans snapshot:', err.message));
+  window._teamListenerUnsubs.push(unsub1);
+
+  // Shared Templates
+  const unsub2 = onSnapshot(getSharedTemplatesDoc(), (snap) => {
+    if (!snap.exists()) return;
+    window.sharedTemplates = snap.data().templates || [];
+    try { renderPlansLibrary(); } catch(e) {}
+  }, err => console.warn('SharedTemplates snapshot:', err.message));
+  window._teamListenerUnsubs.push(unsub2);
+
+  // Team Drills
+  const unsub3 = onSnapshot(getTeamDrillsDoc(), (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    if (!Array.isArray(data.drills)) return;
+    const personalDrills = (window.DRILLS || []).filter(d => d.scope === 'personal');
+    window.DRILLS = [...data.drills, ...personalDrills];
+    try { applyBibFilters(); } catch(e) {}
+    const navCount = document.getElementById('nav-count-bib');
+    if (navCount) navCount.textContent = window.DRILLS.length;
+  }, err => console.warn('Drills snapshot error:', err.message));
+  window._teamListenerUnsubs.push(unsub3);
+
+  // Drills initial load
+  loadDrillsFromFirestore();
+  migrateIfNeeded().catch(e => console.warn('migrate:', e.message));
+};
+
 window._userListenerUnsubs = window._userListenerUnsubs || [];
 
 window.fbInitUserListeners = (kuerzel) => {
@@ -1320,7 +1366,6 @@ window.fbInitUserListeners = (kuerzel) => {
   }).catch(e => console.warn('Templates init load:', e.message));
 
   // Load plans immediately
-  loadDrillsFromFirestore();
   getDocFromServer(getPlansDoc()).then(snap => {
     if (!snap.exists()) return;
     const data = snap.data();
@@ -1345,27 +1390,136 @@ window.fbRegisterUser = async (kuerzel) => {
     const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
     const snap = await getDoc(userDoc);
     if (!snap.exists()) {
+      // Neuer User — Team aus window.currentTeam übernehmen (wurde ggf. schon gesetzt)
+      const teamId = window.currentTeam || null;
       await setDoc(userDoc, {
         kuerzel,
         isAdmin: kuerzel === 'david',
+        activeTeam: teamId,
+        teams: teamId ? [teamId] : [],
         createdAt: Date.now(),
         lastSeen: Date.now()
       });
-      console.log('[USER] Registered:', kuerzel);
+      console.log('[USER] Registered:', kuerzel, 'team:', teamId);
     } else {
+      const data = snap.data();
+      // Team aus Profil laden
+      if (data.activeTeam) {
+        window.currentTeam = data.activeTeam;
+        if (typeof window.fbInitTeamListeners === 'function') window.fbInitTeamListeners(data.activeTeam);
+      } else {
+        // Kein activeTeam → einmalige Migration (z.B. david → wiesel2)
+        if (typeof window.fbMigrateUserTeam === 'function') {
+          window.fbMigrateUserTeam(kuerzel, 'wiesel2');
+        }
+      }
       await setDoc(userDoc, { lastSeen: Date.now() }, { merge: true });
-      console.log('[USER] Updated lastSeen:', kuerzel);
+      console.log('[USER] Updated lastSeen:', kuerzel, 'team:', window.currentTeam);
     }
   } catch(e) {
     console.warn('[USER] Register error:', e.message);
   }
 };
 
+// ---- Team für User setzen (nach Erstanlage oder Wechsel)
+window.fbSetActiveTeam = async (kuerzel, teamId) => {
+  try {
+    window.currentTeam = teamId;
+    const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
+    const snap = await getDoc(userDoc);
+    const existing = snap.exists() ? (snap.data().teams || []) : [];
+    const teams = existing.includes(teamId) ? existing : [...existing, teamId];
+    await setDoc(userDoc, { activeTeam: teamId, teams }, { merge: true });
+    // Team-Profil anlegen falls noch nicht vorhanden → Ersteller wird Admin
+    const teamDoc = doc(db, 'teams', teamId, 'data', 'profile');
+    const teamSnap = await getDoc(teamDoc);
+    if (!teamSnap.exists()) {
+      await setDoc(teamDoc, {
+        teamId, name: teamId, createdBy: kuerzel,
+        admins: [kuerzel], joinCode: null,
+        createdAt: Date.now()
+      });
+    }
+    if (typeof window.fbInitTeamListeners === 'function') window.fbInitTeamListeners(teamId);
+    console.log('[TEAM] Active team set:', teamId);
+  } catch(e) {
+    console.warn('[TEAM] setActiveTeam error:', e.message);
+  }
+};
+
+// ---- Team-Profil laden
+window._fbGetTeamProfile = async (teamId) => {
+  const teamDoc = doc(db, 'teams', teamId, 'data', 'profile');
+  const snap = await getDoc(teamDoc);
+  return snap.exists() ? snap.data() : {};
+};
+
+// ---- Team-Namen ändern (nur Admin)
+window.fbSaveTeamName = async (teamId, name) => {
+  try {
+    const teamDoc = doc(db, 'teams', teamId, 'data', 'profile');
+    await setDoc(teamDoc, { name }, { merge: true });
+  } catch(e) { console.warn('fbSaveTeamName:', e.message); }
+};
+
+// ---- Join-Code speichern (nur Admin)
+window.fbSaveJoinCode = async (teamId, code) => {
+  try {
+    const teamDoc = doc(db, 'teams', teamId, 'data', 'profile');
+    await setDoc(teamDoc, { joinCode: code, joinCodeCreatedAt: Date.now() }, { merge: true });
+  } catch(e) { console.warn('fbSaveJoinCode:', e.message); }
+};
+
+// ---- Team beitreten via Join-Code oder neu anlegen
+window.fbJoinOrCreateTeam = async (kuerzel, val) => {
+  try {
+    // Prüfen ob val ein Join-Code ist (6 Zeichen, nur A-Z0-9)
+    const isCode = /^[A-Z0-9]{6}$/.test(val.toUpperCase());
+    if (isCode) {
+      // Join-Code: alle Teams durchsuchen (einfach: val als teamId probieren schlägt fehl → Info)
+      // Für jetzt: Team mit diesem Code suchen via known teams
+      // Simplified: wir suchen nicht global — User muss auch Team-ID kennen oder wir bauen später einen Code-Index
+      // Vorerst: val direkt als teamId interpretieren wenn kein Code-Match
+    }
+    // Neu anlegen oder beitreten (teamId = val)
+    await window.fbSetActiveTeam(kuerzel, val.toLowerCase());
+  } catch(e) { console.warn('fbJoinOrCreateTeam:', e.message); }
+};
+
+// ---- Einmalige Migration: david bekommt wiesel2 als activeTeam
+window.fbMigrateUserTeam = async (kuerzel, fallbackTeam) => {
+  try {
+    const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
+    const snap = await getDoc(userDoc);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    if (!data.activeTeam) {
+      await setDoc(userDoc, { activeTeam: fallbackTeam, teams: [fallbackTeam] }, { merge: true });
+      window.currentTeam = fallbackTeam;
+      // Team-Profil für wiesel2 anlegen falls nicht vorhanden
+      const teamDoc = doc(db, 'teams', fallbackTeam, 'data', 'profile');
+      const teamSnap = await getDoc(teamDoc);
+      if (!teamSnap.exists()) {
+        await setDoc(teamDoc, {
+          teamId: fallbackTeam, name: 'Wiesel 2', createdBy: kuerzel,
+          admins: [kuerzel], joinCode: null, createdAt: Date.now()
+        });
+      } else if (!(teamSnap.data().admins || []).includes(kuerzel)) {
+        // kuerzel zu admins hinzufügen falls Profil existiert aber kuerzel nicht drin
+        const admins = [...(teamSnap.data().admins || []), kuerzel];
+        await setDoc(teamDoc, { admins }, { merge: true });
+      }
+      console.log('[TEAM] Migrated user team:', kuerzel, '→', fallbackTeam);
+      if (typeof window.fbInitTeamListeners === 'function') window.fbInitTeamListeners(fallbackTeam);
+    }
+  } catch(e) { console.warn('fbMigrateUserTeam:', e.message); }
+};
+
 window.fbSaveDrills = async (drills) => {
   try {
     const teamDrills     = drills.filter(d => d.scope !== 'personal');
     const personalDrills = drills.filter(d => d.scope === 'personal');
-    await setDoc(TEAM_DRILLS_DOC, { drills: teamDrills, updatedAt: Date.now() });
+    await setDoc(getTeamDrillsDoc(), { drills: teamDrills, updatedAt: Date.now() });
     if (personalDrills.length > 0) {
       await setDoc(getPersonalDrillsDoc(), { drills: personalDrills, updatedAt: Date.now() });
     }
@@ -1397,30 +1551,30 @@ window.fbSaveTemplates = async (templates) => {
 // ---- Plan teilen (Kopie in sharedPlans)
 window.fbSharePlan = async (plan) => {
   try {
-    const snap = await getDoc(SHARED_PLANS_DOC);
+    const snap = await getDoc(getSharedPlansDoc());
     const existing = snap.exists() ? (snap.data().plans || []) : [];
     const filtered = existing.filter(p => p.id !== plan.id);
-    await setDoc(SHARED_PLANS_DOC, { plans: [...filtered, { ...plan, scope: 'team' }], updatedAt: Date.now() });
+    await setDoc(getSharedPlansDoc(), { plans: [...filtered, { ...plan, scope: 'team' }], updatedAt: Date.now() });
   } catch(e) { console.warn('fbSharePlan:', e.message); }
 };
 
 // ---- Plan zurückziehen
 window.fbUnsharePlan = async (planId) => {
   try {
-    const snap = await getDoc(SHARED_PLANS_DOC);
+    const snap = await getDoc(getSharedPlansDoc());
     if (!snap.exists()) return;
     const plans = (snap.data().plans || []).filter(p => p.id !== planId);
-    await setDoc(SHARED_PLANS_DOC, { plans, updatedAt: Date.now() });
+    await setDoc(getSharedPlansDoc(), { plans, updatedAt: Date.now() });
   } catch(e) { console.warn('fbUnsharePlan:', e.message); }
 };
 
 // ---- Template teilen
 window.fbShareTemplate = async (tpl) => {
   try {
-    const snap = await getDoc(SHARED_TEMPLATES_DOC);
+    const snap = await getDoc(getSharedTemplatesDoc());
     const existing = snap.exists() ? (snap.data().templates || []) : [];
     const filtered = existing.filter(t => t.id !== tpl.id);
-    await setDoc(SHARED_TEMPLATES_DOC, { templates: [...filtered, { ...tpl, scope: 'team' }], updatedAt: Date.now() });
+    await setDoc(getSharedTemplatesDoc(), { templates: [...filtered, { ...tpl, scope: 'team' }], updatedAt: Date.now() });
   } catch(e) { console.warn('fbShareTemplate:', e.message); }
 };
 
@@ -1457,10 +1611,10 @@ window.fbLoadSaisonFromFirestore = async () => {
 
 window.fbUnshareTemplate = async (tplId) => {
   try {
-    const snap = await getDoc(SHARED_TEMPLATES_DOC);
+    const snap = await getDoc(getSharedTemplatesDoc());
     if (!snap.exists()) return;
     const templates = (snap.data().templates || []).filter(t => t.id !== tplId);
-    await setDoc(SHARED_TEMPLATES_DOC, { templates, updatedAt: Date.now() });
+    await setDoc(getSharedTemplatesDoc(), { templates, updatedAt: Date.now() });
   } catch(e) { console.warn('fbUnshareTemplate:', e.message); }
 };
 
@@ -1469,44 +1623,8 @@ signInAnonymously(auth).then(async () => {
   setStatus('☁ ' + ((window.currentLang||"de")==="en"?"Connected":"Verbunden"), 'var(--green)');
   setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
 
-  // Migration & Drill-Load (fire-and-forget, blockiert Plan-Load nicht)
-  migrateIfNeeded().catch(e => console.warn('migrate:', e.message));
-  loadDrillsFromFirestore().then(loaded => {
-    if (!loaded && window.DRILLS_SEED) {
-      window.DRILLS = window.DRILLS_SEED;
-      try { applyBibFilters(); } catch(e) {}
-      const navCount = document.getElementById('nav-count-bib');
-      if (navCount) navCount.textContent = window.DRILLS.length;
-    }
-  });
-
   // Plans werden in fbInitUserListeners geladen (nach Login, wenn currentUser bekannt)
-
-  // Shared Plans live-listener
-  onSnapshot(SHARED_PLANS_DOC, (snap) => {
-    if (!snap.exists()) return;
-    window.sharedPlans = snap.data().plans || [];
-    try { renderPlansLibrary(); } catch(e) {}
-  }, err => console.warn('SharedPlans snapshot:', err.message));
-
-  // Shared Templates live-listener
-  onSnapshot(SHARED_TEMPLATES_DOC, (snap) => {
-    if (!snap.exists()) return;
-    window.sharedTemplates = snap.data().templates || [];
-    try { renderPlansLibrary(); } catch(e) {}
-  }, err => console.warn('SharedTemplates snapshot:', err.message));
-
-  // Drills live-listener — team drills
-  onSnapshot(TEAM_DRILLS_DOC, (snap) => {
-    if (!snap.exists()) return;
-    const data = snap.data();
-    if (!Array.isArray(data.drills)) return;
-    const personalDrills = (window.DRILLS || []).filter(d => d.scope === 'personal');
-    window.DRILLS = [...data.drills, ...personalDrills];
-    try { applyBibFilters(); } catch(e) {}
-    const navCount = document.getElementById('nav-count-bib');
-    if (navCount) navCount.textContent = window.DRILLS.length;
-  }, err => console.warn('Drills snapshot error:', err.message));
+  // Team-Listener werden in fbInitTeamListeners gestartet (nach Login, wenn currentTeam bekannt)
 
   // Personal drills live-listener (nur wenn User bereits bekannt)
   if (window.currentUser) {
@@ -6752,6 +6870,29 @@ function updateUserBadge() {
   if (el) el.textContent = currentUser || '—';
 }
 
+// ---- Team-Profil laden und Modal befüllen
+async function loadTeamProfileForModal() {
+  if (!window.currentTeam) return;
+  try {
+    if (typeof window._fbGetTeamProfile !== 'function') return;
+    const data = await window._fbGetTeamProfile(window.currentTeam);
+    // Team-Name
+    const nameEl = document.getElementById('user-modal-team-name');
+    if (nameEl) nameEl.textContent = data.name || window.currentTeam;
+    const nameInput = document.getElementById('user-modal-teamname-input');
+    if (nameInput) nameInput.placeholder = data.name || window.currentTeam;
+    // Admin-Check
+    const isTeamAdmin = (data.admins || []).includes(currentUser);
+    const badge = document.getElementById('user-modal-team-admin-badge');
+    if (badge) badge.style.display = isTeamAdmin ? 'inline' : 'none';
+    const adminSection = document.getElementById('user-modal-admin-section');
+    if (adminSection) adminSection.style.display = isTeamAdmin ? 'flex' : 'none';
+    // Join-Code
+    const codeEl = document.getElementById('user-modal-join-code');
+    if (codeEl) codeEl.textContent = data.joinCode || '—';
+  } catch(e) { console.warn('loadTeamProfile:', e.message); }
+}
+
 function openUserModal(force) {
   const modal = document.getElementById('user-modal');
   if (!modal) return;
@@ -6759,8 +6900,66 @@ function openUserModal(force) {
   if (cancelBtn) cancelBtn.style.display = force ? 'none' : '';
   const input = document.getElementById('user-modal-input');
   if (input) input.value = currentUser || '';
+  // Team-Bereich
+  const teamSection = document.getElementById('user-modal-team-section');
+  if (teamSection) {
+    teamSection.style.display = currentUser ? 'flex' : 'none';
+    const teamName = document.getElementById('user-modal-team-name');
+    if (teamName) teamName.textContent = window.currentTeam || '—';
+    if (currentUser && window.currentTeam) loadTeamProfileForModal();
+  }
   modal.style.display = 'flex';
-  setTimeout(() => { if (input) input.focus(); }, 50);
+  setTimeout(() => { if (input && window.innerWidth > 768) input.focus(); }, 50);
+}
+
+function toggleTeamActions() {
+  const el = document.getElementById('user-modal-team-actions');
+  if (!el) return;
+  const visible = el.style.display === 'flex';
+  el.style.display = visible ? 'none' : 'flex';
+  if (!visible) setTimeout(() => { const i = document.getElementById('user-modal-team-input'); if (i) i.focus(); }, 50);
+}
+
+async function joinOrCreateTeam() {
+  const input = document.getElementById('user-modal-team-input');
+  const val = (input ? input.value.trim() : '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  if (!val || !currentUser) return;
+  // Join-Code-Check: 6-stellig alphanumerisch → beitreten, sonst neu anlegen
+  if (typeof window.fbJoinOrCreateTeam === 'function') {
+    await window.fbJoinOrCreateTeam(currentUser, val);
+  }
+  const actions = document.getElementById('user-modal-team-actions');
+  if (actions) actions.style.display = 'none';
+  if (input) input.value = '';
+  loadTeamProfileForModal();
+  if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
+}
+
+async function saveTeamName() {
+  const input = document.getElementById('user-modal-teamname-input');
+  const val = (input ? input.value.trim() : '');
+  if (!val || !window.currentTeam) return;
+  if (typeof window.fbSaveTeamName === 'function') await window.fbSaveTeamName(window.currentTeam, val);
+  const nameEl = document.getElementById('user-modal-team-name');
+  if (nameEl) nameEl.textContent = val;
+  if (input) input.value = '';
+  toast('✓ Team-Name gespeichert');
+}
+
+async function generateJoinCode() {
+  if (!window.currentTeam) return;
+  const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+  if (typeof window.fbSaveJoinCode === 'function') await window.fbSaveJoinCode(window.currentTeam, code);
+  const codeEl = document.getElementById('user-modal-join-code');
+  if (codeEl) codeEl.textContent = code;
+  toast('🔑 Neuer Code: ' + code);
+}
+
+function copyJoinCode() {
+  const codeEl = document.getElementById('user-modal-join-code');
+  const code = codeEl ? codeEl.textContent : '';
+  if (!code || code === '—') return;
+  navigator.clipboard.writeText(code).then(() => toast('📋 Code kopiert: ' + code));
 }
 
 function closeUserModal() {
@@ -6816,10 +7015,46 @@ function _doLogin(val) {
   try { renderNavSavedPlans(); } catch(e) {}
   updateUserBadge();
   updateSaisonVisibility();
-  if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(val);
-  if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(val);
-  setTimeout(seedDefaultTemplates, 1500);
+  // fbRegisterUser lädt Team aus Profil und startet Team-Listener
+  if (typeof window.fbRegisterUser === 'function') {
+    window.fbRegisterUser(val).then(() => {
+      // Falls nach Profil-Load kein Team gesetzt → Team-Setup-Dialog öffnen
+      if (!window.currentTeam) {
+        setTimeout(openTeamSetupModal, 500);
+      } else {
+        if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(val);
+        setTimeout(seedDefaultTemplates, 1500);
+      }
+    });
+  }
   closeUserModal();
+}
+
+function openTeamSetupModal() {
+  const modal = document.getElementById('team-setup-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeTeamSetupModal() {
+  const modal = document.getElementById('team-setup-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function saveTeamSetup() {
+  const input = document.getElementById('team-setup-input');
+  const val = (input ? input.value.trim() : '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  if (!val) {
+    if (input) { input.style.borderColor = 'var(--red)'; setTimeout(() => input.style.borderColor = '', 1000); }
+    return;
+  }
+  // teamId aus Name ableiten (lowercase, keine Sonderzeichen)
+  const teamId = val;
+  if (typeof window.fbSetActiveTeam === 'function') {
+    await window.fbSetActiveTeam(currentUser, teamId);
+  }
+  closeTeamSetupModal();
+  if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
+  setTimeout(seedDefaultTemplates, 1500);
 }
 
 // ============================================================
@@ -6889,9 +7124,17 @@ window._appReady = true;
 window.currentUser = currentUser; // expose to module scope
 updateUserBadge();
 if (currentUser) {
-  if (typeof window.fbRegisterUser === 'function') window.fbRegisterUser(currentUser);
-  if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
-  setTimeout(seedDefaultTemplates, 1500);
+  // fbRegisterUser lädt Team aus Profil und startet Team+User-Listener
+  if (typeof window.fbRegisterUser === 'function') {
+    window.fbRegisterUser(currentUser).then(() => {
+      if (!window.currentTeam) {
+        setTimeout(openTeamSetupModal, 500);
+      } else {
+        if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
+        setTimeout(seedDefaultTemplates, 1500);
+      }
+    });
+  }
 } else {
   setTimeout(() => openUserModal(true), 100);
 }
@@ -7274,13 +7517,69 @@ window.renderPlanOverview   = renderPlanOverview;
         style="font-size:16px;"
         onkeydown="if(event.key==='Enter')saveUserKuerzel()">
       <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" id="user-modal-save-btn" onclick="saveUserKuerzel()">Speichern</button>
-      <button class="btn btn-ghost btn-sm" id="user-modal-cancel-btn" onclick="closeUserModal()" style="display:none;"></button>
+      <button class="btn btn-ghost btn-sm" id="user-modal-cancel-btn" onclick="closeUserModal()" style="display:none;height:0;overflow:hidden;margin:0;padding:0;border:none;"></button>
+
+      <!-- TEAM BEREICH -->
+      <div id="user-modal-team-section" style="display:none;flex-direction:column;gap:10px;border-top:1px solid var(--border);padding-top:14px;">
+
+        <!-- Team-Info Zeile -->
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:12px;color:var(--text-subtle);">🏀 Team</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:13px;font-weight:600;color:var(--text);" id="user-modal-team-name">—</span>
+            <span id="user-modal-team-admin-badge" style="display:none;font-size:10px;background:var(--blue-light,#e8f0fe);color:var(--blue,#2E75B6);border-radius:4px;padding:1px 6px;font-weight:600;">Chef</span>
+          </div>
+        </div>
+
+        <!-- Admin-Bereich: nur für Team-Chefs -->
+        <div id="user-modal-admin-section" style="display:none;flex-direction:column;gap:8px;">
+          <!-- Team-Name ändern -->
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="user-modal-teamname-input" class="form-input" placeholder="Team-Name ändern" maxlength="40" style="font-size:13px;flex:1;" onkeydown="if(event.key==='Enter')saveTeamName()">
+            <button class="btn btn-primary btn-sm" onclick="saveTeamName()">✓</button>
+          </div>
+          <!-- Join-Code -->
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:12px;color:var(--text-subtle);flex:1;">Join-Code:</span>
+            <code id="user-modal-join-code" style="font-size:13px;font-family:DM Mono,monospace;background:var(--surface2);padding:3px 8px;border-radius:4px;letter-spacing:2px;">—</code>
+            <button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="generateJoinCode()">🔄</button>
+            <button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="copyJoinCode()">📋</button>
+          </div>
+        </div>
+
+        <!-- Team wechseln / beitreten -->
+        <div id="user-modal-team-actions" style="display:none;flex-direction:column;gap:6px;">
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="user-modal-team-input" class="form-input" placeholder="Team-ID oder Join-Code" maxlength="30" style="font-size:13px;flex:1;" onkeydown="if(event.key==='Enter')joinOrCreateTeam()">
+            <button class="btn btn-primary btn-sm" onclick="joinOrCreateTeam()">OK</button>
+          </div>
+          <div style="font-size:11px;color:var(--text-subtle);">Neue Team-ID → Team anlegen · Join-Code → beitreten</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="align-self:flex-start;font-size:11px;" onclick="toggleTeamActions()">Team wechseln / beitreten</button>
+      </div>
+
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <div class="user-modal-google-hint" id="user-modal-google-hint">Google Login kommt demnächst</div>
         <button onclick="toggleLang();applyUserModalLang();" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;cursor:pointer;font-size:11px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:4px;" id="user-modal-lang-btn">
           <span id="user-modal-lang-flag">🇬🇧</span><span id="user-modal-lang-label">EN</span>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- TEAM SETUP MODAL -->
+  <div class="user-modal-overlay" id="team-setup-modal" style="display:none;">
+    <div class="user-modal-box">
+      <div class="user-modal-logo">assistr</div>
+      <div class="user-modal-title">🏀 Dein Team</div>
+      <div class="user-modal-sub">Gib einen kurzen Teamnamen ein. Andere können diesem Team später per Code beitreten.</div>
+      <hr class="user-modal-divider">
+      <input type="text" id="team-setup-input" class="form-input"
+        placeholder="z.B. wiesel2, tigers, bsc-herren …"
+        maxlength="30"
+        style="font-size:16px;"
+        onkeydown="if(event.key==='Enter')saveTeamSetup()">
+      <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" onclick="saveTeamSetup()">Team anlegen</button>
     </div>
   </div>
 
