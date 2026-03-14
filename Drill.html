@@ -954,9 +954,9 @@
     .main {
       padding: 14px;
       padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-      overflow-y: auto;
+      overflow-y: scroll;
       -webkit-overflow-scrolling: touch;
-      /* Use position:fixed approach instead of dvh for reliable iOS sizing */
+      /* position:fixed gives reliable sizing on iOS - no dvh issues */
       position: fixed;
       top: 48px;
       left: 0;
@@ -5517,9 +5517,9 @@ function openPhaseModal(phaseId) {
 
   const overlay = document.createElement('div');
   overlay.id = 'phase-modal-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch;';
   overlay.innerHTML = `
-    <div style="background:var(--surface);border-radius:12px;padding:24px;max-width:400px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:DM Sans,sans-serif;max-height:90vh;overflow-y:auto;">
+    <div style="background:var(--surface);border-radius:12px;padding:24px;max-width:400px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:DM Sans,sans-serif;margin:auto 0;">
       <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text);">${existing?T['phase-modal-edit'][currentLang]:T['phase-modal-new'][currentLang]}</div>
       <div class="form-group" style="margin-bottom:10px;">
         <label class="form-label">${T['phase-name-label'][currentLang]} *</label>
@@ -5594,9 +5594,13 @@ function getSchwerpunkte() {
 }
 
 function savePhaseFromModal(phaseId) {
-  const name = document.getElementById('phase-name').value.trim();
-  const startDate = document.getElementById('phase-start').value;
-  const endDate = document.getElementById('phase-end').value;
+  const nameEl = document.getElementById('phase-name');
+  const startEl = document.getElementById('phase-start');
+  const endEl = document.getElementById('phase-end');
+  dbg('[Phase] save called, phaseId=' + phaseId + ' name=' + (nameEl?.value||'NULL') + ' start=' + (startEl?.value||'NULL') + ' end=' + (endEl?.value||'NULL'));
+  const name = nameEl ? nameEl.value.trim() : '';
+  const startDate = startEl ? startEl.value : '';
+  const endDate = endEl ? endEl.value : '';
   if (!name || !startDate || !endDate) { toast('Name und Zeitraum erforderlich'); return; }
   if (startDate > endDate) { toast('Start muss vor Ende liegen'); return; }
 
