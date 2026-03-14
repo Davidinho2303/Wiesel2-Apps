@@ -1433,12 +1433,19 @@ window.fbLoadSaison = async () => {
   try {
     const u = window.currentUser || 'anonymous';
     const ref = doc(db, 'users', u, 'data', 'seasons');
-    const snap = await getDocFromServer(ref);
-    if (snap.exists()) {
-      const phases = snap.data().phases || [];
-      // Update via callback so regular script's local var gets updated
+    // Use onSnapshot for reliability on iOS PWA (getDocFromServer can fail offline)
+    const unsub = onSnapshot(ref, (snap) => {
+      unsub(); // one-shot
+      const phases = snap.exists() ? (snap.data().phases || []) : [];
       if (typeof window.onSaisonLoaded === 'function') window.onSaisonLoaded(phases);
-    }
+    }, (e) => {
+      console.warn('fbLoadSaison snapshot:', e.message);
+      // Fallback: try getDoc
+      getDoc(ref).then(snap => {
+        const phases = snap.exists() ? (snap.data().phases || []) : [];
+        if (typeof window.onSaisonLoaded === 'function') window.onSaisonLoaded(phases);
+      }).catch(e2 => console.warn('fbLoadSaison fallback:', e2.message));
+    });
   } catch(e) { console.warn('fbLoadSaison:', e.message); }
 };
 
@@ -2888,14 +2895,18 @@ function canEditDrill(d) {
 }
 
 
-// iOS PWA repaint helper — forces layout recalc on affected containers
+// iOS PWA repaint helper — forces GPU layer repaint
 function iosRepaint(...ids) {
   if (!/iphone|ipad|ipod/i.test(navigator.userAgent)) return;
-  ids.forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.style.opacity = '0.99';
-    requestAnimationFrame(() => { el.style.opacity = '1'; });
+  // Also repaint the main scroll container
+  const main = document.querySelector('.main');
+  const targets = [...ids.map(id => document.getElementById(id)).filter(Boolean)];
+  if (main) targets.push(main);
+  targets.forEach(el => {
+    el.style.transform = 'translateZ(0)';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { el.style.transform = ''; });
+    });
   });
 }
 
