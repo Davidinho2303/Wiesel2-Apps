@@ -953,15 +953,14 @@
     .topbar-right .btn { display: none; }
     .main {
       padding: 14px;
-      padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
       overflow-y: scroll;
       -webkit-overflow-scrolling: touch;
-      /* position:fixed gives reliable sizing on iOS - no dvh issues */
       position: fixed;
       top: 48px;
       left: 0;
       right: 0;
-      bottom: 60px;
+      bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+      padding-bottom: 20px;
     }
     .mobile-bottom-nav {
       display: flex !important;
