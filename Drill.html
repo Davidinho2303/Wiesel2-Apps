@@ -953,10 +953,8 @@
     .topbar-right .btn { display: none; }
     .main {
       padding: 14px;
-      /* Extra space at bottom so content clears the fixed bottom nav + home indicator */
-      padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px) + 24px);
-      overflow-y: visible;
-      /* Let the page scroll naturally — no fixed height needed */
+      /* Content must scroll past fixed bottom nav + home indicator */
+      padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px) + 32px);
     }
     .mobile-bottom-nav {
       display: flex !important;
@@ -1007,10 +1005,10 @@
       max-width: 100%;
       width: 100%;
       max-height: 80dvh;
-      overflow-y: auto;
+      overflow-y: scroll;
       -webkit-overflow-scrolling: touch;
       padding: 20px 16px;
-      padding-bottom: 32px;
+      padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px) + 16px);
     }
     #drill-edit-modal .modal {
       max-height: calc(100dvh - 48px);
@@ -1018,13 +1016,16 @@
       border-radius: 0;
       margin: 0;
       padding: 16px;
-      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+      /* Bottom padding = nav height + safe area + extra breathing room */
+      padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px) + 24px);
       overflow-y: scroll;
       -webkit-overflow-scrolling: touch;
     }
     #drill-edit-modal {
       align-items: flex-start;
       padding-top: 48px;
+      /* Overlay itself must not cover the bottom nav area */
+      padding-bottom: 0;
     }
     .de-form-grid {
       grid-template-columns: 1fr !important;
