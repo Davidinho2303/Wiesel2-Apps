@@ -946,21 +946,17 @@
 
   @media (max-width: 768px) {
     .sidebar { display: none !important; }
-    .app-shell { grid-template-columns: 1fr; grid-template-rows: 48px 1fr; }
+    .app-shell { grid-template-columns: 1fr; grid-template-rows: 48px auto; min-height: unset; }
     .topbar { padding: 0 14px; height: 48px; }
     .topbar-subtitle { display: none; }
     .topbar-logo { font-size: 14px; }
     .topbar-right .btn { display: none; }
     .main {
       padding: 14px;
-      padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
-      overflow-y: scroll;
-      -webkit-overflow-scrolling: touch;
-      /* 100dvh = dynamic viewport height (adjusts for Safari toolbar).
-         Minus topbar (48px) and bottom-nav visual height (60px).
-         safe-area-inset-bottom covers the home indicator on newer iPhones. */
-      height: calc(100dvh - 48px - 60px - env(safe-area-inset-bottom, 0px));
-      box-sizing: border-box;
+      /* Extra space at bottom so content clears the fixed bottom nav + home indicator */
+      padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px) + 24px);
+      overflow-y: visible;
+      /* Let the page scroll naturally — no fixed height needed */
     }
     .mobile-bottom-nav {
       display: flex !important;
