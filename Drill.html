@@ -298,8 +298,6 @@
     cursor: pointer;
     transition: all 0.15s;
     position: relative;
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
   }
   .drill-card:hover {
     border-color: var(--border-strong);
@@ -956,11 +954,14 @@
     .main {
       padding: 14px;
       padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-      height: calc(100dvh - 48px - 60px);
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      -webkit-transform: translateZ(0);
-      transform: translateZ(0);
+      /* Use position:fixed approach instead of dvh for reliable iOS sizing */
+      position: fixed;
+      top: 48px;
+      left: 0;
+      right: 0;
+      bottom: 60px;
     }
     .mobile-bottom-nav {
       display: flex !important;
@@ -1303,8 +1304,8 @@ window.fbInitUserListeners = (kuerzel) => {
   }, err => console.warn('Personal drills snapshot error:', err.message));
   window._userListenerUnsubs.push(unsub2);
 
-  // Load saison
-  if (typeof fbLoadSaison === 'function') fbLoadSaison();
+  // Load saison — use window.fbLoadSaison (module scope)
+  if (typeof window.fbLoadSaison === 'function') window.fbLoadSaison();
 
   // Load templates immediately
   getDocFromServer(getTemplatesDoc()).then(snap => {
@@ -1427,32 +1428,31 @@ window.fbShareTemplate = async (tpl) => {
 // ---- Template zurückziehen
 window.fbSaveSaison = async (phases) => {
   const u = window.currentUser;
+  console.log('[Saison] save called, user=' + u + ', phases=' + phases.length);
   if (!u || u === 'anonymous') { console.warn('[Saison] save skipped — no user'); return; }
   try {
     const ref = doc(db, 'users', u, 'data', 'seasons');
     await setDoc(ref, { phases, updatedAt: Date.now() });
-    console.log('[Saison] saved', phases.length, 'phases for', u);
-  } catch(e) { console.warn('[Saison] save error:', e.message); }
+    console.log('[Saison] save SUCCESS for ' + u);
+  } catch(e) { console.warn('[Saison] save ERROR: ' + e.message); }
 };
 
 window.fbLoadSaison = async () => {
   const u = window.currentUser;
-  if (!u || u === 'anonymous') { console.warn('fbLoadSaison: no user'); return; }
+  console.log('[Saison] load called, user=' + u);
+  if (!u || u === 'anonymous') { console.warn('[Saison] no user'); return; }
   try {
     const ref = doc(db, 'users', u, 'data', 'seasons');
     const unsub = onSnapshot(ref, (snap) => {
-      unsub();
-      if (!snap.exists()) {
-        console.log('[Saison] no doc yet for', u);
-        // Don't overwrite with empty — just leave saisonPhases as-is
-        return;
-      }
+      console.log('[Saison] snapshot fired, exists=' + snap.exists());
+      if (!snap.exists()) return;
       const phases = snap.data().phases || [];
-      console.log('[Saison] loaded', phases.length, 'phases for', u);
+      console.log('[Saison] loaded ' + phases.length + ' phases');
       if (typeof window.onSaisonLoaded === 'function') window.onSaisonLoaded(phases);
-    }, (e) => {
-      console.warn('[Saison] snapshot error:', e.message);
-    });
+    }, (e) => console.warn('[Saison] snapshot error: ' + e.message));
+    // Track for cleanup on user switch
+    if (!window._userListenerUnsubs) window._userListenerUnsubs = [];
+    window._userListenerUnsubs.push(unsub);
   } catch(e) { console.warn('[Saison] load error:', e.message); }
 };
 
@@ -1558,6 +1558,7 @@ signInAnonymously(auth).then(async () => {
         <span id="lang-flag">🇬🇧</span><span id="lang-label">EN</span>
       </button>
       <span id="sync-status" style="font-size:11px;color:var(--text-subtle);font-family:DM Mono,monospace;">☁ Cloud</span>
+      <button onclick="showDebug()" style="font-size:10px;padding:3px 7px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-family:DM Mono,monospace;color:var(--text-muted);">DBG</button>
       <button class="user-badge" id="user-badge-btn" onclick="openUserModal()">
         <span>🤖</span><span id="user-badge-label">—</span>
       </button>
@@ -2902,20 +2903,7 @@ function canEditDrill(d) {
 }
 
 
-// iOS PWA repaint helper — forces GPU layer repaint
-function iosRepaint(...ids) {
-  if (!/iphone|ipad|ipod/i.test(navigator.userAgent)) return;
-  // Also repaint the main scroll container
-  const main = document.querySelector('.main');
-  const targets = [...ids.map(id => document.getElementById(id)).filter(Boolean)];
-  if (main) targets.push(main);
-  targets.forEach(el => {
-    el.style.transform = 'translateZ(0)';
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => { el.style.transform = ''; });
-    });
-  });
-}
+// iosRepaint removed — position:fixed on .main fixes iOS rendering
 
 function renderBibliothek(drills) {
   const grid = document.getElementById('bib-grid');
@@ -2956,7 +2944,7 @@ function renderBibliothek(drills) {
     </div>
   `).join('');
 
-  iosRepaint('bib-grid', 'bib-filters');
+
 }
 
 
@@ -3967,7 +3955,6 @@ function renderSlots() {
   const container = document.getElementById('slot-list');
   container.innerHTML = currentPlan.slots.map((slot, idx) => renderSlotHTML(slot, idx)).join('');
   attachTouchDragListeners();
-  iosRepaint('slot-list');
 }
 
 function renderSlotHTML(slot, idx) {
