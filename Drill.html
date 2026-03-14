@@ -1017,15 +1017,18 @@
       padding-bottom: 32px;
     }
     #drill-edit-modal .modal {
-      max-height: 100dvh;
-      height: 100dvh;
+      max-height: calc(100dvh - 48px);
+      height: calc(100dvh - 48px);
       border-radius: 0;
       margin: 0;
       padding: 16px;
-      padding-bottom: env(safe-area-inset-bottom, 20px);
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+      overflow-y: scroll;
+      -webkit-overflow-scrolling: touch;
     }
     #drill-edit-modal {
       align-items: flex-start;
+      padding-top: 48px;
     }
     .de-form-grid {
       grid-template-columns: 1fr !important;
