@@ -1305,7 +1305,7 @@ window.fbInitUserListeners = (kuerzel) => {
   window._userListenerUnsubs.push(unsub2);
 
   // Load saison — use window.fbLoadSaison (module scope)
-  if (typeof window.fbLoadSaison === 'function') window.fbLoadSaison();
+  if (typeof window.fbLoadSaisonFromFirestore === 'function') window.fbLoadSaisonFromFirestore();
 
   // Load templates immediately
   getDocFromServer(getTemplatesDoc()).then(snap => {
@@ -1426,7 +1426,7 @@ window.fbShareTemplate = async (tpl) => {
 };
 
 // ---- Template zurückziehen
-window.fbSaveSaison = async (phases) => {
+window.fbSaveSaisonToFirestore = async (phases) => {
   const u = window.currentUser;
   console.log('[Saison] save called, user=' + u + ', phases=' + phases.length);
   if (!u || u === 'anonymous') { console.warn('[Saison] save skipped — no user'); return; }
@@ -1437,7 +1437,7 @@ window.fbSaveSaison = async (phases) => {
   } catch(e) { console.warn('[Saison] save ERROR: ' + e.message); }
 };
 
-window.fbLoadSaison = async () => {
+window.fbLoadSaisonFromFirestore = async () => {
   const u = window.currentUser;
   console.log('[Saison] load called, user=' + u);
   if (!u || u === 'anonymous') { console.warn('[Saison] no user'); return; }
@@ -5166,15 +5166,18 @@ window.onSaisonLoaded = function(phases) {
 };
 
 async function fbLoadSaison() {
-  if (typeof window.fbLoadSaison === 'function') {
-    await window.fbLoadSaison();
-    // window.fbLoadSaison already called renderSaisonPage via window.saisonPhases
+  if (typeof window.fbLoadSaisonFromFirestore === 'function') {
+    await window.fbLoadSaisonFromFirestore();
+  } else {
+    console.warn('[Saison] fbLoadSaisonFromFirestore not ready');
   }
 }
 
 async function fbSaveSaison() {
-  if (typeof window.fbSaveSaison === 'function') {
-    await window.fbSaveSaison(saisonPhases);
+  if (typeof window.fbSaveSaisonToFirestore === 'function') {
+    await window.fbSaveSaisonToFirestore(saisonPhases);
+  } else {
+    console.warn('[Saison] fbSaveSaisonToFirestore not ready');
   }
 }
 
