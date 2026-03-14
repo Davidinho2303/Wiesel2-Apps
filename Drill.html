@@ -7169,13 +7169,18 @@ function dbg(msg) {
   if (el) el.innerHTML = _debugLog.map(l => '<div>' + l + '</div>').join('');
 }
 function showDebug() {
-  document.getElementById('debug-overlay').style.display = 'block';
+  const u = window.currentUser || 'null';
+  const phases = (typeof saisonPhases !== 'undefined') ? saisonPhases.length : '?';
+  const hasFbSave = typeof window.fbSaveSaison === 'function';
+  const hasFbLoad = typeof window.fbLoadSaison === 'function';
+  const logs = _debugLog.slice(0, 15).join('\n') || '(keine Logs)';
+  alert('USER: ' + u + '\nPHASES: ' + phases + '\nfbSave: ' + hasFbSave + '\nfbLoad: ' + hasFbLoad + '\n\n' + logs);
 }
 // Intercept console.warn/log for saison messages
 const _origWarn = console.warn;
 const _origLog = console.log;
-console.warn = function(...args) { _origWarn(...args); const s = args.join(' '); if (s.includes('Saison') || s.includes('saison') || s.includes('season')) dbg('⚠ ' + s); };
-console.log = function(...args) { _origLog(...args); const s = args.join(' '); if (s.includes('Saison') || s.includes('saison') || s.includes('[Saison]')) dbg('ℹ ' + s); };
+console.warn = function(...args) { _origWarn(...args); dbg('⚠ ' + args.join(' ')); };
+console.log = function(...args) { _origLog(...args); const s = args.join(' '); if (s.includes('Saison') || s.includes('[')) dbg('ℹ ' + s); };
 
 
 // Expose functions for module script (Firebase onSnapshot)
