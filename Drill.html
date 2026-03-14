@@ -6091,6 +6091,13 @@ function attachTouchDragListeners() {
 // ============================================================
 let currentLang = localStorage.getItem('wiesel2_lang') || 'de';
 
+// ============================================================
+// KI PROXY CONFIG
+// Cloudflare Worker URL eintragen nach dem Deploy:
+// ============================================================
+const KI_PROXY_URL = 'https://assistr-proxy.davidjohannesschreiber.workers.dev';
+// ============================================================
+
 const T = {
   // TOPBAR & NAV
   'nav-bibliothek':   { de: 'Drill-Bibliothek', en: 'Drill Library' },
@@ -6945,7 +6952,7 @@ Wenn ein Wert unklar ist, wähle den sinnvollsten Default. Mehrere Drills = mehr
     : document.getElementById('ki-input-text').value.trim();
 
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch(KI_PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
