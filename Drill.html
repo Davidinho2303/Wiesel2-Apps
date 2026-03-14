@@ -298,6 +298,8 @@
     cursor: pointer;
     transition: all 0.15s;
     position: relative;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
   }
   .drill-card:hover {
     border-color: var(--border-strong);
@@ -957,6 +959,8 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       padding-bottom: 20px;
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
     }
     .mobile-bottom-nav {
       display: flex !important;
@@ -1422,31 +1426,34 @@ window.fbShareTemplate = async (tpl) => {
 
 // ---- Template zurückziehen
 window.fbSaveSaison = async (phases) => {
+  const u = window.currentUser;
+  if (!u || u === 'anonymous') { console.warn('[Saison] save skipped — no user'); return; }
   try {
-    const u = window.currentUser || 'anonymous';
     const ref = doc(db, 'users', u, 'data', 'seasons');
     await setDoc(ref, { phases, updatedAt: Date.now() });
-  } catch(e) { console.warn('fbSaveSaison:', e.message); }
+    console.log('[Saison] saved', phases.length, 'phases for', u);
+  } catch(e) { console.warn('[Saison] save error:', e.message); }
 };
 
 window.fbLoadSaison = async () => {
+  const u = window.currentUser;
+  if (!u || u === 'anonymous') { console.warn('fbLoadSaison: no user'); return; }
   try {
-    const u = window.currentUser || 'anonymous';
     const ref = doc(db, 'users', u, 'data', 'seasons');
-    // Use onSnapshot for reliability on iOS PWA (getDocFromServer can fail offline)
     const unsub = onSnapshot(ref, (snap) => {
-      unsub(); // one-shot
-      const phases = snap.exists() ? (snap.data().phases || []) : [];
+      unsub();
+      if (!snap.exists()) {
+        console.log('[Saison] no doc yet for', u);
+        // Don't overwrite with empty — just leave saisonPhases as-is
+        return;
+      }
+      const phases = snap.data().phases || [];
+      console.log('[Saison] loaded', phases.length, 'phases for', u);
       if (typeof window.onSaisonLoaded === 'function') window.onSaisonLoaded(phases);
     }, (e) => {
-      console.warn('fbLoadSaison snapshot:', e.message);
-      // Fallback: try getDoc
-      getDoc(ref).then(snap => {
-        const phases = snap.exists() ? (snap.data().phases || []) : [];
-        if (typeof window.onSaisonLoaded === 'function') window.onSaisonLoaded(phases);
-      }).catch(e2 => console.warn('fbLoadSaison fallback:', e2.message));
+      console.warn('[Saison] snapshot error:', e.message);
     });
-  } catch(e) { console.warn('fbLoadSaison:', e.message); }
+  } catch(e) { console.warn('[Saison] load error:', e.message); }
 };
 
 window.fbUnshareTemplate = async (tplId) => {
