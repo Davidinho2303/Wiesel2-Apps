@@ -1511,6 +1511,7 @@ window.fbMigrateUserTeam = async (kuerzel, fallbackTeam) => {
       }
       console.log('[TEAM] Migrated user team:', kuerzel, '→', fallbackTeam);
       if (typeof window.fbInitTeamListeners === 'function') window.fbInitTeamListeners(fallbackTeam);
+      if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(kuerzel);
     }
   } catch(e) { console.warn('fbMigrateUserTeam:', e.message); }
 };
@@ -1625,6 +1626,17 @@ signInAnonymously(auth).then(async () => {
 
   // Plans werden in fbInitUserListeners geladen (nach Login, wenn currentUser bekannt)
   // Team-Listener werden in fbInitTeamListeners gestartet (nach Login, wenn currentTeam bekannt)
+
+  // Drills sofort laden — currentTeam ist ggf. noch nicht gesetzt, Fallback 'wiesel2' greift
+  loadDrillsFromFirestore().then(loaded => {
+    if (!loaded && window.DRILLS_SEED) {
+      window.DRILLS = window.DRILLS_SEED;
+      try { applyBibFilters(); } catch(e) {}
+      const navCount = document.getElementById('nav-count-bib');
+      if (navCount) navCount.textContent = window.DRILLS.length;
+    }
+  });
+  migrateIfNeeded().catch(e => console.warn('migrate:', e.message));
 
   // Personal drills live-listener (nur wenn User bereits bekannt)
   if (window.currentUser) {
@@ -7018,12 +7030,10 @@ function _doLogin(val) {
   // fbRegisterUser lädt Team aus Profil und startet Team-Listener
   if (typeof window.fbRegisterUser === 'function') {
     window.fbRegisterUser(val).then(() => {
-      // Falls nach Profil-Load kein Team gesetzt → Team-Setup-Dialog öffnen
+      if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(val);
+      setTimeout(seedDefaultTemplates, 1500);
       if (!window.currentTeam) {
         setTimeout(openTeamSetupModal, 500);
-      } else {
-        if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(val);
-        setTimeout(seedDefaultTemplates, 1500);
       }
     });
   }
@@ -7127,11 +7137,12 @@ if (currentUser) {
   // fbRegisterUser lädt Team aus Profil und startet Team+User-Listener
   if (typeof window.fbRegisterUser === 'function') {
     window.fbRegisterUser(currentUser).then(() => {
+      // User-Listener immer starten (Pläne, Saison, persönliche Drills)
+      if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
+      setTimeout(seedDefaultTemplates, 1500);
+      // Team-Setup nur wenn wirklich kein Team gesetzt (auch nach Migration)
       if (!window.currentTeam) {
         setTimeout(openTeamSetupModal, 500);
-      } else {
-        if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
-        setTimeout(seedDefaultTemplates, 1500);
       }
     });
   }
