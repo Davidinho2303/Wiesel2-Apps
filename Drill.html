@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, user-scalable=yes">
-<title>Wiesel 2</title>
+<title>assistr</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Wiesel 2">
+<meta name="apple-mobile-web-app-title" content="assistr">
 <meta name="theme-color" content="#1a1916">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
@@ -1514,7 +1514,7 @@ signInAnonymously(auth).then(async () => {
 <div class="app-shell" id="app-shell">
   <!-- TOPBAR -->
   <header class="topbar">
-    <span class="topbar-logo">Wiesel 2</span>
+    <span class="topbar-logo">assistr</span>
     <div class="topbar-sep"></div>
     <span class="topbar-subtitle">Drill-Bibliothek & Trainingsplanung · Saison 2025/2026</span>
     <div class="topbar-right">
@@ -1749,7 +1749,7 @@ signInAnonymously(auth).then(async () => {
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn btn-ghost btn-sm" id="saison-view-toggle" onclick="toggleSaisonView()">📅 Kalender</button>
-          <button class="btn btn-primary btn-sm" onclick="openPhaseModal(null)">+ Phase</button>
+          <button class="btn btn-primary btn-sm" id="saison-new-phase-btn" onclick="openPhaseModal(null)">+ Phase</button>
         </div>
       </div>
 
@@ -2010,7 +2010,7 @@ signInAnonymously(auth).then(async () => {
 <div class="modal-overlay hidden" id="ki-import-modal" onclick="if(event.target===this)closeKiImportModal()">
   <div class="modal" style="max-width:700px;max-height:90vh;display:flex;flex-direction:column;">
     <div class="modal-header">
-      <div class="modal-title">🤖 KI Drill-Erkennung</div>
+      <div class="modal-title" id="ki-modal-title">🤖 KI Drill-Erkennung</div>
       <button class="modal-close" onclick="closeKiImportModal()">×</button>
     </div>
     <div style="padding:16px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px;">
@@ -2018,20 +2018,20 @@ signInAnonymously(auth).then(async () => {
       <div id="ki-input-section">
         <!-- Mode Tabs -->
         <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:12px;">
-          <button id="ki-tab-text" onclick="kiSetMode('text')" style="padding:7px 16px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--text);cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text);">✏️ Text</button>
-          <button id="ki-tab-image" onclick="kiSetMode('image')" style="padding:7px 16px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);">📷 Bild</button>
+          <button id="ki-tab-text-label" onclick="kiSetMode('text')" style="padding:7px 16px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--text);cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text);">✏️ Text</button>
+          <button id="ki-tab-image-label" onclick="kiSetMode('image')" style="padding:7px 16px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);">📷 Bild</button>
         </div>
         <!-- Text Mode -->
         <div id="ki-mode-text">
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Beschreibe einen oder mehrere Drills frei formuliert.</div>
-          <textarea id="ki-input-text" class="form-input" rows="6" style="resize:vertical;font-family:DM Sans,sans-serif;font-size:13px;" placeholder="z.B.:&#10;Shell Drill: 4-on-4 Defense Positioning, Halbfeld, 8 Spieler, Defense live, kompetitiv&#10;&#10;Leiter Dribbling — Warmup, 1 Spieler, Ballhandling, niedrige Intensität"></textarea>
+          <div id="ki-text-hint" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Beschreibe einen oder mehrere Drills frei formuliert.</div>
+          <textarea id="ki-input-text" class="form-input" rows="6" style="resize:vertical;font-family:DM Sans,sans-serif;font-size:13px;" id="ki-input-text-el" placeholder="z.B.:&#10;Shell Drill: 4-on-4 Defense Positioning, Halbfeld, 8 Spieler, Defense live, kompetitiv&#10;&#10;Leiter Dribbling — Warmup, 1 Spieler, Ballhandling, niedrige Intensität"></textarea>
         </div>
         <!-- Image Mode -->
         <div id="ki-mode-image" style="display:none;">
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Foto von Whiteboard, Drill-Sheet oder handgeschriebenem Zettel — Claude liest die Drills aus.</div>
+          <div id="ki-image-hint" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Foto von Whiteboard, Drill-Sheet oder handgeschriebenem Zettel — Claude liest die Drills aus.</div>
           <label id="ki-image-dropzone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed var(--border);border-radius:var(--radius);padding:28px;cursor:pointer;background:var(--surface2);transition:border-color 0.15s;position:relative;">
             <span style="font-size:28px;">📷</span>
-            <span style="font-size:13px;color:var(--text-subtle);">Bild wählen oder hierher ziehen</span>
+            <span id="ki-dropzone-label" style="font-size:13px;color:var(--text-subtle);">Bild wählen oder hierher ziehen</span>
             <span style="font-size:11px;color:var(--text-subtle);">JPG, PNG, WEBP</span>
             <input type="file" id="ki-image-file" accept="image/*" onchange="kiImageChosen(this)" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
           </label>
@@ -2041,14 +2041,14 @@ signInAnonymously(auth).then(async () => {
           </div>
         </div>
         <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
-          <button class="btn btn-primary" id="ki-analyze-btn" onclick="runKiAnalysis()">🤖 Analysieren</button>
+          <button class="btn btn-primary" id="ki-analyze-btn-label" onclick="runKiAnalysis()">🤖 Analysieren</button>
           <span id="ki-status" style="font-size:12px;color:var(--text-muted);"></span>
         </div>
       </div>
       <!-- RESULTS -->
       <div id="ki-results-section" style="display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <div style="font-family:DM Mono,monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-subtle);">Erkannte Drills — prüfen & anpassen</div>
+          <div id="ki-results-label" style="font-family:DM Mono,monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-subtle);">Erkannte Drills — prüfen & anpassen</div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-ghost btn-sm" onclick="kiSelectAll(true)">Alle</button>
             <button class="btn btn-ghost btn-sm" onclick="kiSelectAll(false)">Keine</button>
@@ -2057,8 +2057,8 @@ signInAnonymously(auth).then(async () => {
         <div id="ki-drill-list" style="display:flex;flex-direction:column;gap:10px;"></div>
         <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;align-items:center;">
           <span id="ki-save-status" style="font-size:12px;color:var(--text-muted);"></span>
-          <button class="btn btn-ghost btn-sm" onclick="kiBackToInput()">← Zurück</button>
-          <button class="btn btn-primary" onclick="kiSaveSelected()">💾 Ausgewählte speichern</button>
+          <button class="btn btn-ghost btn-sm" onclick="kiBackToInput()" id="ki-back-btn">← Zurück</button>
+          <button class="btn btn-primary" onclick="kiSaveSelected()" id="ki-save-btn">💾 Ausgewählte speichern</button>
         </div>
       </div>
     </div>
@@ -4254,7 +4254,7 @@ function buildWordHTMLPro(plan) {
 ${slotsHTML}
 </table>
 ${plan.notes ? `<div class="notes"><strong>📌 Notizen:</strong><br>${esc(plan.notes).replace(/\n/g,'<br>')}</div>` : ''}
-<div class="footer">Weddinger Wiesel 2 &middot; Saison 2025/2026 &middot; ${new Date().toLocaleDateString('de-DE')}</div>
+<div class="footer">assistr · Weddinger Wiesel 2 · Saison 2025/2026 · ${new Date().toLocaleDateString('de-DE')}</div>
 </body>
 </html>`;
 }
@@ -4304,7 +4304,7 @@ function buildWhatsAppText(plan) {
     txt += `\n📌 *Notizen:*\n${plan.notes}\n`;
   }
 
-  txt += `\n_Weddinger Wiesel 2 · Saison 2025/2026_`;
+  txt += `\n_assistr · Weddinger Wiesel 2 · Saison 2025/2026_`;
   return txt;
 }
 
@@ -4374,7 +4374,7 @@ function buildWordHTML(plan) {
 <div class="meta">${esc(plan.date||'')}${plan.theme ? ' &middot; '+esc(plan.theme) : ''} &middot; ${drillTotal} min Drillzeit gesamt</div>
 ${slotsHTML}
 ${plan.notes ? `<div class="notes"><strong>Notizen:</strong> ${esc(plan.notes).replace(/\n/g,' &middot; ')}</div>` : ''}
-<div class="footer">Weddinger Wiesel 2 &middot; Saison 2025/2026</div>
+<div class="footer">assistr · assistr · Weddinger Wiesel 2 · Saison 2025/2026</div>
 </body>
 </html>`;
 }
@@ -4427,7 +4427,7 @@ function buildRTF(plan) {
     body += `{\\pard\\sb0\\sa120\\fs18\\cf2 ${r(plan.notes)}\\par}\n`;
   }
 
-  body += `{\\pard\\sb240\\sa0\\fs16\\cf2 Weddinger Wiesel 2 \\u183? Saison 2025/2026\\par}\n`;
+  body += `{\\pard\\sb240\\sa0\\fs16\\cf2 assistr \\u183? Weddinger Wiesel 2 \\u183? Saison 2025/2026\\par}\n`;
 
   return `{\\rtf1\\ansi\\deff0\n` +
     `{\\fonttbl{\\f0\\fswiss\\fcharset0 Arial;}{\\f1\\fmodern\\fcharset0 Courier New;}}\n` +
@@ -4506,7 +4506,7 @@ function buildPrintHTML(plans, title) {
   <div class="no-print">Druckvorschau · Strg+P (Win) / ⌘+P (Mac) → PDF speichern oder drucken</div>
   <h1>${esc(title||'Trainingspläne')} <span style="font-size:10pt;color:#888;font-weight:normal;">${plansArr.length > 1 ? '('+plansArr.length+' Pläne)' : ''}</span></h1>
   ${plansHTML}
-  <div style="margin-top:20px;font-size:8pt;color:#aaa;border-top:1px solid #eee;padding-top:6px;">Weddinger Wiesel 2 · Saison 2025/2026</div>
+  <div style="margin-top:20px;font-size:8pt;color:#aaa;border-top:1px solid #eee;padding-top:6px;">assistr · Weddinger Wiesel 2 · Saison 2025/2026</div>
   </body></html>`;
 }
 
@@ -4961,7 +4961,7 @@ function renderSharedPlansList() {
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button class="btn btn-ghost btn-sm" onclick="loadSharedPlan('${p.id}')" title="${currentLang==='en'?'Load as copy':'Als Kopie laden'}">📋</button>
-        ${saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title="Phase zuweisen" style="font-size:11px;">📅</button>` : ''}
+        ${saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title="" + (currentLang==='en'?'Assign phase':'Phase zuweisen') + " style="font-size:11px;">📅</button>` : ''}
         ${canManage ? `<button class="btn btn-danger btn-sm" onclick="unshareAndDeletePlan('${p.id}',event)">✕</button>` : ''}
       </div>
     </div>`;
@@ -5205,7 +5205,7 @@ function toggleSaisonView() {
   saisonView = saisonView === 'calendar' ? 'list' : 'calendar';
   document.getElementById('saison-calendar-view').style.display = saisonView === 'calendar' ? '' : 'none';
   document.getElementById('saison-list-view').style.display = saisonView === 'list' ? '' : 'none';
-  document.getElementById('saison-view-toggle').textContent = saisonView === 'calendar' ? '☰ Liste' : '📅 Kalender';
+  document.getElementById('saison-view-toggle').textContent = saisonView === 'calendar' ? T['saison-btn-list'][currentLang] : T['saison-btn-cal'][currentLang];
   if (saisonView === 'list') renderSaisonTimeline();
   else renderSaisonCalendar();
 }
@@ -5641,8 +5641,8 @@ function openAssignTemplateInfo(tplId, event) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
   overlay.innerHTML = `<div style="background:var(--surface);border-radius:12px;padding:22px;max-width:320px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.16);font-family:DM Sans,sans-serif;">
     <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Template: ${tpl.name}</div>
-    <div style="font-size:12px;color:var(--text-subtle);margin-bottom:14px;">Templates selbst werden keiner Phase zugeordnet. Wenn du dieses Template lädst und den Plan speicherst, wird er anhand seines Datums automatisch einer Phase zugewiesen.</div>
-    ${saisonPhases.length > 0 ? '<div style="font-size:11px;color:var(--text-subtle);">Aktive Phasen:<br>' + saisonPhases.map(p=>`<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:8px;background:${p.color}22;color:${p.color};font-size:11px;font-weight:600;">${p.name} (${p.startDate}→${p.endDate})</span>`).join('') + '</div>' : ''}
+    <div style="font-size:12px;color:var(--text-subtle);margin-bottom:14px;">${currentLang==='en'?'Templates are not assigned to phases. When you load this template and save the plan, it will be auto-assigned to a phase based on its date.':'Templates selbst werden keiner Phase zugeordnet. Wenn du dieses Template lädst und den Plan speicherst, wird er anhand seines Datums automatisch einer Phase zugewiesen.'}</div>
+    ${saisonPhases.length > 0 ? `<div style="font-size:11px;color:var(--text-subtle);">${currentLang==='en'?'Active phases:':'Aktive Phasen:'}<br>${saisonPhases.map(p=>`<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:8px;background:${p.color}22;color:${p.color};font-size:11px;font-weight:600;">${p.name} (${p.startDate}→${p.endDate})</span>`).join('')}</div>` : ''}
     <div style="margin-top:16px;text-align:right;"><button class="btn btn-primary" onclick="document.getElementById('tpl-phase-info-overlay').remove()">OK</button></div>
   </div>`;
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
@@ -5740,7 +5740,7 @@ function renderSavedPlansList() {
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button class="btn btn-ghost btn-sm" onclick="duplicatePlan('${p.id}',event)" title="${currentLang==='en'?'Duplicate':'Duplizieren'}" style="font-size:11px;">⧉</button>
-        ${saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title="Phase zuweisen" style="font-size:11px;">📅</button>` : ''}
+        ${saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title=\"${currentLang==='en'?'Assign phase':'Phase zuweisen'}\" style="font-size:11px;">📅</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="toggleSharePlan('${p.id}')" title="${p.scope==='team'?(currentLang==='en'?'Unshare':'Zurückziehen'):(currentLang==='en'?'Share':'Teilen')}" style="font-size:11px;">${'scope' in p && p.scope === 'team' ? '🌐' : '🔗'}</button>
         <button class="btn btn-danger btn-sm" onclick="deletePlan('${p.id}',event)">✕</button>
       </div>
@@ -6214,6 +6214,19 @@ const T = {
   'saison-btn-cal':   { de: '📅 Kalender', en: '📅 Calendar' },
   'saison-btn-list':  { de: '☰ Liste', en: '☰ List' },
   'saison-btn-new':   { de: '+ Phase', en: '+ Phase' },
+
+  // KI Import
+  'ki-modal-title':   { de: '🤖 KI Drill-Erkennung', en: '🤖 AI Drill Recognition' },
+  'ki-tab-text':      { de: '✏️ Text', en: '✏️ Text' },
+  'ki-tab-image':     { de: '📷 Bild', en: '📷 Image' },
+  'ki-text-hint':     { de: 'Beschreibe einen oder mehrere Drills frei formuliert.', en: 'Describe one or more drills in free text.' },
+  'ki-text-ph':       { de: 'z.B.:\nShell Drill: 4-on-4 Defense Positioning, Halbfeld, 8 Spieler, Defense live, kompetitiv\n\nLeiter Dribbling — Warmup, 1 Spieler, Ballhandling, niedrige Intensität', en: 'e.g.:\nShell Drill: 4-on-4 Defense Positioning, half court, 8 players, live defense, competitive\n\nLadder Dribbling — Warm-up, 1 player, Ball handling, low intensity' },
+  'ki-image-hint':    { de: 'Foto von Whiteboard, Drill-Sheet oder handgeschriebenem Zettel — Claude liest die Drills aus.', en: 'Photo of whiteboard, drill sheet or handwritten notes — Claude reads the drills.' },
+  'ki-dropzone':      { de: 'Bild wählen oder hierher ziehen', en: 'Choose image or drag here' },
+  'ki-analyze-btn':   { de: '🤖 Analysieren', en: '🤖 Analyse' },
+  'ki-results-label': { de: 'Erkannte Drills — prüfen & anpassen', en: 'Detected Drills — review & adjust' },
+  'ki-back-btn':      { de: '← Zurück', en: '← Back' },
+  'ki-save-btn':      { de: '💾 Ausgewählte speichern', en: '💾 Save selected' },
   'saison-cur-phase': { de: 'AKTUELLE PHASE', en: 'CURRENT PHASE' },
   'saison-all-phases':{ de: 'Alle Phasen', en: 'All Phases' },
   'saison-no-phases': { de: 'Noch keine Phasen. Mit „+ Phase" starten.', en: 'No phases yet. Start with "+ Phase".' },
@@ -6604,6 +6617,21 @@ function applyLang() {
   const saisonNewBtn = document.querySelector('#page-saison .btn-primary');
   if (saisonNewBtn) saisonNewBtn.textContent = T['saison-btn-new'][currentLang];
 
+  // KI Import Modal
+  const _ki = (id, key) => { const el = document.getElementById(id); if (el) el.textContent = T[key][currentLang]; };
+  _ki('ki-modal-title', 'ki-modal-title');
+  _ki('ki-tab-text-label', 'ki-tab-text');
+  _ki('ki-tab-image-label', 'ki-tab-image');
+  _ki('ki-text-hint', 'ki-text-hint');
+  _ki('ki-image-hint', 'ki-image-hint');
+  _ki('ki-dropzone-label', 'ki-dropzone');
+  _ki('ki-analyze-btn-label', 'ki-analyze-btn');
+  _ki('ki-results-label', 'ki-results-label');
+  _ki('ki-back-btn', 'ki-back-btn');
+  _ki('ki-save-btn', 'ki-save-btn');
+  const kiTextEl = document.getElementById('ki-input-text');
+  if (kiTextEl) kiTextEl.placeholder = T['ki-text-ph'][currentLang];
+
   // Re-render saison if visible (to update all inline strings)
   if (document.getElementById('page-saison')?.classList.contains('active')) renderSaisonPage();
 
@@ -6816,8 +6844,8 @@ function kiSetMode(mode) {
   kiMode = mode;
   document.getElementById('ki-mode-text').style.display = mode === 'text' ? 'block' : 'none';
   document.getElementById('ki-mode-image').style.display = mode === 'image' ? 'block' : 'none';
-  const tabText = document.getElementById('ki-tab-text');
-  const tabImg = document.getElementById('ki-tab-image');
+  const tabText = document.getElementById('ki-tab-text-label');
+  const tabImg = document.getElementById('ki-tab-image-label');
   tabText.style.borderBottomColor = mode === 'text' ? 'var(--text)' : 'transparent';
   tabText.style.color = mode === 'text' ? 'var(--text)' : 'var(--text-subtle)';
   tabImg.style.borderBottomColor = mode === 'image' ? 'var(--text)' : 'transparent';
@@ -6829,7 +6857,7 @@ async function kiImageChosen(input) {
   if (!file) return;
   kiImageMime = file.type || 'image/jpeg';
   const status = document.getElementById('ki-status');
-  status.textContent = '⏳ Bild laden…';
+  status.textContent = currentLang==='en'?'⏳ Loading image…':'⏳ Bild laden…';
   try {
     // Use arrayBuffer — more reliable on iOS PWA than FileReader.readAsDataURL
     const buf = await file.arrayBuffer();
@@ -6848,7 +6876,7 @@ async function kiImageChosen(input) {
     document.getElementById('ki-image-dropzone').style.display = 'none';
     status.textContent = '';
   } catch(e) {
-    status.textContent = '⚠ Bild konnte nicht geladen werden';
+    status.textContent = currentLang==='en'?'⚠ Could not load image':'⚠ Bild konnte nicht geladen werden';
     console.error('kiImageChosen error:', e);
   }
 }
@@ -6874,18 +6902,18 @@ function kiSelectAll(val) {
 }
 
 async function runKiAnalysis() {
-  const btn = document.getElementById('ki-analyze-btn');
+  const btn = document.getElementById('ki-analyze-btn-label');
   const status = document.getElementById('ki-status');
 
   if (kiMode === 'text') {
     const text = document.getElementById('ki-input-text').value.trim();
     if (!text) return;
   } else {
-    if (!kiImageBase64) { status.textContent = '⚠ Kein Bild gewählt'; return; }
+    if (!kiImageBase64) { status.textContent = currentLang==='en'?'⚠ No image selected':'⚠ Kein Bild gewählt'; return; }
   }
 
   btn.disabled = true;
-  btn.textContent = '⏳ Analysiere…';
+  btn.textContent = currentLang==='en'?'⏳ Analysing…':'⏳ Analysiere…';
   status.textContent = '';
 
   const schema = `Extrahiere alle Basketball-Drills aus dem Input. Gib ein JSON-Array zurück (nur JSON, kein Markdown, keine Erklärung).
@@ -6932,13 +6960,13 @@ Wenn ein Wert unklar ist, wähle den sinnvollsten Default. Mehrere Drills = mehr
     const clean = raw.replace(/```json|```/g, '').trim();
     let drills;
     try { drills = JSON.parse(clean); } catch(e) {
-      status.textContent = '⚠ Parsing-Fehler — bitte Text präzisieren';
-      btn.disabled = false; btn.textContent = '🤖 Analysieren';
+      status.textContent = currentLang==='en'?'⚠ Parse error — please be more specific':'⚠ Parsing-Fehler — bitte Text präzisieren';
+      btn.disabled = false; btn.textContent = T['ki-analyze-btn'][currentLang];
       return;
     }
     if (!Array.isArray(drills) || drills.length === 0) {
-      status.textContent = '⚠ Keine Drills erkannt';
-      btn.disabled = false; btn.textContent = '🤖 Analysieren';
+      status.textContent = currentLang==='en'?'⚠ No drills detected':'⚠ Keine Drills erkannt';
+      btn.disabled = false; btn.textContent = T['ki-analyze-btn'][currentLang];
       return;
     }
     kiDrillCandidates = drills.map((d, i) => ({ ...d, _id: 'ki_' + Date.now() + '_' + i, _selected: true }));
@@ -6946,10 +6974,10 @@ Wenn ein Wert unklar ist, wähle den sinnvollsten Default. Mehrere Drills = mehr
     document.getElementById('ki-input-section').style.display = 'none';
     document.getElementById('ki-results-section').style.display = 'block';
   } catch(e) {
-    status.textContent = '⚠ API-Fehler: ' + e.message;
+    status.textContent = (currentLang==='en'?'⚠ API error: ':'⚠ API-Fehler: ') + e.message;
   }
   btn.disabled = false;
-  btn.textContent = '🤖 Analysieren';
+  btn.textContent = T['ki-analyze-btn'][currentLang];
 }
 
 function renderKiResults() {
@@ -7035,9 +7063,9 @@ function kiToggleArr(idx, field, val, checked) {
 
 async function kiSaveSelected() {
   const selected = kiDrillCandidates.filter(d => d._selected && d.name);
-  if (selected.length === 0) { toast('Keine Drills ausgewählt'); return; }
+  if (selected.length === 0) { toast(currentLang==='en'?'No drills selected':'Keine Drills ausgewählt'); return; }
   const status = document.getElementById('ki-save-status');
-  status.textContent = `Speichere ${selected.length} Drill(s)…`;
+  status.textContent = (currentLang==='en'?`Saving ${selected.length} drill(s)…`:`Speichere ${selected.length} Drill(s)…`);
   let saved = 0;
   for (const d of selected) {
     const drill = {
@@ -7069,10 +7097,10 @@ async function kiSaveSelected() {
     saved++;
   }
   applyBibFilters();
-  status.textContent = `✓ ${saved} Drill(s) gespeichert`;
+  status.textContent = `✓ ${saved} ` + (currentLang==='en'?'drill(s) saved':'Drill(s) gespeichert');
   setTimeout(() => {
     closeKiImportModal();
-    toast(`✓ ${saved} Drill(s) importiert`);
+    toast(`✓ ${saved} ` + (currentLang==='en'?'drill(s) imported':'Drill(s) importiert'));
   }, 800);
 }
 
@@ -7086,7 +7114,7 @@ window.renderPlanOverview   = renderPlanOverview;
   <!-- USER LOGIN SCREEN -->
   <div class="user-modal-overlay" id="user-modal" style="display:none;" onclick="if(event.target===this&&currentUser)closeUserModal()">
     <div class="user-modal-box">
-      <div class="user-modal-logo">Wiesel 2 · Coaching App</div>
+      <div class="user-modal-logo">assistr</div>
       <div class="user-modal-title" id="user-modal-title">🤖 Wer bist du?</div>
       <div class="user-modal-sub" id="user-modal-sub">Gib dein Kürzel ein um fortzufahren. Deine Drills und Pläne werden dir zugeordnet.</div>
       <div style="background:#fff8e1;border:1px solid #f0c040;border-radius:8px;padding:10px 12px;font-size:12px;color:#7a5200;display:flex;flex-direction:column;gap:4px;" id="user-modal-warn">
