@@ -1250,6 +1250,22 @@ async function migrateIfNeeded() {
       console.log('[MIGRATE] plans patched with createdBy+scope');
     }
 
+    // --- Drills team→public Migration ---
+    if (!meta.drillsPublicMigrated && window.currentUser === 'david') {
+      const drillsSnap = await getDoc(getTeamDrillsDoc());
+      if (drillsSnap.exists()) {
+        const drills = (drillsSnap.data().drills || []).map(d => ({ ...d, scope: 'public' }));
+        await setDoc(getTeamDrillsDoc(), { drills: [], updatedAt: Date.now() });
+        await setDoc(getPublicDrillsDoc(), { drills, updatedAt: Date.now() });
+        // Also update window.DRILLS
+        window.DRILLS = (window.DRILLS || []).map(d => d.scope === 'team' ? { ...d, scope: 'public' } : d);
+        try { applyBibFilters(); } catch(e) {}
+        await setDoc(getMetaDoc(), { ...meta, drillsPublicMigrated: true }, { merge: true });
+        console.log('[MIGRATE] Drills team→public:', drills.length);
+      }
+      return;
+    }
+
     // --- Original Seed-Migration ---
     if (meta.drillsMigrated) {
       const drillsSnap = await getDoc(getTeamDrillsDoc());
@@ -1337,6 +1353,14 @@ window.fbInitTeamListeners = (teamId) => {
     if (navCount) navCount.textContent = window.DRILLS.length;
   }, err => console.warn('Drills snapshot error:', err.message));
   window._teamListenerUnsubs.push(unsub3);
+
+  // Public plans listener
+  const unsubPublic = onSnapshot(getPublicPlansDoc(), (snap) => {
+    if (!snap.exists()) return;
+    window.publicPlans = snap.data().plans || [];
+    try { if (plansLibTab === 'shared') renderSharedPlansList(); } catch(e) {}
+  }, err => console.warn('PublicPlans snapshot:', err.message));
+  window._teamListenerUnsubs.push(unsubPublic);
 
   // Saison-Migration (einmalig: user→team) dann laden
   migrateSaisonToTeam().then(() => {
@@ -1618,23 +1642,36 @@ window.fbSaveTemplates = async (templates) => {
   } catch(e) { console.warn('fbSaveTemplates:', e.message); }
 };
 
-// ---- Plan teilen (Kopie in sharedPlans)
+// ---- Plan teilen (Kopie in sharedPlans oder publicPlans)
 window.fbSharePlan = async (plan) => {
   try {
-    const snap = await getDoc(getSharedPlansDoc());
-    const existing = snap.exists() ? (snap.data().plans || []) : [];
-    const filtered = existing.filter(p => p.id !== plan.id);
-    await setDoc(getSharedPlansDoc(), { plans: [...filtered, { ...plan, scope: 'team' }], updatedAt: Date.now() });
+    if (plan.scope === 'public') {
+      const snap = await getDoc(getPublicPlansDoc());
+      const existing = snap.exists() ? (snap.data().plans || []) : [];
+      const filtered = existing.filter(p => p.id !== plan.id);
+      await setDoc(getPublicPlansDoc(), { plans: [...filtered, { ...plan }], updatedAt: Date.now() });
+    } else {
+      const snap = await getDoc(getSharedPlansDoc());
+      const existing = snap.exists() ? (snap.data().plans || []) : [];
+      const filtered = existing.filter(p => p.id !== plan.id);
+      await setDoc(getSharedPlansDoc(), { plans: [...filtered, { ...plan, scope: 'team' }], updatedAt: Date.now() });
+    }
   } catch(e) { console.warn('fbSharePlan:', e.message); }
 };
 
-// ---- Plan zurückziehen
+// ---- Plan zurückziehen (aus team + public)
 window.fbUnsharePlan = async (planId) => {
   try {
-    const snap = await getDoc(getSharedPlansDoc());
-    if (!snap.exists()) return;
-    const plans = (snap.data().plans || []).filter(p => p.id !== planId);
-    await setDoc(getSharedPlansDoc(), { plans, updatedAt: Date.now() });
+    const teamSnap = await getDoc(getSharedPlansDoc());
+    if (teamSnap.exists()) {
+      const plans = (teamSnap.data().plans || []).filter(p => p.id !== planId);
+      await setDoc(getSharedPlansDoc(), { plans, updatedAt: Date.now() });
+    }
+    const pubSnap = await getDoc(getPublicPlansDoc());
+    if (pubSnap.exists()) {
+      const plans = (pubSnap.data().plans || []).filter(p => p.id !== planId);
+      await setDoc(getPublicPlansDoc(), { plans, updatedAt: Date.now() });
+    }
   } catch(e) { console.warn('fbUnsharePlan:', e.message); }
 };
 
@@ -2441,7 +2478,7 @@ signInAnonymously(auth).then(async () => {
       <div class="form-group">
         <label class="form-label" id="de-scope-label">Sichtbarkeit</label>
         <select class="form-input" id="de-scope">
-          <option value="public" id="de-scope-opt-public">🌐 Public (alle Teams)</option>
+          <option value="public" id="de-scope-opt-public" selected>🌐 Public (alle Teams)</option>
           <option value="team" id="de-scope-opt-team">👥 Team</option>
           <option value="private" id="de-scope-opt-personal">🔒 Privat</option>
         </select>
@@ -3491,7 +3528,7 @@ async function saveDrillFromModal() {
     bildUrl: window._deUploadedBildUrl !== undefined ? window._deUploadedBildUrl : document.getElementById('de-bild').value.trim(),
     videoUrl: window._deUploadedVideoUrl !== undefined ? window._deUploadedVideoUrl : document.getElementById('de-video').value.trim(),
     externerLink: document.getElementById('de-link').value.trim(),
-    scope: document.getElementById('de-scope').value || 'team',
+    scope: document.getElementById('de-scope').value || 'public',
     updatedAt: Date.now()
   };
 
@@ -3698,6 +3735,7 @@ function formatDateDE(date) {
 
 
 function newPlan() {
+  window._sharedPlanReadOnly = false;
   currentPlan = {
     id: 'plan_' + Date.now(),
     name: '',
@@ -3705,7 +3743,7 @@ function newPlan() {
     theme: '',
     notes: '',
     totalTime: 90,
-    scope: 'private',
+    scope: 'team',
     createdBy: window.currentUser || '',
     slots: [
       { id: 's1', label: 'Warmup', phase: 'warmup', durationMin: 20, drills: [], fixed: true },
@@ -3759,7 +3797,28 @@ function updatePlanMeta() {
   updatePlanDisplayHeader();
 }
 
+function updatePlanReadOnlyBanner() {
+  const existing = document.getElementById('plan-readonly-banner');
+  if (window._sharedPlanReadOnly) {
+    if (!existing) {
+      const banner = document.createElement('div');
+      banner.id = 'plan-readonly-banner';
+      banner.style.cssText = 'background:#fff8e1;border:1px solid #f0c040;border-radius:8px;padding:8px 14px;font-size:12px;color:#7a5200;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;';
+      banner.innerHTML = `<span>👁 ${currentLang==='en'?'Viewing shared plan':'Geteilter Plan (read-only)'}</span>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="saveSharedPlanNotes()">📝 ${currentLang==='en'?'Save notes':'Notizen'}</button>
+          <button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="loadSharedPlanAsCopy(currentPlan.id)">📋 ${currentLang==='en'?'Copy':'Kopie'}</button>
+        </div>`;
+      const planForm = document.getElementById('plan-form') || document.getElementById('page-planung');
+      if (planForm) planForm.insertBefore(banner, planForm.firstChild);
+    }
+  } else {
+    if (existing) existing.remove();
+  }
+}
+
 function updatePlanDisplayHeader() {
+  updatePlanReadOnlyBanner();
   if (!currentPlan) return;
   const name = currentPlan.name || (currentLang === 'en' ? 'New Practice Plan' : 'Neuer Trainingsplan');
   document.getElementById('plan-title-display').textContent = name;
@@ -3835,7 +3894,22 @@ function savePlan() {
   toast(toastMsg('saved'));
 }
 
+function saveSharedPlanNotes() {
+  if (!window._sharedPlanReadOnly || !currentPlan) return;
+  const notes = document.getElementById('plan-notes')?.value || '';
+  currentPlan.notes = notes;
+  // Update in sharedPlans
+  const allShared = [...(window.sharedPlans || []), ...(window.publicPlans || [])];
+  const plan = allShared.find(p => p.id === currentPlan.id);
+  if (plan) {
+    plan.notes = notes;
+    if (typeof window.fbSharePlan === 'function') window.fbSharePlan({ ...plan, notes });
+    toast(currentLang === 'en' ? '📝 Notes saved' : '📝 Notizen gespeichert');
+  }
+}
+
 function autoSave() {
+  if (window._sharedPlanReadOnly) return; // Read-only plan — no save
   if (!currentPlan) return;
   if (!currentPlan.name) currentPlan.name = 'Training ' + currentPlan.date;
   const idx = savedPlans.findIndex(p => p.id === currentPlan.id);
@@ -3922,13 +3996,33 @@ function toggleSharePlan(planId) {
 }
 
 // ---- Geteilten Plan als Kopie laden
-function loadSharedPlan(planId) {
-  const plan = (window.sharedPlans || []).find(p => p.id === planId);
+function openSharedPlan(planId) {
+  // Alle quellen durchsuchen
+  const allShared = [...(window.sharedPlans || []), ...(window.publicPlans || [])];
+  const plan = allShared.find(p => p.id === planId);
+  if (!plan) return;
+  // Plan direkt laden — read-only (kein neues id, scope bleibt)
+  currentPlan = JSON.parse(JSON.stringify(plan));
+  window._sharedPlanReadOnly = true; // Flag für read-only Anzeige
+  document.getElementById('plan-name').value = plan.name || '';
+  document.getElementById('plan-date').value = plan.date || '';
+  document.getElementById('plan-theme').value = plan.theme || '';
+  document.getElementById('plan-notes').value = plan.notes || '';
+  document.getElementById('plan-total-time').value = plan.totalTime || 90;
+  renderSlots(); updateTimeSummary(); updatePlanDisplayHeader();
+  showPage('planung');
+  toast(currentLang === 'en' ? '👁 Viewing shared plan' : '👁 Geteilter Plan (Read-only)');
+}
+
+function loadSharedPlanAsCopy(planId) {
+  const allShared = [...(window.sharedPlans || []), ...(window.publicPlans || [])];
+  const plan = allShared.find(p => p.id === planId);
   if (!plan) return;
   const copy = JSON.parse(JSON.stringify(plan));
   copy.id = 'plan_' + Date.now();
-  copy.scope = 'personal';
+  copy.scope = 'private';
   copy.name = (copy.name || '') + (currentLang === 'en' ? ' (copy)' : ' (Kopie)');
+  window._sharedPlanReadOnly = false;
   currentPlan = copy;
   document.getElementById('plan-name').value = copy.name;
   document.getElementById('plan-date').value = copy.date || '';
@@ -3939,6 +4033,9 @@ function loadSharedPlan(planId) {
   showPage('planung');
   toast(currentLang === 'en' ? 'Plan loaded as copy' : 'Plan als Kopie geladen');
 }
+
+// Legacy shim
+function loadSharedPlan(planId) { openSharedPlan(planId); }
 
 // ---- Plan aus shared löschen (nur Ersteller/Admin)
 function unshareAndDeletePlan(planId, e) {
@@ -4065,8 +4162,8 @@ function openTemplateModal(tplId, fromPlan) {
         <label class="form-label">Scope</label>
         <select id="tpl-scope-input" class="form-select">
           <option value="public" ${(existing?.scope||'')==='public'?'selected':''}>🌐 Public</option>
-          <option value="team" ${(existing?.scope||'')==='team'?'selected':''}>👥 Team</option>
-          <option value="private" ${(existing?.scope||'private')==='private'||(existing?.scope||'')==='personal'?'selected':''}>🔒 Privat</option>
+          <option value="team" ${!existing||!existing.scope||existing.scope==='team'?'selected':''}>👥 Team</option>
+          <option value="private" ${(existing?.scope||'')==='private'||(existing?.scope||'')==='personal'?'selected':''}>🔒 Privat</option>
         </select>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
@@ -5220,10 +5317,13 @@ function renderPlansLibrary() {
 
 function renderSharedPlansList() {
   const container = document.getElementById('saved-plans-list');
-  document.getElementById('shared-plans-count').textContent = (window.sharedPlans || []).length;
+  const totalShared = new Set([...(window.sharedPlans||[]), ...(window.publicPlans||[])].map(p=>p.id)).size;
+  document.getElementById('shared-plans-count').textContent = totalShared;
   const userFilter = document.getElementById('shared-user-filter')?.value || '';
   const search = (document.getElementById('shared-search')?.value || '').toLowerCase();
-  let plans = window.sharedPlans || [];
+  // Merge team-shared + public plans, deduplicate by id
+  const allShared = [...(window.sharedPlans || []), ...(window.publicPlans || [])];
+  let plans = Object.values(allShared.reduce((acc, p) => { acc[p.id] = p; return acc; }, {}));
   if (userFilter) plans = plans.filter(p => p.createdBy === userFilter);
   if (search) plans = plans.filter(p => (p.name||'').toLowerCase().includes(search) || (p.theme||'').toLowerCase().includes(search) || (p.date||'').includes(search));
   if (plans.length === 0) {
@@ -5240,7 +5340,8 @@ function renderSharedPlansList() {
         <div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);margin-top:2px;">${drillCount} Drills</div>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
-        <button class="btn btn-ghost btn-sm" onclick="loadSharedPlan('${p.id}')" title="${currentLang==='en'?'Load as copy':'Als Kopie laden'}">📋</button>
+        <button class="btn btn-ghost btn-sm" onclick="openSharedPlan('${p.id}')" title="${currentLang==='en'?'Open':'Öffnen'}">👁</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadSharedPlanAsCopy('${p.id}')" title="${currentLang==='en'?'Copy to my plans':'Als Kopie speichern'}">📋</button>
         ${saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title="" + (currentLang==='en'?'Assign phase':'Phase zuweisen') + " style="font-size:11px;">📅</button>` : ''}
         ${canManage ? `<button class="btn btn-danger btn-sm" onclick="unshareAndDeletePlan('${p.id}',event)">✕</button>` : ''}
       </div>
