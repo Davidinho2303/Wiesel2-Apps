@@ -1252,17 +1252,28 @@ async function migrateIfNeeded() {
 
     // --- Drills team→public Migration ---
     if (!meta.drillsPublicMigrated && window.currentUser === 'david') {
-      const drillsSnap = await getDoc(getTeamDrillsDoc());
-      if (drillsSnap.exists()) {
-        const drills = (drillsSnap.data().drills || []).map(d => ({ ...d, scope: 'public' }));
-        await setDoc(getTeamDrillsDoc(), { drills: [], updatedAt: Date.now() });
+      // Lese direkt aus wiesel2 (hardcoded, einmalige Migration)
+      const wiesel2DrillsDoc = doc(db, 'teams', 'wiesel2', 'data', 'drills');
+      const drillsSnap = await getDoc(wiesel2DrillsDoc);
+      // Auch aus wieselherren2 versuchen falls wiesel2 leer
+      let drills = [];
+      if (drillsSnap.exists() && (drillsSnap.data().drills || []).length > 0) {
+        drills = (drillsSnap.data().drills || []).map(d => ({ ...d, scope: 'public' }));
+        await setDoc(wiesel2DrillsDoc, { drills: [], updatedAt: Date.now() });
+      } else {
+        const altSnap = await getDoc(getTeamDrillsDoc());
+        if (altSnap.exists()) {
+          drills = (altSnap.data().drills || []).map(d => ({ ...d, scope: 'public' }));
+          await setDoc(getTeamDrillsDoc(), { drills: [], updatedAt: Date.now() });
+        }
+      }
+      if (drills.length > 0) {
         await setDoc(getPublicDrillsDoc(), { drills, updatedAt: Date.now() });
-        // Also update window.DRILLS
-        window.DRILLS = (window.DRILLS || []).map(d => d.scope === 'team' ? { ...d, scope: 'public' } : d);
+        window.DRILLS = (window.DRILLS || []).filter(d => d.scope !== 'team').concat(drills);
         try { applyBibFilters(); } catch(e) {}
-        await setDoc(getMetaDoc(), { ...meta, drillsPublicMigrated: true }, { merge: true });
         console.log('[MIGRATE] Drills team→public:', drills.length);
       }
+      await setDoc(getMetaDoc(), { ...meta, drillsPublicMigrated: true }, { merge: true });
       return;
     }
 
@@ -1363,12 +1374,13 @@ window.fbInitTeamListeners = (teamId) => {
     if (navCount) navCount.textContent = window.DRILLS.length;
   }, err => console.warn('Public drills snapshot error:', err.message));
   window._teamListenerUnsubs.push(unsubPublicDrills);
+  window.publicPlans = window.publicPlans || [];
 
   // Public plans listener
+  window.publicPlans = window.publicPlans || []; // initialisieren
   const unsubPublic = onSnapshot(getPublicPlansDoc(), (snap) => {
-    if (!snap.exists()) return;
-    window.publicPlans = snap.data().plans || [];
-    try { if (plansLibTab === 'shared') renderSharedPlansList(); } catch(e) {}
+    window.publicPlans = snap.exists() ? (snap.data().plans || []) : [];
+    try { if (typeof renderSharedPlansList === 'function' && plansLibTab === 'shared') renderSharedPlansList(); } catch(e) {}
   }, err => console.warn('PublicPlans snapshot:', err.message));
   window._teamListenerUnsubs.push(unsubPublic);
 
@@ -3833,7 +3845,7 @@ function updatePlanReadOnlyBanner() {
       const banner = document.createElement('div');
       banner.id = 'plan-readonly-banner';
       banner.style.cssText = 'background:#fff8e1;border:1px solid #f0c040;border-radius:8px;padding:8px 14px;font-size:12px;color:#7a5200;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;';
-      banner.innerHTML = `<span>👁 ${currentLang==='en'?'Viewing shared plan':'Geteilter Plan (read-only)'}</span>
+      banner.innerHTML = `<span>👁 ${currentLang==='en'?'Viewing shared plan (read-only)':'Geteilter Plan (read-only)'}</span>
         <div style="display:flex;gap:4px;">
           <button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="saveSharedPlanNotes()">📝 ${currentLang==='en'?'Save notes':'Notizen'}</button>
           <button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="loadSharedPlanAsCopy(currentPlan.id)">📋 ${currentLang==='en'?'Copy':'Kopie'}</button>
@@ -4000,11 +4012,16 @@ function openPlanScopePicker(planId, event) {
   const rect = event?.target?.getBoundingClientRect();
   picker.style.top = (rect ? rect.bottom + 4 : 100) + 'px';
   picker.style.left = (rect ? rect.left : 100) + 'px';
-  [['private','🔒 Privat'],['team','👥 Team'],['public','🌐 Public']].forEach(([scope, label]) => {
+  const scopeLabels = {
+    private: currentLang==='en'?'🔒 Private':'🔒 Privat',
+    team: '👥 Team',
+    public: '🌐 Public'
+  };
+  Object.entries(scopeLabels).forEach(([scope, label]) => {
     const btn = document.createElement('button');
     btn.className = 'btn btn-ghost btn-sm';
     btn.style.cssText = 'text-align:left;font-size:12px;padding:6px 10px;' + (plan.scope === scope ? 'font-weight:700;background:var(--surface2);' : '');
-    btn.textContent = label;
+    btn.textContent = scopeLabels[scope];
     btn.onclick = () => { setPlanScope(planId, scope); picker.remove(); };
     picker.appendChild(btn);
   });
@@ -6926,6 +6943,8 @@ function applyLang() {
   if (bibScopeLabel) bibScopeLabel.textContent = currentLang === 'en' ? 'Visibility' : 'Sichtbarkeit';
   const bibScopeAll = document.getElementById('bib-scope-all');
   if (bibScopeAll) bibScopeAll.textContent = currentLang === 'en' ? 'All' : 'Alle';
+  const bibScopePrivate = document.getElementById('bib-scope-private');
+  if (bibScopePrivate) bibScopePrivate.textContent = currentLang === 'en' ? '🔒 Private' : '🔒 Privat';
   const bibOwnerAll = document.getElementById('bib-owner-all');
   if (bibOwnerAll) bibOwnerAll.textContent = currentLang === 'en' ? 'All' : 'Alle';
   const bibOwnerMine = document.getElementById('bib-owner-mine');
