@@ -1108,6 +1108,10 @@ function getTeamDrillsDoc()      { const t = window.currentTeam || 'wiesel2'; re
 function getMetaDoc()            { const t = window.currentTeam || 'wiesel2'; return doc(db, 'teams', t, 'data', 'meta'); }
 function getSharedPlansDoc()     { const t = window.currentTeam || 'wiesel2'; return doc(db, 'teams', t, 'data', 'sharedPlans'); }
 function getSharedTemplatesDoc() { const t = window.currentTeam || 'wiesel2'; return doc(db, 'teams', t, 'data', 'sharedTemplates'); }
+function getTeamPlansDoc()       { const t = window.currentTeam || 'wiesel2'; return doc(db, 'teams', t, 'data', 'plans'); }
+function getTeamSeasonsDoc()     { const t = window.currentTeam || 'wiesel2'; return doc(db, 'teams', t, 'data', 'seasons'); }
+function getPublicDrillsDoc()    { return doc(db, 'public', 'drills'); }
+function getPublicPlansDoc()     { return doc(db, 'public', 'plans'); }
 
 // Dynamic docs — depend on currentUser (set after login)
 function getPlansDoc()          { const u = window.currentUser || 'anonymous'; return doc(db, 'users', u, 'data', 'plans'); }
@@ -1137,7 +1141,6 @@ async function loadDrillsFromFirestore() {
     if (teamSnap.exists()) {
       const data = teamSnap.data();
       if (Array.isArray(data.drills)) {
-        // Scope-Patch: fehlende scope-Felder auf 'team' setzen
         let needsPatch = false;
         data.drills.forEach(d => { if (!d.scope) { d.scope = 'team'; needsPatch = true; } });
         teamDrills = data.drills;
@@ -1148,10 +1151,19 @@ async function loadDrillsFromFirestore() {
       }
     }
 
-    // Personal drills kommen ausschließlich aus fbInitUserListeners onSnapshot
-    if (teamDrills.length > 0) {
-      const existingPersonal = (window.DRILLS || []).filter(d => d.scope === 'personal');
-      window.DRILLS = [...teamDrills, ...existingPersonal];
+    // Load public drills
+    let publicDrills = [];
+    try {
+      const publicSnap = await getDoc(getPublicDrillsDoc());
+      if (publicSnap.exists() && Array.isArray(publicSnap.data().drills)) {
+        publicDrills = publicSnap.data().drills;
+      }
+    } catch(e) { console.warn('Public drills load error:', e.message); }
+
+    // Personal drills kommen aus fbInitUserListeners onSnapshot
+    if (teamDrills.length > 0 || publicDrills.length > 0) {
+      const existingPrivate = (window.DRILLS || []).filter(d => d.scope === 'private' || d.scope === 'personal');
+      window.DRILLS = [...publicDrills, ...teamDrills, ...existingPrivate];
   // Deduplizieren: gleiche ID → personal hat Vorrang
   window.DRILLS = Object.values(window.DRILLS.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
       try { applyBibFilters(); } catch(e) {}
@@ -1260,6 +1272,30 @@ async function migrateIfNeeded() {
   }
 }
 
+// ---- Einmalige Saison-Migration: users/{uid}/data/seasons → teams/{teamId}/data/seasons
+async function migrateSaisonToTeam() {
+  try {
+    const t = window.currentTeam;
+    const u = window.currentUser;
+    if (!t || !u) return;
+    // Prüfen ob Team-Saison bereits existiert
+    const teamSaisonRef = doc(db, 'teams', t, 'data', 'seasons');
+    const teamSnap = await getDoc(teamSaisonRef);
+    if (teamSnap.exists() && (teamSnap.data().phases || []).length > 0) return; // bereits migriert
+    // User-Saison laden
+    const userSaisonRef = doc(db, 'users', u, 'data', 'seasons');
+    const userSnap = await getDoc(userSaisonRef);
+    if (!userSnap.exists()) return;
+    const phases = userSnap.data().phases || [];
+    if (phases.length === 0) return;
+    // Nach Team kopieren
+    await setDoc(teamSaisonRef, { phases, updatedAt: Date.now() });
+    console.log('[MIGRATE] Saison migriert:', phases.length, 'Phasen → team', t);
+  } catch(e) {
+    console.warn('[MIGRATE] Saison migration error:', e.message);
+  }
+}
+
 // ---- Drills in Firestore speichern
 // Re-init user-specific Firestore listeners after login
 // Track active user listeners for cleanup
@@ -1302,7 +1338,11 @@ window.fbInitTeamListeners = (teamId) => {
   }, err => console.warn('Drills snapshot error:', err.message));
   window._teamListenerUnsubs.push(unsub3);
 
-  // Initialer Drill-Load (onSnapshot feuert auch beim ersten Mal, aber expliziter Load als Fallback)
+  // Saison-Migration (einmalig: user→team) dann laden
+  migrateSaisonToTeam().then(() => {
+    if (typeof window.fbLoadSaisonFromFirestore === 'function') window.fbLoadSaisonFromFirestore();
+  });
+  // Initialer Drill-Load
   loadDrillsFromFirestore();
   // Migration (einmalig)
   migrateIfNeeded().catch(e => console.warn('migrate:', e.message));
@@ -1346,8 +1386,7 @@ window.fbInitUserListeners = (kuerzel) => {
   }, err => console.warn('Personal drills snapshot error:', err.message));
   window._userListenerUnsubs.push(unsub2);
 
-  // Load saison — use window.fbLoadSaison (module scope)
-  if (typeof window.fbLoadSaisonFromFirestore === 'function') window.fbLoadSaisonFromFirestore();
+  // Saison wird in fbInitTeamListeners geladen (team-weit)
 
   // Load templates immediately
   getDocFromServer(getTemplatesDoc()).then(snap => {
@@ -1546,12 +1585,12 @@ window.fbMigrateUserTeam = async (kuerzel, fallbackTeam) => {
 
 window.fbSaveDrills = async (drills) => {
   try {
-    const teamDrills     = drills.filter(d => d.scope !== 'personal');
-    const personalDrills = drills.filter(d => d.scope === 'personal');
+    const publicDrills  = drills.filter(d => d.scope === 'public');
+    const teamDrills    = drills.filter(d => d.scope === 'team');
+    const privateDrills = drills.filter(d => d.scope === 'private' || d.scope === 'personal');
     await setDoc(getTeamDrillsDoc(), { drills: teamDrills, updatedAt: Date.now() });
-    if (personalDrills.length > 0) {
-      await setDoc(getPersonalDrillsDoc(), { drills: personalDrills, updatedAt: Date.now() });
-    }
+    await setDoc(getPublicDrillsDoc(), { drills: publicDrills, updatedAt: Date.now() });
+    await setDoc(getPersonalDrillsDoc(), { drills: privateDrills, updatedAt: Date.now() });
   } catch(e) {
     console.warn('Drills save error:', e.message);
     setStatus('⚠ Drill-Speichern fehlgeschlagen', 'var(--red)');
@@ -1561,7 +1600,16 @@ window.fbSaveDrills = async (drills) => {
 // ---- Plans speichern
 window.fbSavePlans = async (plans, mins) => {
   try {
-    await setDoc(getPlansDoc(), { plans, drillMins: mins || {}, updatedAt: Date.now() });
+    const publicPlans  = plans.filter(p => p.scope === 'public');
+    const teamPlans    = plans.filter(p => p.scope === 'team');
+    const privatePlans = plans.filter(p => !p.scope || p.scope === 'private' || p.scope === 'personal');
+    await setDoc(getPlansDoc(), { plans: privatePlans, drillMins: mins || {}, updatedAt: Date.now() });
+    if (teamPlans.length > 0 || window._teamPlansExisted) {
+      await setDoc(getTeamPlansDoc(), { plans: teamPlans, updatedAt: Date.now() });
+    }
+    if (publicPlans.length > 0 || window._publicPlansExisted) {
+      await setDoc(getPublicPlansDoc(), { plans: publicPlans, updatedAt: Date.now() });
+    }
   } catch(e) {
     console.warn('Firebase save:', e.message);
     setStatus((window.currentLang||"de")==="en"?'⚠ Save failed':'⚠ Speichern fehlgeschlagen', 'var(--red)');
@@ -1609,22 +1657,22 @@ window.fbShareTemplate = async (tpl) => {
 
 // ---- Template zurückziehen
 window.fbSaveSaisonToFirestore = async (phases) => {
-  const u = window.currentUser;
-  console.log('[Saison] save called, user=' + u + ', phases=' + phases.length);
-  if (!u || u === 'anonymous') { console.warn('[Saison] save skipped — no user'); return; }
+  const t = window.currentTeam;
+  console.log('[Saison] save called, team=' + t + ', phases=' + phases.length);
+  if (!t) { console.warn('[Saison] save skipped — no team'); return; }
   try {
-    const ref = doc(db, 'users', u, 'data', 'seasons');
+    const ref = doc(db, 'teams', t, 'data', 'seasons');
     await setDoc(ref, { phases, updatedAt: Date.now() });
-    console.log('[Saison] save SUCCESS for ' + u);
+    console.log('[Saison] save SUCCESS for team ' + t);
   } catch(e) { console.warn('[Saison] save ERROR: ' + e.message); }
 };
 
 window.fbLoadSaisonFromFirestore = async () => {
-  const u = window.currentUser;
-  console.log('[Saison] load called, user=' + u);
-  if (!u || u === 'anonymous') { console.warn('[Saison] no user'); return; }
+  const t = window.currentTeam;
+  console.log('[Saison] load called, team=' + t);
+  if (!t) { console.warn('[Saison] no team'); return; }
   try {
-    const ref = doc(db, 'users', u, 'data', 'seasons');
+    const ref = doc(db, 'teams', t, 'data', 'seasons');
     const unsub = onSnapshot(ref, (snap) => {
       console.log('[Saison] snapshot fired, exists=' + snap.exists());
       if (!snap.exists()) return;
@@ -1632,9 +1680,9 @@ window.fbLoadSaisonFromFirestore = async () => {
       console.log('[Saison] loaded ' + phases.length + ' phases');
       if (typeof window.onSaisonLoaded === 'function') window.onSaisonLoaded(phases);
     }, (e) => console.warn('[Saison] snapshot error: ' + e.message));
-    // Track for cleanup on user switch
-    if (!window._userListenerUnsubs) window._userListenerUnsubs = [];
-    window._userListenerUnsubs.push(unsub);
+    // Track for cleanup on team switch
+    if (!window._teamListenerUnsubs) window._teamListenerUnsubs = [];
+    window._teamListenerUnsubs.push(unsub);
   } catch(e) { console.warn('[Saison] load error:', e.message); }
 };
 
@@ -2400,8 +2448,9 @@ signInAnonymously(auth).then(async () => {
       <div class="form-group">
         <label class="form-label" id="de-scope-label">Sichtbarkeit</label>
         <select class="form-input" id="de-scope">
-          <option value="team" id="de-scope-opt-team">Geteilt</option>
-          <option value="personal" id="de-scope-opt-personal">Nur ich</option>
+          <option value="public" id="de-scope-opt-public">🌐 Public (alle Teams)</option>
+          <option value="team" id="de-scope-opt-team">👥 Team</option>
+          <option value="private" id="de-scope-opt-personal">🔒 Privat</option>
         </select>
       </div>
     </div>
@@ -3820,32 +3869,56 @@ function loadPlan(planId) {
   updateSidebarExportState();
 }
 
-// ---- Plan teilen
-function sharePlan(planId) {
+// ---- Plan-Scope setzen (private / team / public)
+function setPlanScope(planId, scope) {
   const plan = savedPlans.find(p => p.id === planId);
   if (!plan) return;
-  plan.scope = 'team';
+  const oldScope = plan.scope;
+  plan.scope = scope;
   const idx = savedPlans.findIndex(p => p.id === planId);
   if (idx >= 0) savedPlans[idx] = plan;
-  saveToStorage();
-  if (typeof window.fbSharePlan === 'function') window.fbSharePlan(plan);
+  // Aus sharedPlans entfernen wenn nicht mehr team
+  if (oldScope === 'team' && scope !== 'team') {
+    if (typeof window.fbUnsharePlan === 'function') window.fbUnsharePlan(planId);
+  }
+  // In sharedPlans eintragen wenn team
+  if (scope === 'team') {
+    if (typeof window.fbSharePlan === 'function') window.fbSharePlan(plan);
+  }
   if (typeof window.fbSavePlans === 'function') window.fbSavePlans(savedPlans, window.drillMins);
   renderSavedPlansList();
-  toast(currentLang === 'en' ? '🌐 Plan shared' : '🌐 Plan geteilt');
+  const labels = { private: currentLang==='en'?'🔒 Private':'🔒 Privat', team: currentLang==='en'?'👥 Team':'👥 Team', public: '🌐 Public' };
+  toast(labels[scope] || scope);
 }
 
-// ---- Plan zurückziehen (aus shared entfernen)
-function unsharePlan(planId) {
+// ---- Scope-Picker für Plan anzeigen
+function openPlanScopePicker(planId, event) {
+  event && event.stopPropagation();
+  const existing = document.getElementById('plan-scope-picker');
+  if (existing) { existing.remove(); return; }
   const plan = savedPlans.find(p => p.id === planId);
-  if (plan) { plan.scope = 'personal'; }
-  const idx = savedPlans.findIndex(p => p.id === planId);
-  if (idx >= 0) savedPlans[idx] = plan;
-  saveToStorage();
-  if (typeof window.fbUnsharePlan === 'function') window.fbUnsharePlan(planId);
-  if (typeof window.fbSavePlans === 'function') window.fbSavePlans(savedPlans, window.drillMins);
-  renderSavedPlansList();
-  toast(currentLang === 'en' ? 'Plan unshared' : 'Plan zurückgezogen');
+  if (!plan) return;
+  const picker = document.createElement('div');
+  picker.id = 'plan-scope-picker';
+  picker.style.cssText = 'position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);padding:6px;display:flex;flex-direction:column;gap:2px;min-width:160px;';
+  const rect = event?.target?.getBoundingClientRect();
+  picker.style.top = (rect ? rect.bottom + 4 : 100) + 'px';
+  picker.style.left = (rect ? rect.left : 100) + 'px';
+  [['private','🔒 Privat'],['team','👥 Team'],['public','🌐 Public']].forEach(([scope, label]) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-ghost btn-sm';
+    btn.style.cssText = 'text-align:left;font-size:12px;padding:6px 10px;' + (plan.scope === scope ? 'font-weight:700;background:var(--surface2);' : '');
+    btn.textContent = label;
+    btn.onclick = () => { setPlanScope(planId, scope); picker.remove(); };
+    picker.appendChild(btn);
+  });
+  document.body.appendChild(picker);
+  setTimeout(() => document.addEventListener('click', function h() { picker.remove(); document.removeEventListener('click', h); }), 10);
 }
+
+// Legacy shims
+function sharePlan(planId) { setPlanScope(planId, 'team'); }
+function unsharePlan(planId) { setPlanScope(planId, 'private'); }
 
 // ---- Toggle Share für Plan
 function toggleSharePlan(planId) {
@@ -3998,8 +4071,9 @@ function openTemplateModal(tplId, fromPlan) {
       <div class="form-group" style="margin-bottom:16px;">
         <label class="form-label">Scope</label>
         <select id="tpl-scope-input" class="form-select">
-          <option value="personal" ${(existing?.scope||'personal')==='personal'?'selected':''}>Privat</option>
-          <option value="team" ${(existing?.scope||'')==='team'?'selected':''}>Geteilt</option>
+          <option value="public" ${(existing?.scope||'')==='public'?'selected':''}>🌐 Public</option>
+          <option value="team" ${(existing?.scope||'')==='team'?'selected':''}>👥 Team</option>
+          <option value="private" ${(existing?.scope||'private')==='private'||(existing?.scope||'')==='personal'?'selected':''}>🔒 Privat</option>
         </select>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
@@ -5947,7 +6021,7 @@ function renderSavedPlansList() {
     const drillCount = (p.slots || []).reduce((a, s) => a + (s.drills || []).length, 0);
     const totalMins = (p.slots || []).reduce((a, s) =>
       a + (s.drills || []).reduce((b, sd) => b + (parseInt(sd.mins) || 0), 0), 0);
-    const isShared = p.scope === 'team';
+    const isShared = p.scope === 'team' || p.scope === 'public';
     return `<div class="plan-list-item ${currentPlan && currentPlan.id === p.id ? 'active' : ''}" onclick="loadPlan('${p.id}')">
       <div style="flex:1;min-width:0;">
         <div class="plan-list-name">${p.name || '—'}${isShared ? ' <span style="font-size:9px;color:var(--blue,#2E75B6);font-family:DM Mono,monospace;">🌐</span>' : ''}${p.phaseId ? (() => { const ph = saisonPhases.find(x=>x.id===p.phaseId); return ph ? ` <span style="font-size:9px;font-family:DM Mono,monospace;padding:1px 5px;border-radius:8px;background:${ph.color}22;color:${ph.color};font-weight:600;">${ph.name}</span>` : ''; })() : ''}</div>
@@ -5957,7 +6031,7 @@ function renderSavedPlansList() {
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button class="btn btn-ghost btn-sm" onclick="duplicatePlan('${p.id}',event)" title="${currentLang==='en'?'Duplicate':'Duplizieren'}" style="font-size:11px;">⧉</button>
         ${saisonPhases.length>0 ? `<button class="btn btn-ghost btn-sm" onclick="openAssignPhaseModal('${p.id}',event)" title=\"${currentLang==='en'?'Assign phase':'Phase zuweisen'}\" style="font-size:11px;">📅</button>` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="toggleSharePlan('${p.id}')" title="${p.scope==='team'?(currentLang==='en'?'Unshare':'Zurückziehen'):(currentLang==='en'?'Share':'Teilen')}" style="font-size:11px;">${'scope' in p && p.scope === 'team' ? '🌐' : '🔗'}</button>
+        <button class="btn btn-ghost btn-sm" onclick="openPlanScopePicker('${p.id}',event)" title="Sichtbarkeit" style="font-size:11px;">${p.scope==='public'?'🌐':p.scope==='team'?'👥':'🔒'}</button>
         <button class="btn btn-danger btn-sm" onclick="deletePlan('${p.id}',event)">✕</button>
       </div>
     </div>`;
