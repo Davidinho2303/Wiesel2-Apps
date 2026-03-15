@@ -1308,8 +1308,9 @@ window.fbInitTeamListeners = (teamId) => {
   }, err => console.warn('Drills snapshot error:', err.message));
   window._teamListenerUnsubs.push(unsub3);
 
-  // Drills initial load
+  // Initialer Drill-Load (onSnapshot feuert auch beim ersten Mal, aber expliziter Load als Fallback)
   loadDrillsFromFirestore();
+  // Migration (einmalig)
   migrateIfNeeded().catch(e => console.warn('migrate:', e.message));
 };
 
@@ -1639,16 +1640,7 @@ signInAnonymously(auth).then(async () => {
   // Plans werden in fbInitUserListeners geladen (nach Login, wenn currentUser bekannt)
   // Team-Listener werden in fbInitTeamListeners gestartet (nach Login, wenn currentTeam bekannt)
 
-  // Drills sofort laden — currentTeam ist ggf. noch nicht gesetzt, Fallback 'wiesel2' greift
-  loadDrillsFromFirestore().then(loaded => {
-    if (!loaded && window.DRILLS_SEED) {
-      window.DRILLS = window.DRILLS_SEED;
-      try { applyBibFilters(); } catch(e) {}
-      const navCount = document.getElementById('nav-count-bib');
-      if (navCount) navCount.textContent = window.DRILLS.length;
-    }
-  });
-  migrateIfNeeded().catch(e => console.warn('migrate:', e.message));
+  // Drills + Migration laufen in fbInitTeamListeners nach Login
 
   // Personal drills live-listener (nur wenn User bereits bekannt)
   if (window.currentUser) {
@@ -2575,7 +2567,7 @@ window.DRILLS_SEED = [
 ];
 
 // DRILLS live array — wird durch Firestore überschrieben
-window.DRILLS = window.DRILLS_SEED.slice();
+window.DRILLS = []; // Wird von Firestore geladen; DRILLS_SEED nur als Fallback
 
 // ============================================================
 // DRILL-BESCHREIBUNGEN — DE
