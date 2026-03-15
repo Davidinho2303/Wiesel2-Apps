@@ -1341,18 +1341,28 @@ window.fbInitTeamListeners = (teamId) => {
 
   // Team Drills
   const unsub3 = onSnapshot(getTeamDrillsDoc(), (snap) => {
-    if (!snap.exists()) return;
-    const data = snap.data();
-    if (!Array.isArray(data.drills)) return;
-    const personalDrills = (window.DRILLS || []).filter(d => d.scope === 'personal');
-    window.DRILLS = [...data.drills, ...personalDrills];
-  // Deduplizieren: gleiche ID → personal hat Vorrang
-  window.DRILLS = Object.values(window.DRILLS.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
+    const teamDrills = (snap.exists() && Array.isArray(snap.data().drills)) ? snap.data().drills : [];
+    const publicDrills = (window.DRILLS || []).filter(d => d.scope === 'public');
+    const privateDrills = (window.DRILLS || []).filter(d => d.scope === 'private' || d.scope === 'personal');
+    const combined = [...publicDrills, ...teamDrills, ...privateDrills];
+    window.DRILLS = Object.values(combined.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'private' || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
     try { applyBibFilters(); } catch(e) {}
     const navCount = document.getElementById('nav-count-bib');
     if (navCount) navCount.textContent = window.DRILLS.length;
   }, err => console.warn('Drills snapshot error:', err.message));
   window._teamListenerUnsubs.push(unsub3);
+
+  // Public Drills listener
+  const unsubPublicDrills = onSnapshot(getPublicDrillsDoc(), (snap) => {
+    const publicDrills = (snap.exists() && Array.isArray(snap.data().drills)) ? snap.data().drills : [];
+    const nonPublic = (window.DRILLS || []).filter(d => d.scope !== 'public');
+    const combined = [...publicDrills, ...nonPublic];
+    window.DRILLS = Object.values(combined.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'private' || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
+    try { applyBibFilters(); } catch(e) {}
+    const navCount = document.getElementById('nav-count-bib');
+    if (navCount) navCount.textContent = window.DRILLS.length;
+  }, err => console.warn('Public drills snapshot error:', err.message));
+  window._teamListenerUnsubs.push(unsubPublicDrills);
 
   // Public plans listener
   const unsubPublic = onSnapshot(getPublicPlansDoc(), (snap) => {
@@ -1397,11 +1407,10 @@ window.fbInitUserListeners = (kuerzel) => {
 
   // Personal drills listener
   const unsub2 = onSnapshot(getPersonalDrillsDoc(), (snap) => {
-    if (!snap.exists()) return;
-    const data = snap.data();
-    if (!Array.isArray(data.drills)) return;
-    const teamDrills = (window.DRILLS || []).filter(d => d.scope !== 'personal');
-    window.DRILLS = [...teamDrills, ...data.drills];
+    const privateDrills = (snap.exists() && Array.isArray(snap.data().drills)) ? snap.data().drills : [];
+    const nonPrivate = (window.DRILLS || []).filter(d => d.scope !== 'private' && d.scope !== 'personal');
+    const combined = [...nonPrivate, ...privateDrills];
+    window.DRILLS = Object.values(combined.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'private' || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
   // Deduplizieren: gleiche ID → personal hat Vorrang
   window.DRILLS = Object.values(window.DRILLS.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
     try { applyBibFilters(); } catch(e) {}
@@ -1897,7 +1906,16 @@ signInAnonymously(auth).then(async () => {
           <input type="number" class="filter-input" id="bib-spieler" placeholder="z.B. 8" min="1" max="15" style="min-width:80px;" oninput="applyBibFilters()">
         </div>
         <button class="btn btn-ghost btn-sm" onclick="resetBibFilters()" style="align-self:flex-end;">Reset</button>
-        <div class="filter-group filter-full">
+        <div class="filter-group">
+          <span class="filter-label" id="bib-scope-label">Sichtbarkeit</span>
+          <select class="filter-select" id="bib-scope" onchange="applyBibFilters()">
+            <option value="" id="bib-scope-all">Alle</option>
+            <option value="public" id="bib-scope-public">🌐 Public</option>
+            <option value="team" id="bib-scope-team">👥 Team</option>
+            <option value="private" id="bib-scope-private">🔒 Privat</option>
+          </select>
+        </div>
+        <div class="filter-group">
           <span class="filter-label" id="bib-owner-label">Ersteller</span>
           <select class="filter-select" id="bib-owner" onchange="applyBibFilters()">
             <option value="" id="bib-owner-all">Alle</option>
@@ -3138,9 +3156,11 @@ function renderBibliothek(drills) {
       <div class="drill-card-header">
         <div class="drill-card-name">
           ${getDrillName(d)}
-          ${(currentUser && d.createdBy === currentUser && d.scope === 'personal')
-            ? `<span class="drill-scope-badge scope-mein">${currentLang==='en'?'Just me':'Nur ich'}</span>`
-            : `<span class="drill-scope-badge scope-team">${currentLang==='en'?'Shared':'Geteilt'}</span>`}
+          ${d.scope === 'public'
+            ? `<span class="drill-scope-badge scope-basis">🌐 Public</span>`
+            : d.scope === 'private' || d.scope === 'personal'
+              ? `<span class="drill-scope-badge scope-mein">${currentLang==='en'?'🔒 Private':'🔒 Privat'}</span>`
+              : `<span class="drill-scope-badge scope-team">👥 Team</span>`}
         </div>
         <span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${tCat(d.kat)}</span>
       </div>
@@ -3595,8 +3615,14 @@ function applyBibFilters() {
   const filtered = window.DRILLS.filter(d => {
     // Private Drills anderer User ausblenden
     const effectiveScope = d.scope || 'team';
-    if (effectiveScope === 'personal' && d.createdBy !== currentUser) return false;
+    if ((effectiveScope === 'personal' || effectiveScope === 'private') && d.createdBy !== currentUser) return false;
     // Eigene Drills Filter
+    const scopeFilter = document.getElementById('bib-scope')?.value;
+    if (scopeFilter) {
+      const ds = d.scope || 'team';
+      const match = scopeFilter === 'private' ? (ds === 'private' || ds === 'personal') : ds === scopeFilter;
+      if (!match) return false;
+    }
     const owner = document.getElementById('bib-owner')?.value;
     if (owner === 'mine' && d.createdBy !== (window.currentUser || currentUser)) return false;
     const enName = (DRILL_NAMES_EN[d.id] || '').toLowerCase();
@@ -3620,6 +3646,7 @@ function resetBibFilters() {
   document.getElementById('bib-intens').value = '';
   document.getElementById('bib-spieler').value = '';
   const ownerEl = document.getElementById('bib-owner'); if (ownerEl) ownerEl.value = '';
+  const scopeEl = document.getElementById('bib-scope'); if (scopeEl) scopeEl.value = '';
   applyBibFilters();
 }
 
@@ -3630,10 +3657,12 @@ function openDrillModal(drillId, fromPicker) {
   const d = window.DRILLS.find(x => x.id === drillId);
   if (!d) return;
   document.getElementById('modal-drill-name').textContent = getDrillName(d);
-  const scopeBadgeText = (currentUser && d.createdBy === currentUser && d.scope === 'personal')
-    ? (currentLang==='en'?'Just me':'Nur ich')
-    : (currentLang==='en'?'Shared':'Geteilt');
-  const scopeBadgeClass = (currentUser && d.createdBy === currentUser && d.scope === 'personal') ? 'scope-mein' : 'scope-team';
+  const scopeBadgeText = d.scope === 'public'
+    ? '🌐 Public'
+    : (d.scope === 'private' || d.scope === 'personal')
+      ? (currentLang==='en'?'🔒 Private':'🔒 Privat')
+      : '👥 Team';
+  const scopeBadgeClass = d.scope === 'public' ? 'scope-basis' : (d.scope === 'private' || d.scope === 'personal') ? 'scope-mein' : 'scope-team';
   const creatorLabel = d.createdBy ? `<span style="font-size:11px;color:var(--text-subtle);margin-left:8px;">🤖 ${d.createdBy}</span>` : '';
   document.getElementById('modal-drill-cat').innerHTML = `<span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${tCat(d.kat)}</span><span class="drill-scope-badge ${scopeBadgeClass}" style="margin-left:6px;">${scopeBadgeText}</span>${creatorLabel}`;
 
@@ -6892,6 +6921,10 @@ function applyLang() {
   if (continueBtn && continueBtn.style.display !== 'none') continueBtn.textContent = currentLang === 'en' ? 'Continue anyway' : 'Trotzdem fortfahren';
   const bibOwnerLabel = document.getElementById('bib-owner-label');
   if (bibOwnerLabel) bibOwnerLabel.textContent = currentLang === 'en' ? 'Creator' : 'Ersteller';
+  const bibScopeLabel = document.getElementById('bib-scope-label');
+  if (bibScopeLabel) bibScopeLabel.textContent = currentLang === 'en' ? 'Visibility' : 'Sichtbarkeit';
+  const bibScopeAll = document.getElementById('bib-scope-all');
+  if (bibScopeAll) bibScopeAll.textContent = currentLang === 'en' ? 'All' : 'Alle';
   const bibOwnerAll = document.getElementById('bib-owner-all');
   if (bibOwnerAll) bibOwnerAll.textContent = currentLang === 'en' ? 'All' : 'Alle';
   const bibOwnerMine = document.getElementById('bib-owner-mine');
@@ -6900,10 +6933,12 @@ function applyLang() {
   // Scope dropdown labels
   const scopeLabel = document.getElementById('de-scope-label');
   if (scopeLabel) scopeLabel.textContent = currentLang === 'en' ? 'Visibility' : 'Sichtbarkeit';
+  const scopePublic = document.getElementById('de-scope-opt-public');
+  if (scopePublic) scopePublic.textContent = currentLang === 'en' ? '🌐 Public (all teams)' : '🌐 Public (alle Teams)';
   const scopeTeam = document.getElementById('de-scope-opt-team');
-  if (scopeTeam) scopeTeam.textContent = currentLang === 'en' ? 'Shared' : 'Geteilt';
+  if (scopeTeam) scopeTeam.textContent = currentLang === 'en' ? '👥 Team' : '👥 Team';
   const scopePersonal = document.getElementById('de-scope-opt-personal');
-  if (scopePersonal) scopePersonal.textContent = currentLang === 'en' ? 'Just me' : 'Nur ich';
+  if (scopePersonal) scopePersonal.textContent = currentLang === 'en' ? '🔒 Private' : '🔒 Privat';
 
   // Page: Planung
   const planSub = document.querySelector('#page-planung .page-subtitle');
