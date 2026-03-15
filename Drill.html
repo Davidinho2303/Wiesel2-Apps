@@ -1278,6 +1278,7 @@ window.fbInitTeamListeners = (teamId) => {
   // Unsubscribe alte Team-Listener
   (window._teamListenerUnsubs || []).forEach(unsub => { try { unsub(); } catch(e) {} });
   window._teamListenerUnsubs = [];
+  window._teamListenersActive = true;
 
   // Shared Plans
   const unsub1 = onSnapshot(getSharedPlansDoc(), (snap) => {
@@ -1412,7 +1413,10 @@ window.fbRegisterUser = async (kuerzel) => {
       if (data.activeTeam) {
         window.currentTeam = data.activeTeam;
         localStorage.setItem('wiesel2_team', data.activeTeam);
-        if (typeof window.fbInitTeamListeners === 'function') window.fbInitTeamListeners(data.activeTeam);
+        // Nur starten wenn noch nicht aktiv (signInAnonymously hat ggf. bereits gestartet)
+        if (typeof window.fbInitTeamListeners === 'function' && !window._teamListenersActive) {
+          window.fbInitTeamListeners(data.activeTeam);
+        }
       } else {
         // Kein activeTeam → einmalige Migration (z.B. david → wiesel2)
         if (typeof window.fbMigrateUserTeam === 'function') {
