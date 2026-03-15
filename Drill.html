@@ -4007,13 +4007,16 @@ function setPlanScope(planId, scope) {
   plan.scope = scope;
   const idx = savedPlans.findIndex(p => p.id === planId);
   if (idx >= 0) savedPlans[idx] = plan;
-  // Aus sharedPlans entfernen wenn nicht mehr team
+  // Aus shared/public entfernen wenn scope wechselt
   if (oldScope === 'team' && scope !== 'team') {
     if (typeof window.fbUnsharePlan === 'function') window.fbUnsharePlan(planId);
   }
-  // In sharedPlans eintragen wenn team
-  if (scope === 'team') {
-    if (typeof window.fbSharePlan === 'function') window.fbSharePlan(plan);
+  if (oldScope === 'public' && scope !== 'public') {
+    if (typeof window.fbUnsharePlan === 'function') window.fbUnsharePlan(planId);
+  }
+  // In team oder public eintragen
+  if (scope === 'team' || scope === 'public') {
+    if (typeof window.fbSharePlan === 'function') window.fbSharePlan({ ...plan, scope });
   }
   if (typeof window.fbSavePlans === 'function') window.fbSavePlans(savedPlans, window.drillMins);
   renderSavedPlansList();
