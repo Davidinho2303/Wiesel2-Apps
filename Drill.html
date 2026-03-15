@@ -1600,16 +1600,9 @@ window.fbSaveDrills = async (drills) => {
 // ---- Plans speichern
 window.fbSavePlans = async (plans, mins) => {
   try {
-    const publicPlans  = plans.filter(p => p.scope === 'public');
-    const teamPlans    = plans.filter(p => p.scope === 'team');
-    const privatePlans = plans.filter(p => !p.scope || p.scope === 'private' || p.scope === 'personal');
-    await setDoc(getPlansDoc(), { plans: privatePlans, drillMins: mins || {}, updatedAt: Date.now() });
-    if (teamPlans.length > 0 || window._teamPlansExisted) {
-      await setDoc(getTeamPlansDoc(), { plans: teamPlans, updatedAt: Date.now() });
-    }
-    if (publicPlans.length > 0 || window._publicPlansExisted) {
-      await setDoc(getPublicPlansDoc(), { plans: publicPlans, updatedAt: Date.now() });
-    }
+    // Alle Pläne bleiben unter users/{uid}/data/plans — scope-Feld bestimmt Sichtbarkeit
+    // Team-Pläne werden zusätzlich in sharedPlans gespiegelt
+    await setDoc(getPlansDoc(), { plans, drillMins: mins || {}, updatedAt: Date.now() });
   } catch(e) {
     console.warn('Firebase save:', e.message);
     setStatus((window.currentLang||"de")==="en"?'⚠ Save failed':'⚠ Speichern fehlgeschlagen', 'var(--red)');
@@ -3712,7 +3705,7 @@ function newPlan() {
     theme: '',
     notes: '',
     totalTime: 90,
-    scope: 'personal',
+    scope: 'private',
     createdBy: window.currentUser || '',
     slots: [
       { id: 's1', label: 'Warmup', phase: 'warmup', durationMin: 20, drills: [], fixed: true },
@@ -3973,7 +3966,7 @@ function loadTemplate(tplId, fromShared) {
     theme: tpl.theme || '',
     notes: tpl.notes || '',
     totalTime: tpl.totalTime || 90,
-    scope: 'personal',
+    scope: 'private',
     createdBy: currentUser,
     createdAt: Date.now(),
     slots: JSON.parse(JSON.stringify(tpl.slots || []))
@@ -7231,7 +7224,7 @@ function seedDefaultTemplates() {
       weekday: 1,
       notes: '',
       totalTime: 90,
-      scope: 'personal',
+      scope: 'private',
       createdBy: 'david',
       createdAt: Date.now(),
       slots: [
@@ -7248,7 +7241,7 @@ function seedDefaultTemplates() {
       weekday: 3,
       notes: '',
       totalTime: 90,
-      scope: 'personal',
+      scope: 'private',
       createdBy: 'david',
       createdAt: Date.now(),
       slots: [
