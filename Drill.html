@@ -1252,27 +1252,33 @@ window.migrateIfNeeded = async function migrateIfNeeded() {
 
     // --- Drills team→public Migration ---
     if (!meta.drillsPublicMigrated && window.currentUser === 'david') {
-      // Lese direkt aus wiesel2 (hardcoded, einmalige Migration)
+      // Schritt 1: wiesel2/data/drills → public/drills (scope: public)
       const wiesel2DrillsDoc = doc(db, 'teams', 'wiesel2', 'data', 'drills');
-      const drillsSnap = await getDoc(wiesel2DrillsDoc);
-      // Auch aus wieselherren2 versuchen falls wiesel2 leer
-      let drills = [];
-      if (drillsSnap.exists() && (drillsSnap.data().drills || []).length > 0) {
-        drills = (drillsSnap.data().drills || []).map(d => ({ ...d, scope: 'public' }));
+      const wiesel2Snap = await getDoc(wiesel2DrillsDoc);
+      let publicDrills = [];
+      if (wiesel2Snap.exists()) {
+        publicDrills = (wiesel2Snap.data().drills || []).map(d => ({ ...d, scope: 'public' }));
+        // wiesel2 leeren
         await setDoc(wiesel2DrillsDoc, { drills: [], updatedAt: Date.now() });
-      } else {
-        const altSnap = await getDoc(getTeamDrillsDoc());
-        if (altSnap.exists()) {
-          drills = (altSnap.data().drills || []).map(d => ({ ...d, scope: 'public' }));
-          await setDoc(getTeamDrillsDoc(), { drills: [], updatedAt: Date.now() });
-        }
       }
-      if (drills.length > 0) {
-        await setDoc(getPublicDrillsDoc(), { drills, updatedAt: Date.now() });
-        window.DRILLS = (window.DRILLS || []).filter(d => d.scope !== 'team').concat(drills);
-        try { applyBibFilters(); } catch(e) {}
-        console.log('[MIGRATE] Drills team→public:', drills.length);
+
+      // Schritt 2: wieselherren2/data/drills bereinigen
+      // Nur Drills behalten die NICHT in public/drills landen (d.h. echte team-only Drills)
+      const teamDrillsSnap = await getDoc(getTeamDrillsDoc());
+      let teamDrills = teamDrillsSnap.exists() ? (teamDrillsSnap.data().drills || []) : [];
+      const publicIds = new Set(publicDrills.map(d => d.id));
+      // Team-Drills die bereits in public sind: entfernen. Resto behalten als scope:'team'
+      const cleanTeamDrills = teamDrills
+        .filter(d => !publicIds.has(d.id))
+        .map(d => ({ ...d, scope: 'team' }));
+      await setDoc(getTeamDrillsDoc(), { drills: cleanTeamDrills, updatedAt: Date.now() });
+
+      // Schritt 3: public/drills schreiben (dedupliziert)
+      if (publicDrills.length > 0) {
+        await setDoc(getPublicDrillsDoc(), { drills: publicDrills, updatedAt: Date.now() });
+        console.log('[MIGRATE] public drills:', publicDrills.length, '/ team drills:', cleanTeamDrills.length);
       }
+
       await setDoc(getMetaDoc(), { ...meta, drillsPublicMigrated: true }, { merge: true });
       return;
     }
