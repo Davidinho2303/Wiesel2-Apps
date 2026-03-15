@@ -7076,12 +7076,52 @@ function _doLogin(val) {
 
 function openTeamSetupModal() {
   const modal = document.getElementById('team-setup-modal');
-  if (modal) modal.style.display = 'flex';
+  if (!modal) return;
+  showTeamSetupChoice();
+  modal.style.display = 'flex';
 }
 
 function closeTeamSetupModal() {
   const modal = document.getElementById('team-setup-modal');
   if (modal) modal.style.display = 'none';
+}
+
+function showTeamSetupChoice() {
+  document.getElementById('team-setup-choice').style.display = 'flex';
+  document.getElementById('team-setup-join').style.display = 'none';
+  document.getElementById('team-setup-create').style.display = 'none';
+}
+
+function showTeamSetupJoin() {
+  document.getElementById('team-setup-choice').style.display = 'none';
+  document.getElementById('team-setup-join').style.display = 'flex';
+  setTimeout(() => { const i = document.getElementById('team-setup-code-input'); if (i) i.focus(); }, 50);
+}
+
+function showTeamSetupCreate() {
+  document.getElementById('team-setup-choice').style.display = 'none';
+  document.getElementById('team-setup-create').style.display = 'flex';
+  setTimeout(() => { const i = document.getElementById('team-setup-input'); if (i) i.focus(); }, 50);
+}
+
+async function saveTeamJoin() {
+  const input = document.getElementById('team-setup-code-input');
+  const val = (input ? input.value.trim() : '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (val.length !== 6) {
+    if (input) { input.style.borderColor = 'var(--red)'; setTimeout(() => input.style.borderColor = '', 1000); }
+    return;
+  }
+  const btn = document.getElementById('team-setup-join-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+  if (typeof window.fbJoinOrCreateTeam === 'function') {
+    await window.fbJoinOrCreateTeam(currentUser, val);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Beitreten'; }
+  if (window.currentTeam) {
+    closeTeamSetupModal();
+    if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
+    setTimeout(seedDefaultTemplates, 1500);
+  }
 }
 
 async function saveTeamSetup() {
@@ -7091,10 +7131,8 @@ async function saveTeamSetup() {
     if (input) { input.style.borderColor = 'var(--red)'; setTimeout(() => input.style.borderColor = '', 1000); }
     return;
   }
-  // teamId aus Name ableiten (lowercase, keine Sonderzeichen)
-  const teamId = val;
   if (typeof window.fbSetActiveTeam === 'function') {
-    await window.fbSetActiveTeam(currentUser, teamId);
+    await window.fbSetActiveTeam(currentUser, val);
   }
   closeTeamSetupModal();
   if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
@@ -7626,14 +7664,37 @@ window.renderPlanOverview   = renderPlanOverview;
     <div class="user-modal-box">
       <div class="user-modal-logo">assistr</div>
       <div class="user-modal-title">🏀 Dein Team</div>
-      <div class="user-modal-sub">Gib einen kurzen Teamnamen ein. Andere können diesem Team später per Code beitreten.</div>
+      <div class="user-modal-sub">Bist du Teil eines bestehenden Teams oder legst du ein neues an?</div>
       <hr class="user-modal-divider">
-      <input type="text" id="team-setup-input" class="form-input"
-        placeholder="z.B. wiesel2, tigers, bsc-herren …"
-        maxlength="30"
-        style="font-size:16px;"
-        onkeydown="if(event.key==='Enter')saveTeamSetup()">
-      <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" onclick="saveTeamSetup()">Team anlegen</button>
+
+      <!-- Auswahl -->
+      <div id="team-setup-choice" style="display:flex;flex-direction:column;gap:10px;">
+        <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" onclick="showTeamSetupJoin()">🔑 Team beitreten (Code)</button>
+        <button class="btn btn-ghost" style="width:100%;padding:12px;font-size:14px;" onclick="showTeamSetupCreate()">+ Neues Team anlegen</button>
+      </div>
+
+      <!-- Beitreten -->
+      <div id="team-setup-join" style="display:none;flex-direction:column;gap:10px;">
+        <input type="text" id="team-setup-code-input" class="form-input"
+          placeholder="6-stelliger Join-Code"
+          maxlength="6"
+          style="font-size:20px;letter-spacing:4px;text-align:center;text-transform:uppercase;"
+          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+          onkeydown="if(event.key==='Enter')saveTeamJoin()">
+        <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" id="team-setup-join-btn" onclick="saveTeamJoin()">Beitreten</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:12px;" onclick="showTeamSetupChoice()">← Zurück</button>
+      </div>
+
+      <!-- Anlegen -->
+      <div id="team-setup-create" style="display:none;flex-direction:column;gap:10px;">
+        <input type="text" id="team-setup-input" class="form-input"
+          placeholder="z.B. wiesel2, tigers, bsc-herren …"
+          maxlength="30"
+          style="font-size:16px;"
+          onkeydown="if(event.key==='Enter')saveTeamSetup()">
+        <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" onclick="saveTeamSetup()">Team anlegen</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:12px;" onclick="showTeamSetupChoice()">← Zurück</button>
+      </div>
     </div>
   </div>
 
