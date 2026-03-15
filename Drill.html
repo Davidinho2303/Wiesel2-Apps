@@ -1152,6 +1152,8 @@ async function loadDrillsFromFirestore() {
     if (teamDrills.length > 0) {
       const existingPersonal = (window.DRILLS || []).filter(d => d.scope === 'personal');
       window.DRILLS = [...teamDrills, ...existingPersonal];
+  // Deduplizieren: gleiche ID → personal hat Vorrang
+  window.DRILLS = Object.values(window.DRILLS.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
       try { applyBibFilters(); } catch(e) {}
       const navCount = document.getElementById('nav-count-bib');
       if (navCount) navCount.textContent = window.DRILLS.length;
@@ -1292,6 +1294,8 @@ window.fbInitTeamListeners = (teamId) => {
     if (!Array.isArray(data.drills)) return;
     const personalDrills = (window.DRILLS || []).filter(d => d.scope === 'personal');
     window.DRILLS = [...data.drills, ...personalDrills];
+  // Deduplizieren: gleiche ID → personal hat Vorrang
+  window.DRILLS = Object.values(window.DRILLS.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
     try { applyBibFilters(); } catch(e) {}
     const navCount = document.getElementById('nav-count-bib');
     if (navCount) navCount.textContent = window.DRILLS.length;
@@ -1334,6 +1338,8 @@ window.fbInitUserListeners = (kuerzel) => {
     if (!Array.isArray(data.drills)) return;
     const teamDrills = (window.DRILLS || []).filter(d => d.scope !== 'personal');
     window.DRILLS = [...teamDrills, ...data.drills];
+  // Deduplizieren: gleiche ID → personal hat Vorrang
+  window.DRILLS = Object.values(window.DRILLS.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
     try { applyBibFilters(); } catch(e) {}
     const navCount = document.getElementById('nav-count-bib');
     if (navCount) navCount.textContent = window.DRILLS.length;
