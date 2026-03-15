@@ -1471,24 +1471,46 @@ window.fbSaveTeamName = async (teamId, name) => {
 // ---- Join-Code speichern (nur Admin)
 window.fbSaveJoinCode = async (teamId, code) => {
   try {
-    const teamDoc = doc(db, 'teams', teamId, 'data', 'profile');
-    await setDoc(teamDoc, { joinCode: code, joinCodeCreatedAt: Date.now() }, { merge: true });
+    // Alten Code aus Index löschen
+    const teamSnap = await getDoc(doc(db, 'teams', teamId, 'data', 'profile'));
+    if (teamSnap.exists() && teamSnap.data().joinCode) {
+      const oldCode = teamSnap.data().joinCode;
+      try { await setDoc(doc(db, 'joinCodes', oldCode), { deleted: true }, { merge: true }); } catch(e) {}
+    }
+    // Neuen Code ins Team-Profil speichern
+    await setDoc(doc(db, 'teams', teamId, 'data', 'profile'), { joinCode: code, joinCodeCreatedAt: Date.now() }, { merge: true });
+    // Neuen Code in globalem Index speichern
+    await setDoc(doc(db, 'joinCodes', code), { teamId, createdAt: Date.now() });
   } catch(e) { console.warn('fbSaveJoinCode:', e.message); }
 };
 
 // ---- Team beitreten via Join-Code oder neu anlegen
 window.fbJoinOrCreateTeam = async (kuerzel, val) => {
   try {
-    // Prüfen ob val ein Join-Code ist (6 Zeichen, nur A-Z0-9)
-    const isCode = /^[A-Z0-9]{6}$/.test(val.toUpperCase());
+    const valUpper = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const isCode = /^[A-Z0-9]{6}$/.test(valUpper);
+
     if (isCode) {
-      // Join-Code: alle Teams durchsuchen (einfach: val als teamId probieren schlägt fehl → Info)
-      // Für jetzt: Team mit diesem Code suchen via known teams
-      // Simplified: wir suchen nicht global — User muss auch Team-ID kennen oder wir bauen später einen Code-Index
-      // Vorerst: val direkt als teamId interpretieren wenn kein Code-Match
+      // Join-Code → Index abfragen
+      const codeSnap = await getDoc(doc(db, 'joinCodes', valUpper));
+      if (codeSnap.exists() && !codeSnap.data().deleted) {
+        const teamId = codeSnap.data().teamId;
+        await window.fbSetActiveTeam(kuerzel, teamId);
+        // Als Member zum Team hinzufügen
+        await setDoc(doc(db, 'teams', teamId, 'data', 'profile'), {
+          members: { [kuerzel]: 'coach' }
+        }, { merge: true });
+        if (typeof toast === 'function') toast('🏀 Team beigetreten: ' + teamId);
+        return;
+      } else {
+        if (typeof toast === 'function') toast('⚠️ Code ungültig oder abgelaufen');
+        return;
+      }
     }
-    // Neu anlegen oder beitreten (teamId = val)
+
+    // Kein Code → als Team-ID interpretieren, neu anlegen
     await window.fbSetActiveTeam(kuerzel, val.toLowerCase());
+    if (typeof toast === 'function') toast('🏀 Team angelegt: ' + val.toLowerCase());
   } catch(e) { console.warn('fbJoinOrCreateTeam:', e.message); }
 };
 
@@ -6929,11 +6951,27 @@ function toggleTeamActions() {
   if (!visible) setTimeout(() => { const i = document.getElementById('user-modal-team-input'); if (i) i.focus(); }, 50);
 }
 
+async function joinTeamWithCode() {
+  const input = document.getElementById('user-modal-joincode-input');
+  const val = (input ? input.value.trim() : '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!val || !currentUser) return;
+  const btn = input.nextElementSibling;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+  if (typeof window.fbJoinOrCreateTeam === 'function') {
+    await window.fbJoinOrCreateTeam(currentUser, val);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Beitreten'; }
+  if (input) input.value = '';
+  const actions = document.getElementById('user-modal-team-actions');
+  if (actions) actions.style.display = 'none';
+  loadTeamProfileForModal();
+  if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
+}
+
 async function joinOrCreateTeam() {
   const input = document.getElementById('user-modal-team-input');
   const val = (input ? input.value.trim() : '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
   if (!val || !currentUser) return;
-  // Join-Code-Check: 6-stellig alphanumerisch → beitreten, sonst neu anlegen
   if (typeof window.fbJoinOrCreateTeam === 'function') {
     await window.fbJoinOrCreateTeam(currentUser, val);
   }
@@ -7559,12 +7597,17 @@ window.renderPlanOverview   = renderPlanOverview;
         </div>
 
         <!-- Team wechseln / beitreten -->
-        <div id="user-modal-team-actions" style="display:none;flex-direction:column;gap:6px;">
+        <div id="user-modal-team-actions" style="display:none;flex-direction:column;gap:8px;">
+          <div style="font-size:11px;font-weight:600;color:var(--text-subtle);">Team beitreten</div>
           <div style="display:flex;gap:6px;">
-            <input type="text" id="user-modal-team-input" class="form-input" placeholder="Team-ID oder Join-Code" maxlength="30" style="font-size:13px;flex:1;" onkeydown="if(event.key==='Enter')joinOrCreateTeam()">
-            <button class="btn btn-primary btn-sm" onclick="joinOrCreateTeam()">OK</button>
+            <input type="text" id="user-modal-joincode-input" class="form-input" placeholder="6-stelliger Join-Code" maxlength="6" style="font-size:13px;flex:1;text-transform:uppercase;letter-spacing:2px;" onkeydown="if(event.key==='Enter')joinTeamWithCode()">
+            <button class="btn btn-primary btn-sm" onclick="joinTeamWithCode()">Beitreten</button>
           </div>
-          <div style="font-size:11px;color:var(--text-subtle);">Neue Team-ID → Team anlegen · Join-Code → beitreten</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-subtle);margin-top:4px;">Neues Team anlegen</div>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="user-modal-team-input" class="form-input" placeholder="Team-ID (z.B. tigers)" maxlength="30" style="font-size:13px;flex:1;" onkeydown="if(event.key==='Enter')joinOrCreateTeam()">
+            <button class="btn btn-primary btn-sm" onclick="joinOrCreateTeam()">Anlegen</button>
+          </div>
         </div>
         <button class="btn btn-ghost btn-sm" style="align-self:flex-start;font-size:11px;" onclick="toggleTeamActions()">Team wechseln / beitreten</button>
       </div>
