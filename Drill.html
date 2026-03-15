@@ -1403,6 +1403,10 @@ window.fbRegisterUser = async (kuerzel) => {
       console.log('[USER] Registered:', kuerzel, 'team:', teamId);
     } else {
       const data = snap.data();
+      // Sprache aus Profil laden
+      if (data.lang && typeof window.setLangFromProfile === 'function') {
+        window.setLangFromProfile(data.lang);
+      }
       // Team aus Profil laden
       if (data.activeTeam) {
         window.currentTeam = data.activeTeam;
@@ -1608,6 +1612,14 @@ window.fbLoadSaisonFromFirestore = async () => {
     if (!window._userListenerUnsubs) window._userListenerUnsubs = [];
     window._userListenerUnsubs.push(unsub);
   } catch(e) { console.warn('[Saison] load error:', e.message); }
+};
+
+// ---- Sprache speichern
+window._fbSaveLang = async (kuerzel, lang) => {
+  try {
+    const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
+    await setDoc(userDoc, { lang }, { merge: true });
+  } catch(e) {}
 };
 
 window.fbUnshareTemplate = async (tplId) => {
@@ -2961,14 +2973,14 @@ function getStorageKey(base) {
 }
 
 function loadFromStorage() {
+  // localStorage für Pläne entfernt — alles läuft über Firestore
+  // Alte Keys aufräumen (einmalig)
   try {
-    const stored = localStorage.getItem(getStorageKey('wiesel2_plans'));
-    if (stored) savedPlans = JSON.parse(stored);
-  } catch(e) { savedPlans = []; }
-  try {
-    const mins = localStorage.getItem(getStorageKey('wiesel2_drillMins'));
-    if (mins) drillMins = JSON.parse(mins);
-  } catch(e) { drillMins = {}; }
+    const oldKey = getStorageKey('wiesel2_plans');
+    const oldMins = getStorageKey('wiesel2_drillMins');
+    if (localStorage.getItem(oldKey)) localStorage.removeItem(oldKey);
+    if (localStorage.getItem(oldMins)) localStorage.removeItem(oldMins);
+  } catch(e) {}
 }
 
 function saveToStorage() {
@@ -2980,8 +2992,6 @@ function saveToStorage() {
       });
     });
   });
-  try { localStorage.setItem(getStorageKey('wiesel2_plans'), JSON.stringify(savedPlans)); } catch(e) {}
-  try { localStorage.setItem(getStorageKey('wiesel2_drillMins'), JSON.stringify(drillMins)); } catch(e) {}
   if (typeof fbSavePlans === 'function') {
     if (typeof fbSetSyncing === 'function') fbSetSyncing(true);
     const el = document.getElementById('sync-status');
@@ -6300,6 +6310,14 @@ function attachTouchDragListeners() {
 // ============================================================
 let currentLang = localStorage.getItem('wiesel2_lang') || 'de';
 
+window.setLangFromProfile = function(lang) {
+  if (lang && lang !== currentLang) {
+    currentLang = lang;
+    localStorage.setItem('wiesel2_lang', lang);
+    if (typeof applyLang === 'function') applyLang();
+  }
+};
+
 // ============================================================
 // KI PROXY CONFIG
 // Cloudflare Worker URL eintragen nach dem Deploy:
@@ -6569,7 +6587,9 @@ const CONSTRAINT_DESC_EN = {
 
 function toggleLang() {
   currentLang = currentLang === 'de' ? 'en' : 'de';
-  localStorage.setItem('wiesel2_lang', currentLang);
+  localStorage.setItem('wiesel2_lang', currentLang); // Schnell-Fallback beim Startup
+  // Auch ins Firestore-Profil speichern
+  if (window.currentUser && typeof window._fbSaveLang === 'function') window._fbSaveLang(window.currentUser, currentLang);
   applyLang();
 }
 
@@ -7022,7 +7042,6 @@ function _doLogin(val) {
   savedPlans = [];
   window._templatesLoadedFromFirestore = false;
   window.myTemplates = [];
-  loadFromStorage(); // load this user's cached plans
   try { renderSavedPlansList(); } catch(e) {}
   try { renderNavSavedPlans(); } catch(e) {}
   updateUserBadge();
@@ -7120,7 +7139,6 @@ function seedDefaultTemplates() {
 
 if (currentLang !== 'de') applyLang(); // Apply saved language before first render
 else applyUserModalLang(); // Init lang button in modal
-loadFromStorage();
 updateSaisonVisibility();
 renderBibliothek(window.DRILLS);
 document.getElementById('nav-count-bib').textContent = window.DRILLS.length;
