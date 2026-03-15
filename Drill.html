@@ -1411,6 +1411,7 @@ window.fbRegisterUser = async (kuerzel) => {
       // Team aus Profil laden
       if (data.activeTeam) {
         window.currentTeam = data.activeTeam;
+        localStorage.setItem('wiesel2_team', data.activeTeam);
         if (typeof window.fbInitTeamListeners === 'function') window.fbInitTeamListeners(data.activeTeam);
       } else {
         // Kein activeTeam → einmalige Migration (z.B. david → wiesel2)
@@ -1430,6 +1431,7 @@ window.fbRegisterUser = async (kuerzel) => {
 window.fbSetActiveTeam = async (kuerzel, teamId) => {
   try {
     window.currentTeam = teamId;
+    localStorage.setItem('wiesel2_team', teamId);
     const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
     const snap = await getDoc(userDoc);
     const existing = snap.exists() ? (snap.data().teams || []) : [];
@@ -1638,7 +1640,10 @@ signInAnonymously(auth).then(async () => {
   setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
 
   // Plans werden in fbInitUserListeners geladen (nach Login, wenn currentUser bekannt)
-  // Team-Listener werden in fbInitTeamListeners gestartet (nach Login, wenn currentTeam bekannt)
+  // Team-Listener sofort starten falls currentTeam bereits aus localStorage bekannt
+  if (window.currentTeam && typeof window.fbInitTeamListeners === 'function') {
+    window.fbInitTeamListeners(window.currentTeam);
+  }
 
   // Drills + Migration laufen in fbInitTeamListeners nach Login
 
@@ -2567,7 +2572,7 @@ window.DRILLS_SEED = [
 ];
 
 // DRILLS live array — wird durch Firestore überschrieben
-window.DRILLS = []; // Wird von Firestore geladen; DRILLS_SEED nur als Fallback
+window.DRILLS = []; // Wird von Firestore geladen
 
 // ============================================================
 // DRILL-BESCHREIBUNGEN — DE
@@ -6877,6 +6882,8 @@ function applyLang() {
 // USER SYSTEM
 // ============================================================
 let currentUser = localStorage.getItem('wiesel2_user') || null;
+let _cachedTeam = localStorage.getItem('wiesel2_team') || null;
+if (_cachedTeam) window.currentTeam = _cachedTeam;
 const ADMINS = ['david'];
 
 function isAdmin() { return ADMINS.includes((currentUser||'').toLowerCase()); }
