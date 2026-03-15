@@ -1651,28 +1651,7 @@ signInAnonymously(auth).then(async () => {
 
   // Drills + Migration laufen in fbInitTeamListeners nach Login
 
-  // Personal drills live-listener (nur wenn User bereits bekannt)
-  if (window.currentUser) {
-    // User Templates listener
-    onSnapshot(getTemplatesDoc(), (snap) => {
-      if (!snap.exists()) return;
-      window.myTemplates = snap.data().templates || [];
-      if (window.myTemplates.length > 0) window._templatesLoadedFromFirestore = true;
-      if (typeof renderPlanTemplateStrip === "function") renderPlanTemplateStrip();
-      try { renderPlansLibrary(); } catch(e) {}
-    }, err => console.warn('Templates snapshot:', err.message));
-
-    onSnapshot(getPersonalDrillsDoc(), (snap) => {
-      if (!snap.exists()) return;
-      const data = snap.data();
-      if (!Array.isArray(data.drills)) return;
-      const teamDrills = (window.DRILLS || []).filter(d => d.scope !== 'personal');
-      window.DRILLS = [...teamDrills, ...data.drills];
-      try { applyBibFilters(); } catch(e) {}
-      const navCount = document.getElementById('nav-count-bib');
-      if (navCount) navCount.textContent = window.DRILLS.length;
-    }, err => console.warn('Personal drills snapshot error:', err.message));
-  }
+  // User+Personal Listeners laufen in fbInitUserListeners (nach _initUserWhenReady)
 
 }).catch((err) => {
   console.warn('Auth error:', err.message);
