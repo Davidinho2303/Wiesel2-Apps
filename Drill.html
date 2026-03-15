@@ -3776,9 +3776,9 @@ function newPlan() {
     createdBy: window.currentUser || '',
     slots: [
       { id: 's1', label: 'Warmup', phase: 'warmup', durationMin: 20, drills: [], fixed: true },
-      { id: 's2', label: 'Stretching', phase: 'warmup', durationMin: 10, drills: [], fixed: true, noEdit: true },
+      { id: 's2', label: 'Stretching', phase: 'warmup', durationMin: 10, drills: [], ...(currentUser === 'david' ? { fixed: true, noEdit: true } : {}) },
       { id: 's3', label: 'Hauptteil', phase: 'hauptteil', durationMin: 45, drills: [] },
-      { id: 's4', label: 'Ausdehnen', phase: 'abschluss', durationMin: 5, drills: [], fixed: true, noEdit: true },
+      { id: 's4', label: 'Ausdehnen', phase: 'abschluss', durationMin: 5, drills: [], ...(currentUser === 'david' ? { fixed: true, noEdit: true } : {}) },
     ]
   };
   document.getElementById('plan-name').value = '';
@@ -4366,8 +4366,9 @@ function renderSlotHTML(slot, idx) {
         </div>`;
       }).join('');
 
-  const controls = isLocked
-    ? `<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);padding:2px 6px;border:1px solid var(--border);border-radius:10px;">🔒</span>`
+  const isReadOnly = !!window._sharedPlanReadOnly;
+  const controls = isLocked || isReadOnly
+    ? `<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);padding:2px 6px;border:1px solid var(--border);border-radius:10px;">${isReadOnly ? '👁' : '🔒'}</span>`
     : isFixed
     ? `<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);padding:2px 6px;border:1px solid var(--border);border-radius:10px;">${currentLang === 'en' ? 'fixed' : 'fest'}</span>`
     : `${idx > 0 ? `<button class="btn btn-ghost btn-sm" onclick="moveSlot('${slot.id}',-1)">↑</button>` : ''}
@@ -4394,7 +4395,7 @@ function renderSlotHTML(slot, idx) {
       ondragleave="onSlotContentDragLeave(event)"
       ondrop="onSlotContentDrop(event, '${slot.id}')">
       ${isNoEdit ? '' : drillsHTML}
-      ${isNoEdit || isLocked ? '' : `<button class="slot-add-btn" onclick="openPickerForSlot('${slot.id}', '${slot.phase}')">${currentLang === 'en' ? '+ Select drill …' : '+ Drill auswählen …'}</button>`}
+      ${isNoEdit || isLocked || isReadOnly ? '' : `<button class="slot-add-btn" onclick="openPickerForSlot('${slot.id}', '${slot.phase}')">${currentLang === 'en' ? '+ Select drill …' : '+ Drill auswählen …'}</button>`}
     </div>
   </div>`;
 }
