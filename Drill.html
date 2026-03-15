@@ -1148,21 +1148,10 @@ async function loadDrillsFromFirestore() {
       }
     }
 
-    // Load personal drills
-    let personalDrills = [];
-    if (window.currentUser) {
-      try {
-        const personalSnap = await getDoc(getPersonalDrillsDoc());
-        if (personalSnap.exists()) {
-          const data = personalSnap.data();
-          if (Array.isArray(data.drills)) personalDrills = data.drills;
-        }
-      } catch(e) { console.warn('Personal drills load error:', e.message); }
-    }
-
-    const allDrills = [...teamDrills, ...personalDrills];
-    if (allDrills.length > 0) {
-      window.DRILLS = allDrills;
+    // Personal drills kommen ausschließlich aus fbInitUserListeners onSnapshot
+    if (teamDrills.length > 0) {
+      const existingPersonal = (window.DRILLS || []).filter(d => d.scope === 'personal');
+      window.DRILLS = [...teamDrills, ...existingPersonal];
       try { applyBibFilters(); } catch(e) {}
       const navCount = document.getElementById('nav-count-bib');
       if (navCount) navCount.textContent = window.DRILLS.length;
