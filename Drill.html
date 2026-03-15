@@ -1414,7 +1414,7 @@ window.fbRegisterUser = async (kuerzel) => {
       } else {
         // Kein activeTeam → einmalige Migration (z.B. david → wiesel2)
         if (typeof window.fbMigrateUserTeam === 'function') {
-          window.fbMigrateUserTeam(kuerzel, 'wiesel2');
+          await window.fbMigrateUserTeam(kuerzel, 'wiesel2');
         }
       }
       await setDoc(userDoc, { lastSeen: Date.now() }, { merge: true });
@@ -1515,7 +1515,7 @@ window.fbMigrateUserTeam = async (kuerzel, fallbackTeam) => {
       }
       console.log('[TEAM] Migrated user team:', kuerzel, '→', fallbackTeam);
       if (typeof window.fbInitTeamListeners === 'function') window.fbInitTeamListeners(fallbackTeam);
-      if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(kuerzel);
+      // fbInitUserListeners wird vom App-Init aufgerufen nach fbRegisterUser.then()
     }
   } catch(e) { console.warn('fbMigrateUserTeam:', e.message); }
 };
@@ -7147,23 +7147,28 @@ renderNavSavedPlans();
 // Set today's date
 document.getElementById('plan-date').value = formatDate(new Date());
 
-// App fully ready — apply any cloud data that arrived before init
+// App fully ready
 window._appReady = true;
 window.currentUser = currentUser; // expose to module scope
 updateUserBadge();
 if (currentUser) {
-  // fbRegisterUser lädt Team aus Profil und startet Team+User-Listener
-  if (typeof window.fbRegisterUser === 'function') {
-    window.fbRegisterUser(currentUser).then(() => {
-      // User-Listener immer starten (Pläne, Saison, persönliche Drills)
-      if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
-      setTimeout(seedDefaultTemplates, 1500);
-      // Team-Setup nur wenn wirklich kein Team gesetzt (auch nach Migration)
-      if (!window.currentTeam) {
-        setTimeout(openTeamSetupModal, 500);
-      }
-    });
+  // Warten bis module script (Firebase) bereit ist, dann User initialisieren
+  function _initUserWhenReady(attempts) {
+    if (typeof window.fbRegisterUser === 'function' && typeof window.fbInitUserListeners === 'function') {
+      window.fbRegisterUser(currentUser).then(() => {
+        // fbRegisterUser hat Team gesetzt + fbInitTeamListeners gestartet
+        // Jetzt User-Listener starten (Pläne, Saison, persönliche Drills)
+        window.fbInitUserListeners(currentUser);
+        setTimeout(seedDefaultTemplates, 1500);
+        if (!window.currentTeam) setTimeout(openTeamSetupModal, 500);
+      });
+    } else if (attempts > 0) {
+      setTimeout(() => _initUserWhenReady(attempts - 1), 100);
+    } else {
+      console.warn('[APP] Firebase not available after retries');
+    }
   }
+  _initUserWhenReady(20);
 } else {
   setTimeout(() => openUserModal(true), 100);
 }
