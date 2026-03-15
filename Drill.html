@@ -1133,7 +1133,7 @@ const setStatus = (text, color) => {
 };
 
 // ---- Drills aus Firestore laden
-async function loadDrillsFromFirestore() {
+window.loadDrillsFromFirestore = async function loadDrillsFromFirestore() {
   try {
     // Load team drills
     const teamSnap = await getDoc(getTeamDrillsDoc());
@@ -1179,7 +1179,7 @@ async function loadDrillsFromFirestore() {
 }
 
 // ---- Einmalige Migration: hardcoded Seed → Firestore
-async function migrateIfNeeded() {
+window.migrateIfNeeded = async function migrateIfNeeded() {
   try {
     const metaSnap = await getDoc(getMetaDoc());
     const meta = metaSnap.exists() ? metaSnap.data() : {};
@@ -1328,6 +1328,22 @@ async function migrateSaisonToTeam() {
 // Track active user listeners for cleanup
 window._teamListenerUnsubs = window._teamListenerUnsubs || [];
 
+// Expose migration functions for debugging
+window.fbRunMigration = async () => {
+  try {
+    await migrateIfNeeded();
+    console.log('[MIGRATE] done');
+  } catch(e) { console.warn('[MIGRATE] error:', e.message); }
+};
+window.fbResetMigrationFlag = async () => {
+  try {
+    const snap = await getDoc(getMetaDoc());
+    const meta = snap.exists() ? snap.data() : {};
+    await setDoc(getMetaDoc(), { ...meta, drillsPublicMigrated: false }, { merge: true });
+    console.log('[MIGRATE] flag reset');
+  } catch(e) { console.warn('[MIGRATE] reset error:', e.message); }
+};
+
 window.fbInitTeamListeners = (teamId) => {
   // Unsubscribe alte Team-Listener
   (window._teamListenerUnsubs || []).forEach(unsub => { try { unsub(); } catch(e) {} });
@@ -1389,9 +1405,9 @@ window.fbInitTeamListeners = (teamId) => {
     if (typeof window.fbLoadSaisonFromFirestore === 'function') window.fbLoadSaisonFromFirestore();
   });
   // Initialer Drill-Load
-  loadDrillsFromFirestore();
+  if (typeof window.loadDrillsFromFirestore === 'function') window.loadDrillsFromFirestore();
   // Migration (einmalig)
-  migrateIfNeeded().catch(e => console.warn('migrate:', e.message));
+  if (typeof window.migrateIfNeeded === 'function') window.migrateIfNeeded().catch(e => console.warn('migrate:', e.message));
 };
 
 window._userListenerUnsubs = window._userListenerUnsubs || [];
