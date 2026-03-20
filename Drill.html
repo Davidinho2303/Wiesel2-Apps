@@ -1283,6 +1283,72 @@ window.migrateIfNeeded = async function migrateIfNeeded() {
       return;
     }
 
+    // --- canBeConstraint Migration ---
+    // Patcht public/drills und team/drills: setzt canBeConstraint + constraintDesc
+    // für alle Drills die als Constraint gedacht sind.
+    if (!meta.constraintDrillsMigrated && window.currentUser === 'david') {
+      const CONSTRAINT_PATCH = {
+        'spielen-ohne-dribbling': { canBeConstraint: true, constraintDesc: 'Keine Dribbles erlaubt — nur Pässe, Cuts und Bewegung ohne Ball.' },
+        '3dribbles':              { canBeConstraint: true, constraintDesc: 'Max. 3 Dribbles pro Ballbesitz und/oder X Pässe vor Wurf — zwingt zu Bewegung, Spacing und Ball-Movement.' },
+        'bonuspunkte':            { canBeConstraint: true, constraintDesc: 'Offensiver Rebound gibt Bonuspunkte (z.B. +1 extra) — Fokus: OReb und Boxout.' },
+        'c-max3dribbel':          { canBeConstraint: true, constraintDesc: 'Max. 3 Dribbles pro Ballbesitz — zwingt zu Bewegung, Spacing und Ball-Movement.' },
+        'c-xpaesse':              { canBeConstraint: true, constraintDesc: 'Mindestanzahl Pässe erforderlich bevor ein Wurf erlaubt ist.' },
+        'c-kein-dribbling':       { canBeConstraint: true, constraintDesc: 'Keine Dribbles erlaubt — nur Pässe, Cuts und Bewegung ohne Ball.' },
+        'c-bonuspunkte-oreb':     { canBeConstraint: true, constraintDesc: 'Offensiver Rebound gibt Bonuspunkte (z.B. +1 extra) — Fokus: OReb und Boxout.' },
+        'c-nur-catchshot':        { canBeConstraint: true, constraintDesc: 'Würfe nur direkt aus dem Catch — kein zusätzliches Dribbling vor dem Abschluss.' },
+        'c-minus1-turnover':      { canBeConstraint: true, constraintDesc: 'Jeder Turnover gibt der Defense einen Punkt oder zieht der Offense einen ab.' },
+        'c-minus1-wrongcut':      { canBeConstraint: true, constraintDesc: 'Falscher Cut oder schlechtes Leseverhalten kostet sofort einen Punkt.' },
+        'c-wechsel-5stops':       { canBeConstraint: true, constraintDesc: 'Defense und Offense tauschen nach 5 erfolgreichen Defensiv-Stops.' },
+        'c-wechsel-score':        { canBeConstraint: true, constraintDesc: 'Nach jedem erfolgreichen Korb wechseln Offense und Defense.' },
+        'c-plays-erzwingen':      { canBeConstraint: true, constraintDesc: 'Offense muss gesetzte Plays laufen bevor frei gespielt werden darf.' },
+        'c-nur-backdoor':         { canBeConstraint: true, constraintDesc: 'Offense darf nur Backdoor Cuts machen wenn Defender in Passing Lane steht.' },
+        'c-3rd-man':              { canBeConstraint: true, constraintDesc: 'Nach PnR oder Cut: Ball muss zuerst zum 3rd Man bevor Abschluss möglich.' },
+        'c-highlow':              { canBeConstraint: true, constraintDesc: 'Jeder Angriff muss über High-Low Aktion initiiert werden.' },
+        'c-nur-zone':             { canBeConstraint: true, constraintDesc: 'Defense spielt ausschließlich Zone — keine Mann-Mann erlaubt.' },
+        'c-nur-mann':             { canBeConstraint: true, constraintDesc: 'Defense spielt ausschließlich Mann-Mann — keine Zone erlaubt.' },
+        'c-help-helper':          { canBeConstraint: true, constraintDesc: 'Nach jeder Helpside-Aktion muss ein zweiter Spieler rotieren und helfen.' },
+        'c-help-rotate':          { canBeConstraint: true, constraintDesc: 'Jede Rotation muss komplett durchgezogen werden — kein Hängenbleiben erlaubt.' },
+        'c-huetchen-helpline':    { canBeConstraint: true, constraintDesc: 'Defender muss Hütchen auf Helpside-Linie berühren bevor er helfen darf.' },
+        'c-baseline-first':       { canBeConstraint: true, constraintDesc: 'Defender muss erst Baseline berühren bevor er rotieren oder helfen darf.' },
+        'c-coach-drive':          { canBeConstraint: true, constraintDesc: 'Penetration oder Aktion ist erst erlaubt wenn Coach das Signal gibt.' },
+        'c-zeitdruck':            { canBeConstraint: true, constraintDesc: 'Angriff muss innerhalb von X Sekunden abgeschlossen werden (z.B. 8 Sek Shotclock).' },
+        'c-1sek-delay':           { canBeConstraint: true, constraintDesc: 'Defender oder Offense wartet 1 Sekunde nach Signal bevor Aktion beginnt.' },
+        'c-offense-halbfeld':     { canBeConstraint: true, constraintDesc: 'Offense darf nur von definierten Positionen (z.B. nur Wing) penetrieren oder abschließen.' },
+      };
+
+      let patched = 0;
+
+      // Patch public/drills
+      const pubSnap = await getDoc(getPublicDrillsDoc());
+      if (pubSnap.exists()) {
+        const publicDrills = (pubSnap.data().drills || []).map(d => {
+          const patch = CONSTRAINT_PATCH[d.id];
+          if (patch) { patched++; return { ...d, ...patch }; }
+          return d;
+        });
+        // Neue c-* Drills die noch nicht in public sind: aus DRILLS_SEED hinzufügen
+        const existingIds = new Set(publicDrills.map(d => d.id));
+        const newConstraintDrills = (window.DRILLS_SEED || []).filter(d => d.canBeConstraint && !existingIds.has(d.id));
+        const allPublic = [...publicDrills, ...newConstraintDrills];
+        await setDoc(getPublicDrillsDoc(), { drills: allPublic, updatedAt: Date.now() });
+        console.log('[MIGRATE] constraint patch: public', patched, 'patched,', newConstraintDrills.length, 'new');
+      }
+
+      // Patch team/drills (falls dort noch Drills liegen)
+      const teamSnap2 = await getDoc(getTeamDrillsDoc());
+      if (teamSnap2.exists()) {
+        const teamDrills = (teamSnap2.data().drills || []).map(d => {
+          const patch = CONSTRAINT_PATCH[d.id];
+          if (patch) return { ...d, ...patch };
+          return d;
+        });
+        await setDoc(getTeamDrillsDoc(), { drills: teamDrills, updatedAt: Date.now() });
+      }
+
+      await setDoc(getMetaDoc(), { ...meta, constraintDrillsMigrated: true, constraintDrillsMigratedAt: Date.now() }, { merge: true });
+      console.log('[MIGRATE] constraintDrillsMigrated done');
+    }
+
     // --- Original Seed-Migration ---
     if (meta.drillsMigrated) {
       const drillsSnap = await getDoc(getTeamDrillsDoc());
@@ -2462,13 +2528,20 @@ signInAnonymously(auth).then(async () => {
           <option value="optional">optional</option>
         </select>
       </div>
-      <div class="form-group" style="grid-column:1/-1;display:flex;gap:20px;padding-top:4px;">
+      <div class="form-group" style="grid-column:1/-1;display:flex;gap:20px;padding-top:4px;flex-wrap:wrap;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
           <input type="checkbox" id="de-gamelike"> Gamelike
         </label>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
           <input type="checkbox" id="de-abschluss"> Abschluss
         </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="de-canbeconstraint" onchange="deToggleConstraintDesc()"> ⚡ Als Constraint verwendbar
+        </label>
+      </div>
+      <div class="form-group" style="grid-column:1/-1;display:none;" id="de-constraintdesc-group">
+        <label class="form-label">⚡ Constraint-Beschreibung (kurz)</label>
+        <input type="text" id="de-constraintdesc" class="form-input" placeholder="z.B. Max. 3 Dribbles pro Ballbesitz">
       </div>
     </div>
 
@@ -2557,7 +2630,7 @@ window.DRILLS_SEED = [
 
   { id: "extraball", name: "Extraball Passdrill (4+1)", kat: "Passing", phase: ["Warmup"], spielphase: ["Technik"], intensity: "niedrig", minSpieler: 4, feld: "Halbfeld", bälle: "5", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: false, createdAt: 764380800000, createdBy: "david"},
 
-  { id: "spielen-ohne-dribbling", name: "Spielen ohne Dribbling", kat: "Passing", phase: ["Warmup"], spielphase: ["SO","OT","DT","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar", createdAt: 764380800000, createdBy: "david"},
+  { id: "spielen-ohne-dribbling", name: "Spielen ohne Dribbling", kat: "Passing", phase: ["Warmup"], spielphase: ["SO","OT","DT","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar", canBeConstraint: true, constraintDesc: "Max. 3 Dribbles pro Ballbesitz und/oder X Pässe vor Wurf — zwingt zu Bewegung, Spacing und Ball-Movement.", createdAt: 764380800000, createdBy: "david"},
 
   { id: "10pass", name: "10 Pass Drill / 5-0 Motion", kat: "Passing", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "eingeschränkt", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "david"},
 
@@ -2657,9 +2730,9 @@ window.DRILLS_SEED = [
 
   { id: "spielen", name: "Spielen (Mann / Zone)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 10, feld: "Ganzfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "david"},
 
-  { id: "3dribbles", name: "3 Dribbles / X Pässe", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar", createdAt: 764380800000, createdBy: "david"},
+  { id: "3dribbles", name: "3 Dribbles / X Pässe", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar", canBeConstraint: true, constraintDesc: "Keine Dribbles erlaubt — nur Pässe, Cuts und Bewegung ohne Ball.", createdAt: 764380800000, createdBy: "david"},
 
-  { id: "bonuspunkte", name: "Bonuspunkte OReb", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar", createdAt: 764380800000, createdBy: "david"},
+  { id: "bonuspunkte", name: "Bonuspunkte OReb", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, note: "Auch als Constraint/Modifier verwendbar", canBeConstraint: true, constraintDesc: "Offensiver Rebound gibt Bonuspunkte (z.B. +1 extra) — Fokus: OReb und Boxout.", createdAt: 764380800000, createdBy: "david"},
 
   { id: "1-1-clinic", name: "1-1 Clinic (Blind / Korridor / Chase etc.)", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "hoch", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "Hütchen ggf.", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: true, createdAt: 764380800000, createdBy: "david"},
 
@@ -2699,6 +2772,31 @@ window.DRILLS_SEED = [
   { id: "bl-sl", name: "BL / SL Einwurf", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "david"},
 
   { id: "zone-intro", name: "Zone Einführung / 4-out / 3-out", kat: "Plays", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "niedrig", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "nein", competitive: "nein", gamelike: false, abschluss: true, createdAt: 764380800000, createdBy: "david"},
+
+  // CONSTRAINT-DRILLS (canBeConstraint: true, scope: 'public')
+  { id: "c-max3dribbel", name: "Max. 3 Dribbles", kat: "Scoring & Regeln", phase: ["Hauptteil"], spielphase: ["SO","OT","DT","SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "optional", competitive: "optional", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Max. 3 Dribbles pro Ballbesitz — zwingt zu Bewegung, Spacing und Ball-Movement.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-xpaesse", name: "X Pässe vor Abschluss", kat: "Scoring & Regeln", phase: ["Hauptteil"], spielphase: ["SO","OT","DT","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "optional", competitive: "optional", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Mindestanzahl Pässe erforderlich bevor ein Wurf erlaubt ist.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-kein-dribbling", name: "Kein Dribbling", kat: "Scoring & Regeln", phase: ["Hauptteil"], spielphase: ["SO","OT","DT","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "optional", competitive: "optional", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Keine Dribbles erlaubt — nur Pässe, Cuts und Bewegung ohne Ball.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-bonuspunkte-oreb", name: "Bonuspunkte Off. Rebound", kat: "Scoring & Regeln", phase: ["Hauptteil"], spielphase: ["SO","SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Offensiver Rebound gibt Bonuspunkte (z.B. +1 extra) — Fokus: OReb und Boxout.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-nur-catchshot", name: "Nur Catch & Shoot", kat: "Scoring & Regeln", phase: ["Hauptteil"], spielphase: ["SO","OT"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "optional", competitive: "optional", gamelike: true, abschluss: true, canBeConstraint: true, constraintDesc: "Würfe nur direkt aus dem Catch — kein zusätzliches Dribbling vor dem Abschluss.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-minus1-turnover", name: "-1 bei Turnover", kat: "Scoring & Regeln", phase: ["Hauptteil"], spielphase: ["SO","OT","DT","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Jeder Turnover gibt der Defense einen Punkt oder zieht der Offense einen Punkt ab.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-minus1-wrongcut", name: "-1 bei falschem Cut", kat: "Scoring & Regeln", phase: ["Hauptteil"], spielphase: ["SO","OT"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Falscher Cut oder schlechtes Leseverhalten kostet sofort einen Punkt.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-wechsel-5stops", name: "Wechsel nach 5 Stops", kat: "Scoring & Regeln", phase: ["Hauptteil"], spielphase: ["SO","OT","DT","SD"], intensity: "hoch", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Defense und Offense tauschen nach 5 erfolgreichen Defensiv-Stops.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-wechsel-score", name: "Wechsel nach Score", kat: "Scoring & Regeln", phase: ["Hauptteil"], spielphase: ["SO","OT","DT","SD"], intensity: "hoch", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Nach jedem erfolgreichen Korb wechseln Offense und Defense.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-plays-erzwingen", name: "Plays erzwingen", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","OT"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "optional", competitive: "optional", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Offense muss gesetzte Plays laufen bevor frei gespielt werden darf.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-nur-backdoor", name: "Backdoor lesen", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","OT"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (eingeschränkt)", competitive: "optional", gamelike: true, abschluss: true, canBeConstraint: true, constraintDesc: "Offense darf nur Backdoor Cuts machen wenn Defender in Passing Lane steht.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-3rd-man", name: "3rd Man Option", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO","OT"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "optional", competitive: "optional", gamelike: true, abschluss: true, canBeConstraint: true, constraintDesc: "Nach PnR oder Cut: Ball muss zuerst zum 3rd Man bevor Abschluss möglich.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-highlow", name: "High-Low Pflicht", kat: "Offense", phase: ["Hauptteil"], spielphase: ["SO"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "optional", competitive: "optional", gamelike: true, abschluss: true, canBeConstraint: true, constraintDesc: "Jeder Angriff muss über High-Low Aktion initiiert werden.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-nur-zone", name: "Nur Zone Defense", kat: "Defense", phase: ["Hauptteil"], spielphase: ["DT","SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Defense spielt ausschließlich Zone — keine Mann-Mann erlaubt.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-nur-mann", name: "Nur Mann-Mann", kat: "Defense", phase: ["Hauptteil"], spielphase: ["DT","SD"], intensity: "mittel", minSpieler: 6, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Defense spielt ausschließlich Mann-Mann — keine Zone erlaubt.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-help-helper", name: "Help the Helper", kat: "Defense", phase: ["Hauptteil"], spielphase: ["DT","SD"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Nach jeder Helpside-Aktion muss ein zweiter Spieler rotieren und helfen.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-help-rotate", name: "Help-Rotate Pflicht", kat: "Defense", phase: ["Hauptteil"], spielphase: ["DT","SD"], intensity: "mittel", minSpieler: 5, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Jede Rotation muss komplett durchgezogen werden — kein Hängenbleiben erlaubt.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-huetchen-helpline", name: "Hütchen Helpside-Linie", kat: "Defense", phase: ["Hauptteil"], spielphase: ["DT","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "Hütchen", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Defender muss Hütchen auf Helpside-Linie berühren bevor er helfen darf.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-baseline-first", name: "Baseline zuerst berühren", kat: "Defense", phase: ["Hauptteil"], spielphase: ["DT","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (live)", competitive: "ja", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Defender muss erst Baseline berühren bevor er rotieren oder helfen darf.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-coach-drive", name: "Nur auf Coach-Signal", kat: "Defense", phase: ["Hauptteil"], spielphase: ["DT","SD"], intensity: "mittel", minSpieler: 4, feld: "Halbfeld", bälle: "1", material: "keine", defense: "ja (eingeschränkt)", competitive: "optional", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Penetration oder Aktion ist erst erlaubt wenn Coach das Signal gibt.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-zeitdruck", name: "Zeitdruck", kat: "Kondition", phase: ["Hauptteil"], spielphase: ["SO","OT","DT","SD"], intensity: "hoch", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "optional", competitive: "ja", gamelike: true, abschluss: true, canBeConstraint: true, constraintDesc: "Angriff muss innerhalb von X Sekunden abgeschlossen werden (z.B. 8 Sek Shotclock).", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-1sek-delay", name: "1 Sek. Verzögerung", kat: "Kondition", phase: ["Hauptteil"], spielphase: ["SO","OT","DT","SD"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "keine", defense: "optional", competitive: "optional", gamelike: true, abschluss: false, canBeConstraint: true, constraintDesc: "Defender oder Offense wartet 1 Sekunde nach Signal bevor Aktion beginnt.", createdAt: 764380800000, createdBy: "david"},
+  { id: "c-offense-halbfeld", name: "Nur von bestimmten Spots", kat: "Kondition", phase: ["Hauptteil"], spielphase: ["SO","OT"], intensity: "mittel", minSpieler: 2, feld: "Halbfeld", bälle: "1", material: "Hütchen", defense: "optional", competitive: "optional", gamelike: true, abschluss: true, canBeConstraint: true, constraintDesc: "Offense darf nur von definierten Positionen (z.B. nur Wing) penetrieren oder abschließen.", createdAt: 764380800000, createdBy: "david"},
 
 ];
 
@@ -2929,35 +3027,8 @@ function toastMsg(key) {
 // ============================================================
 // CONSTRAINTS / MODIFIER — Bibliothek
 // ============================================================
-const CONSTRAINTS = [
-  // SCORING & REGELN
-  { id: "max3dribbel", label: "Max. 3 Dribbles", desc: "Max. 3 Dribbles pro Ballbesitz — zwingt zu Bewegung, Spacing und Ball-Movement.", cat: "Scoring & Regeln" },
-  { id: "xpaesse", label: "X Pässe vor Abschluss", desc: "Mindestanzahl Pässe erforderlich bevor ein Wurf erlaubt ist.", cat: "Scoring & Regeln" },
-  { id: "kein-dribbling", label: "Kein Dribbling", desc: "Keine Dribbles erlaubt — nur Pässe, Cuts und Bewegung ohne Ball.", cat: "Scoring & Regeln" },
-  { id: "bonuspunkte-oreb", label: "Bonuspunkte Off. Rebound", desc: "Offensiver Rebound gibt Bonuspunkte (z.B. +1 extra) — Fokus: OReb und Boxout.", cat: "Scoring & Regeln" },
-  { id: "nur-catchshot", label: "Nur Catch & Shoot", desc: "Würfe nur direkt aus dem Catch — kein zusätzliches Dribbling vor dem Abschluss.", cat: "Scoring & Regeln" },
-  { id: "minus1-turnover", label: "-1 bei Turnover", desc: "Jeder Turnover gibt der Defense einen Punkt oder zieht der Offense einen Punkt ab.", cat: "Scoring & Regeln" },
-  { id: "minus1-wrongcut", label: "-1 bei falschem Cut", desc: "Falscher Cut oder schlechtes Leseverhalten kostet sofort einen Punkt.", cat: "Scoring & Regeln" },
-  { id: "wechsel-5stops", label: "Wechsel nach 5 Stops", desc: "Defense und Offense tauschen die Seiten nach 5 erfolgreichen Defensiv-Stops.", cat: "Scoring & Regeln" },
-  { id: "wechsel-score", label: "Wechsel nach Score", desc: "Nach jedem erfolgreichen Korb wechseln Offense und Defense.", cat: "Scoring & Regeln" },
-  // OFFENSE FOKUS
-  { id: "plays-erzwingen", label: "Plays erzwingen", desc: "Offense muss gesetzte Plays laufen bevor frei gespielt werden darf.", cat: "Offense" },
-  { id: "nur-backdoor", label: "Backdoor lesen", desc: "Offense darf nur Backdoor Cuts machen wenn Defender in Passing Lane steht.", cat: "Offense" },
-  { id: "3rd-man", label: "3rd Man Option", desc: "Nach PnR oder Cut: Ball muss zuerst zum 3rd Man bevor Abschluss möglich.", cat: "Offense" },
-  { id: "highlow", label: "High-Low Pflicht", desc: "Jeder Angriff muss über High-Low Aktion initiiert werden.", cat: "Offense" },
-  // DEFENSE FOKUS
-  { id: "nur-zone", label: "Nur Zone Defense", desc: "Defense spielt ausschließlich Zone — keine Mann-Mann erlaubt.", cat: "Defense" },
-  { id: "nur-mann", label: "Nur Mann-Mann", desc: "Defense spielt ausschließlich Mann-Mann — keine Zone erlaubt.", cat: "Defense" },
-  { id: "help-helper", label: "Help the Helper", desc: "Nach jeder Helpside-Aktion muss ein zweiter Spieler rotieren und helfen.", cat: "Defense" },
-  { id: "help-rotate", label: "Help-Rotate Pflicht", desc: "Jede Rotation muss komplett durchgezogen werden — kein Hängenbleiben erlaubt.", cat: "Defense" },
-  { id: "huetchen-helpline", label: "Hütchen Helpside-Linie", desc: "Defender muss Hütchen auf Helpside-Linie berühren bevor er helfen darf.", cat: "Defense" },
-  { id: "baseline-first", label: "Baseline zuerst berühren", desc: "Defender muss erst Baseline berühren bevor er rotieren oder helfen darf.", cat: "Defense" },
-  { id: "coach-drive", label: "Nur auf Coach-Signal", desc: "Penetration oder Aktion ist erst erlaubt wenn Coach 'Drive!' / das Signal ruft.", cat: "Defense" },
-  // KONDITION & SCHWIERIGKEIT
-  { id: "zeitdruck", label: "Zeitdruck", desc: "Angriff muss innerhalb von X Sekunden abgeschlossen werden (z.B. 8 Sek Shotclock).", cat: "Kondition" },
-  { id: "1sek-delay", label: "1 Sek. Verzögerung", desc: "Defender oder Offense wartet 1 Sekunde nach Signal bevor Aktion beginnt.", cat: "Kondition" },
-  { id: "offense-halbfeld", label: "Nur von bestimmten Spots", desc: "Offense darf nur von definierten Positionen (z.B. nur Wing) penetrieren oder abschließen.", cat: "Kondition" },
-];
+// Constraints sind jetzt Drills mit canBeConstraint: true in window.DRILLS
+// Das hardcoded CONSTRAINTS-Array entfällt.
 
 // ============================================================
 // CONSTRAINT STATE
@@ -2970,7 +3041,7 @@ function openConstraintModal(slotId, drillIdx, drillName, e) {
   constraintTargetSlotId = slotId;
   constraintTargetDrillIdx = drillIdx;
 
-  document.getElementById('constraint-modal-subtitle').textContent = (currentLang==='en'?'Drill: ':'Drill: ') + drillName;
+  document.getElementById('constraint-modal-subtitle').textContent = 'Drill: ' + drillName;
   document.getElementById('constraint-custom-input').value = '';
 
   // Get current constraints for this drill slot
@@ -2978,25 +3049,39 @@ function openConstraintModal(slotId, drillIdx, drillName, e) {
   const sd = slot?.drills[drillIdx];
   const active = sd?.constraints || [];
 
-  // Group presets by category
-  const cats = [...new Set(CONSTRAINTS.map(c => c.cat))];
-  let html = '';
-  cats.forEach(cat => {
-    const catLabel = currentLang === 'en' ? (CONSTRAINT_T[cat]?.en || cat) : cat;
-    html += `<div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.07em;margin:10px 0 4px;">${catLabel}</div>`;
-    CONSTRAINTS.filter(c => c.cat === cat).forEach(c => {
-      const isActive = active.includes(c.label);
-      const displayLabel = currentLang === 'en' ? (CONSTRAINT_T[c.label]?.en || c.label) : c.label;
-      const displayDesc  = currentLang === 'en' ? (CONSTRAINT_DESC_EN[c.label] || c.desc) : c.desc;
-      html += `<button class="constraint-preset-btn ${isActive ? 'selected' : ''}" onclick="toggleConstraint('${c.id}','${c.label.replace(/'/g,"\\'")}')">
-        <span style="font-size:14px;flex-shrink:0;">${isActive ? '✓' : '+'}</span>
-        <span>
-          <div class="constraint-preset-label">${displayLabel}</div>
-          <div class="constraint-preset-desc">${displayDesc}</div>
-        </span>
-      </button>`;
-    });
+  // Filter drills: canBeConstraint + visible to current user
+  const constraintDrills = (window.DRILLS || []).filter(d => {
+    if (!d.canBeConstraint) return false;
+    const scope = d.scope || 'public';
+    if (scope === 'public') return true;
+    if (scope === 'team') return !!window.currentTeam;
+    if (scope === 'private') return d.createdBy === currentUser;
+    return true;
   });
+
+  // Group by kat, sorted
+  const cats = [...new Set(constraintDrills.map(d => d.kat))].sort();
+  let html = '';
+  if (constraintDrills.length === 0) {
+    html = `<div style="font-size:12px;color:var(--text-subtle);padding:8px 0;">Noch keine Constraint-Drills vorhanden. Drills mit ⚡ markieren um sie hier zu sehen.</div>`;
+  } else {
+    cats.forEach(cat => {
+      const catDrills = constraintDrills.filter(d => d.kat === cat);
+      html += `<div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.07em;margin:10px 0 4px;">${cat}</div>`;
+      catDrills.forEach(d => {
+        const isActive = active.includes(d.name);
+        const desc = d.constraintDesc || d.beschreibung || '';
+        const scopeBadge = (d.scope === 'private') ? ' 🔒' : (d.scope === 'team') ? ' 👥' : '';
+        html += `<button class="constraint-preset-btn ${isActive ? 'selected' : ''}" onclick="toggleConstraint('${d.id}','${d.name.replace(/'/g,"\\'")}')">
+          <span style="font-size:14px;flex-shrink:0;">${isActive ? '✓' : '+'}</span>
+          <span>
+            <div class="constraint-preset-label">${d.name}${scopeBadge}</div>
+            ${desc ? `<div class="constraint-preset-desc">${desc}</div>` : ''}
+          </span>
+        </button>`;
+      });
+    });
+  }
 
   document.getElementById('constraint-preset-list').innerHTML = html;
   document.getElementById('constraint-modal').classList.remove('hidden');
@@ -3208,6 +3293,7 @@ function renderBibliothek(drills) {
         ${d.defense !== 'nein' ? `<span class="meta-pill" style="background:#fee8e8;color:#8b1a1a">D</span>` : ''}
         ${d.competitive === 'ja' ? `<span class="meta-pill" style="background:#e8f0e8;color:#1a6b1a">🏆</span>` : ''}
         ${d.gamelike ? `<span class="meta-pill" style="background:#e8e8fe;color:#2b2b8b">🎮</span>` : ''}
+        ${d.canBeConstraint ? `<span class="meta-pill" style="background:#fff8e0;color:#7a5c00;border:1px solid #e8d060;">⚡</span>` : ''}
         ${d.material !== 'keine' ? `<span class="meta-pill">🔧 ${d.material.split(',')[0].trim()}</span>` : ''}
       </div>
 
@@ -3356,7 +3442,7 @@ function openDrillEditModal(drillId) {
   _s('de-spieler','value',4); _s('de-feld','value','Halbfeld');
   _s('de-baelle','value',''); _s('de-material','value','');
   _s('de-defense','value','nein'); _s('de-competitive','value','nein');
-  _s('de-gamelike','checked',false); _s('de-abschluss','checked',false);
+  _s('de-gamelike','checked',false); _s('de-abschluss','checked',false); _s('de-canbeconstraint','checked',false); _s('de-constraintdesc','value',''); const cdg=document.getElementById('de-constraintdesc-group'); if(cdg) cdg.style.display='none';
   _s('de-beschreibung','value',''); _s('de-variationen','value','');
   _s('de-coaching','value',''); _s('de-note','value','');
   _s('de-scope','value','team');
@@ -3391,6 +3477,10 @@ function openDrillEditModal(drillId) {
     document.getElementById('de-competitive').value = d.competitive || 'nein';
     document.getElementById('de-gamelike').checked = !!d.gamelike;
     document.getElementById('de-abschluss').checked = !!d.abschluss;
+    document.getElementById('de-canbeconstraint').checked = !!d.canBeConstraint;
+    document.getElementById('de-constraintdesc').value = d.constraintDesc || '';
+    const _cdg = document.getElementById('de-constraintdesc-group');
+    if (_cdg) _cdg.style.display = d.canBeConstraint ? '' : 'none';
     // Descriptions from DRILL_DESC_DE if not stored on drill
     document.getElementById('de-beschreibung').value = d.beschreibung || DRILL_DESC_DE[drillId] || '';
     document.getElementById('de-variationen').value = d.variationen || '';
@@ -3497,6 +3587,11 @@ function deVideoFileChosen(input) {
   document.getElementById('de-video-preview').style.display = 'block';
 }
 
+function deToggleConstraintDesc() {
+  const el = document.getElementById('de-constraintdesc-group');
+  if (el) el.style.display = document.getElementById('de-canbeconstraint').checked ? '' : 'none';
+}
+
 function closeDrillEditModal() {
   document.getElementById('drill-edit-modal').classList.add('hidden');
   drillEditId = null;
@@ -3575,6 +3670,8 @@ async function saveDrillFromModal() {
     competitive: document.getElementById('de-competitive').value,
     gamelike: document.getElementById('de-gamelike').checked,
     abschluss: document.getElementById('de-abschluss').checked,
+    canBeConstraint: document.getElementById('de-canbeconstraint').checked,
+    constraintDesc: document.getElementById('de-constraintdesc').value.trim(),
     beschreibung: document.getElementById('de-beschreibung').value.trim(),
     variationen: document.getElementById('de-variationen').value.trim(),
     coachingPunkte: document.getElementById('de-coaching').value.trim(),
