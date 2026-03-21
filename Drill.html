@@ -2389,24 +2389,25 @@ signInAnonymously(auth).then(async () => {
         <!-- Mode Tabs -->
         <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:12px;">
           <button id="ki-tab-text-label" onclick="kiSetMode('text')" style="padding:7px 16px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--text);cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text);">✏️ Text</button>
-          <button id="ki-tab-image-label" onclick="kiSetMode('image')" style="padding:7px 16px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);">📷 Bild</button>
+          <button id="ki-tab-image-label" onclick="kiSetMode('image')" style="padding:7px 16px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--text-subtle);">📎 Datei</button>
         </div>
         <!-- Text Mode -->
         <div id="ki-mode-text">
           <div id="ki-text-hint" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Beschreibe einen oder mehrere Drills frei formuliert.</div>
           <textarea id="ki-input-text" class="form-input" rows="6" style="resize:vertical;font-family:DM Sans,sans-serif;font-size:13px;" id="ki-input-text-el" placeholder="z.B.:&#10;Shell Drill: 4-on-4 Defense Positioning, Halbfeld, 8 Spieler, Defense live, kompetitiv&#10;&#10;Leiter Dribbling — Warmup, 1 Spieler, Ballhandling, niedrige Intensität"></textarea>
         </div>
-        <!-- Image Mode -->
+        <!-- File Mode -->
         <div id="ki-mode-image" style="display:none;">
-          <div id="ki-image-hint" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Foto von Whiteboard, Drill-Sheet oder handgeschriebenem Zettel — Claude liest die Drills aus.</div>
+          <div id="ki-image-hint" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Foto, PDF, Word, CSV oder Text — Claude erkennt die Drills automatisch.</div>
           <label id="ki-image-dropzone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed var(--border);border-radius:var(--radius);padding:28px;cursor:pointer;background:var(--surface2);transition:border-color 0.15s;position:relative;">
-            <span style="font-size:28px;">📷</span>
-            <span id="ki-dropzone-label" style="font-size:13px;color:var(--text-subtle);">Bild wählen oder hierher ziehen</span>
-            <span style="font-size:11px;color:var(--text-subtle);">JPG, PNG, WEBP</span>
-            <input type="file" id="ki-image-file" accept="image/*" onchange="kiImageChosen(this)" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
+            <span style="font-size:28px;">📎</span>
+            <span id="ki-dropzone-label" style="font-size:13px;color:var(--text-subtle);">Datei wählen oder hierher ziehen</span>
+            <span style="font-size:11px;color:var(--text-subtle);">JPG · PNG · PDF · DOCX · TXT · CSV · MD</span>
+            <input type="file" id="ki-image-file" accept="image/*,application/pdf,.pdf,.docx,.doc,.txt,.csv,.md" onchange="kiFileChosen(this)" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
           </label>
           <div id="ki-image-preview" style="display:none;margin-top:10px;position:relative;">
             <img id="ki-image-preview-img" style="max-width:100%;max-height:220px;border-radius:var(--radius);object-fit:contain;border:1px solid var(--border);">
+            <div id="ki-file-info" style="display:none;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:13px;color:var(--text);"></div>
             <button onclick="kiClearImage()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;">×</button>
           </div>
         </div>
@@ -7590,6 +7591,8 @@ if (window.pendingCloudPlans && Array.isArray(window.pendingCloudPlans)) {
 let kiDrillCandidates = [];
 let kiImageBase64 = null;
 let kiImageMime = 'image/jpeg';
+let kiFileText = null;   // for text-based files (txt, csv, md, docx-as-text)
+let kiFileType = null;   // 'image' | 'pdf' | 'text'
 let kiMode = 'text';
 
 function openKiImportModal() {
@@ -7616,38 +7619,81 @@ function kiSetMode(mode) {
   tabImg.style.color = mode === 'image' ? 'var(--text)' : 'var(--text-subtle)';
 }
 
-async function kiImageChosen(input) {
+async function kiFileChosen(input) {
   const file = input.files[0];
   if (!file) return;
-  kiImageMime = file.type || 'image/jpeg';
   const status = document.getElementById('ki-status');
-  status.textContent = currentLang==='en'?'⏳ Loading image…':'⏳ Bild laden…';
+  status.textContent = currentLang==='en'?'⏳ Loading file…':'⏳ Datei laden…';
+  const preview = document.getElementById('ki-image-preview');
+  const img = document.getElementById('ki-image-preview-img');
+  const fileInfo = document.getElementById('ki-file-info');
+  img.style.display = 'none';
+  fileInfo.style.display = 'none';
+  kiImageBase64 = null; kiFileText = null; kiFileType = null;
+
+  const isImage = file.type.startsWith('image/');
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  const isText = !isImage && !isPdf; // txt, csv, md, docx treated as text
+
   try {
-    // Use arrayBuffer — more reliable on iOS PWA than FileReader.readAsDataURL
     const buf = await file.arrayBuffer();
     const bytes = new Uint8Array(buf);
-    let binary = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+
+    if (isImage) {
+      kiFileType = 'image';
+      kiImageMime = file.type || 'image/jpeg';
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      kiImageBase64 = btoa(binary);
+      const objectUrl = URL.createObjectURL(file);
+      img.src = objectUrl;
+      img.style.display = 'block';
+      fileInfo.style.display = 'none';
+    } else if (isPdf) {
+      kiFileType = 'pdf';
+      kiImageMime = 'application/pdf';
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      kiImageBase64 = btoa(binary);
+      img.style.display = 'none';
+      fileInfo.textContent = '📄 ' + file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB)';
+      fileInfo.style.display = 'block';
+    } else {
+      // Text-based: txt, csv, md, docx (best-effort UTF-8 read)
+      kiFileType = 'text';
+      const decoder = new TextDecoder('utf-8', { fatal: false });
+      kiFileText = decoder.decode(bytes);
+      img.style.display = 'none';
+      fileInfo.textContent = '📝 ' + file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB) — als Text importiert';
+      fileInfo.style.display = 'block';
     }
-    kiImageBase64 = btoa(binary);
-    const objectUrl = URL.createObjectURL(file);
-    const preview = document.getElementById('ki-image-preview');
-    const img = document.getElementById('ki-image-preview-img');
-    img.src = objectUrl;
+
     preview.style.display = 'block';
     document.getElementById('ki-image-dropzone').style.display = 'none';
     status.textContent = '';
   } catch(e) {
-    status.textContent = currentLang==='en'?'⚠ Could not load image':'⚠ Bild konnte nicht geladen werden';
-    console.error('kiImageChosen error:', e);
+    status.textContent = currentLang==='en'?'⚠ Could not load file':'⚠ Datei konnte nicht geladen werden';
+    console.error('kiFileChosen error:', e);
   }
 }
 
+// Keep old name as alias for backward compat (bildUrl attachment checkbox)
+function kiImageChosen(input) { return kiFileChosen(input); }
+
 function kiClearImage() {
-  kiImageBase64 = null;
-  document.getElementById('ki-image-preview').style.display = 'none';
+  kiImageBase64 = null; kiFileText = null; kiFileType = null;
+  const preview = document.getElementById('ki-image-preview');
+  const img = document.getElementById('ki-image-preview-img');
+  const fileInfo = document.getElementById('ki-file-info');
+  if (preview) preview.style.display = 'none';
+  if (img) { img.src = ''; img.style.display = 'none'; }
+  if (fileInfo) { fileInfo.textContent = ''; fileInfo.style.display = 'none'; }
   document.getElementById('ki-image-dropzone').style.display = 'flex';
   document.getElementById('ki-image-file').value = '';
 }
@@ -7673,7 +7719,7 @@ async function runKiAnalysis() {
     const text = document.getElementById('ki-input-text').value.trim();
     if (!text) return;
   } else {
-    if (!kiImageBase64) { status.textContent = currentLang==='en'?'⚠ No image selected':'⚠ Kein Bild gewählt'; return; }
+    if (!kiImageBase64 && !kiFileText) { status.textContent = currentLang==='en'?'⚠ No file selected':'⚠ Keine Datei gewählt'; return; }
   }
 
   btn.disabled = true;
@@ -7701,12 +7747,23 @@ Jedes Objekt hat diese Felder:
 
 Wenn ein Wert unklar ist, wähle den sinnvollsten Default. Mehrere Drills = mehrere Objekte im Array.`;
 
-  const userContent = kiMode === 'image'
-    ? [
-        { type: 'image', source: { type: 'base64', media_type: kiImageMime, data: kiImageBase64 } },
-        { type: 'text', text: 'Extrahiere alle Basketball-Drills aus diesem Bild als JSON-Array.' }
-      ]
-    : document.getElementById('ki-input-text').value.trim();
+  let userContent;
+  if (kiMode === 'text') {
+    userContent = document.getElementById('ki-input-text').value.trim();
+  } else if (kiFileType === 'image') {
+    userContent = [
+      { type: 'image', source: { type: 'base64', media_type: kiImageMime, data: kiImageBase64 } },
+      { type: 'text', text: 'Extrahiere alle Basketball-Drills aus diesem Bild als JSON-Array.' }
+    ];
+  } else if (kiFileType === 'pdf') {
+    userContent = [
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: kiImageBase64 } },
+      { type: 'text', text: 'Extrahiere alle Basketball-Drills aus diesem Dokument als JSON-Array.' }
+    ];
+  } else {
+    // text file
+    userContent = 'Extrahiere alle Basketball-Drills aus folgendem Text als JSON-Array:\n\n' + kiFileText;
+  }
 
   try {
     const resp = await fetch(KI_PROXY_URL, {
