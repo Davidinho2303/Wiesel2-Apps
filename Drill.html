@@ -1430,6 +1430,8 @@ window.fbInitTeamListeners = (teamId) => {
   (window._teamListenerUnsubs || []).forEach(unsub => { try { unsub(); } catch(e) {} });
   window._teamListenerUnsubs = [];
   window._teamListenersActive = true;
+  window._activeTeamListenerId = teamId;
+  window.currentTeam = teamId;
 
   // Shared Plans
   const unsub1 = onSnapshot(getSharedPlansDoc(), (snap) => {
@@ -1596,8 +1598,8 @@ window.fbRegisterUser = async (kuerzel) => {
       if (data.activeTeam) {
         window.currentTeam = data.activeTeam;
         localStorage.setItem('wiesel2_team', data.activeTeam);
-        // Nur starten wenn noch nicht aktiv (signInAnonymously hat ggf. bereits gestartet)
-        if (typeof window.fbInitTeamListeners === 'function' && !window._teamListenersActive) {
+        // Neu starten wenn Team sich geändert hat oder noch nicht aktiv
+        if (typeof window.fbInitTeamListeners === 'function' && window._activeTeamListenerId !== data.activeTeam) {
           window.fbInitTeamListeners(data.activeTeam);
         }
       } else {
@@ -1671,6 +1673,31 @@ window.fbGetUserTeams = async (kuerzel) => {
 };
 
 // ---- Team-Profil laden
+// ---- Team verlassen
+window.fbLeaveTeam = async (kuerzel, teamId) => {
+  try {
+    const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
+    const snap = await getDoc(userDoc);
+    if (!snap.exists()) return;
+    const teams = (snap.data().teams || []).filter(t => t !== teamId);
+    const newActive = teams.length > 0 ? teams[0] : null;
+    await setDoc(userDoc, { activeTeam: newActive, teams }, { merge: true });
+    window.currentTeam = newActive;
+    if (newActive) localStorage.setItem('wiesel2_team', newActive);
+    else localStorage.removeItem('wiesel2_team');
+    if (newActive && typeof window.fbInitTeamListeners === 'function') window.fbInitTeamListeners(newActive);
+    console.log('[TEAM] Left team:', teamId, '→ new active:', newActive);
+  } catch(e) { console.warn('[TEAM] leaveTeam error:', e.message); }
+};
+
+// ---- Teams-Liste eines Users laden
+window.fbGetUserTeams = async (kuerzel) => {
+  try {
+    const snap = await getDoc(doc(db, 'users', kuerzel, 'data', 'profile'));
+    return snap.exists() ? (snap.data().teams || []) : [];
+  } catch(e) { return []; }
+};
+
 window._fbGetTeamProfile = async (teamId) => {
   const teamDoc = doc(db, 'teams', teamId, 'data', 'profile');
   const snap = await getDoc(teamDoc);
@@ -1759,6 +1786,24 @@ window.fbMigrateUserTeam = async (kuerzel, fallbackTeam) => {
       // fbInitUserListeners wird vom App-Init aufgerufen nach fbRegisterUser.then()
     }
   } catch(e) { console.warn('fbMigrateUserTeam:', e.message); }
+};
+
+// ---- Einzelnen Drill speichern (nach scope ins richtige Dokument)
+window.fbSaveDrill = async (drill) => {
+  try {
+    const scope = drill.scope || 'team';
+    let docRef;
+    if (scope === 'public') docRef = getPublicDrillsDoc();
+    else if (scope === 'private' || scope === 'personal') docRef = getPersonalDrillsDoc();
+    else docRef = getTeamDrillsDoc();
+    const snap = await getDoc(docRef);
+    const existing = (snap.exists() && Array.isArray(snap.data().drills)) ? snap.data().drills : [];
+    const idx = existing.findIndex(d => d.id === drill.id);
+    if (idx >= 0) existing[idx] = drill;
+    else existing.push(drill);
+    await setDoc(docRef, { drills: existing, updatedAt: Date.now() });
+    console.log('[DRILL] Saved:', drill.id, 'scope:', scope);
+  } catch(e) { console.warn('[DRILL] fbSaveDrill error:', e.message); }
 };
 
 // ---- Einzelnen Drill speichern (nach scope ins richtige Dokument)
