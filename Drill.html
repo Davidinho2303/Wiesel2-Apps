@@ -1432,6 +1432,8 @@ window.fbInitTeamListeners = (teamId) => {
   window._teamListenersActive = true;
   window._activeTeamListenerId = teamId;
   window.currentTeam = teamId;
+  // Drills komplett leeren — onSnapshots füllen sauber neu
+  window.DRILLS = [];
 
   // Shared Plans
   const unsub1 = onSnapshot(getSharedPlansDoc(), (snap) => {
@@ -7559,6 +7561,7 @@ async function saveUserKuerzel() {
 function _doLogin(val) {
   currentUser = val;
   window.currentUser = val;
+  window._loginSession = (window._loginSession || 0) + 1;
   localStorage.setItem('wiesel2_user', val);
   // Reset team so fbRegisterUser loads it fresh from Firestore (prevents previous user's team leaking)
   window.currentTeam = null;
@@ -7581,7 +7584,9 @@ function _doLogin(val) {
   updateSaisonVisibility();
   // fbRegisterUser lädt Team aus Profil und startet Team-Listener
   if (typeof window.fbRegisterUser === 'function') {
+    const _session = window._loginSession;
     window.fbRegisterUser(val).then(() => {
+      if (window._loginSession !== _session) return; // User hat inzwischen gewechselt
       if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(val);
       setTimeout(seedDefaultTemplates, 1500);
       if (!window.currentTeam) {
@@ -7726,9 +7731,9 @@ if (currentUser) {
   // Warten bis module script (Firebase) bereit ist, dann User initialisieren
   function _initUserWhenReady(attempts) {
     if (typeof window.fbRegisterUser === 'function' && typeof window.fbInitUserListeners === 'function') {
+      const _initSession = window._loginSession;
       window.fbRegisterUser(currentUser).then(() => {
-        // fbRegisterUser hat Team gesetzt + fbInitTeamListeners gestartet
-        // Jetzt User-Listener starten (Pläne, Saison, persönliche Drills)
+        if (window._loginSession !== _initSession) return; // User hat inzwischen gewechselt
         window.fbInitUserListeners(currentUser);
         setTimeout(seedDefaultTemplates, 1500);
         if (!window.currentTeam) setTimeout(openTeamSetupModal, 500);
