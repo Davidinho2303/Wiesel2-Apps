@@ -2,7 +2,7 @@
 
 **Coaching-Plattform für Basketballtrainer** — Drill-Bibliothek, Trainingsplanung, Saisonplanung, Team-Kollaboration.
 
-🌐 [assistr öffnen](https://davidinho2303.github.io/wiesel2-dashboard/Drill.html)
+🌐 [assistr öffnen](https://davidinho2303.github.io/Wiesel2-Apps/Drill.html)
 
 ---
 
