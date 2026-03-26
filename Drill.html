@@ -1436,7 +1436,9 @@ window.fbInitTeamListeners = (teamId) => {
   window.DRILLS = [];
 
   // Shared Plans
+  const _teamId1 = teamId;
   const unsub1 = onSnapshot(getSharedPlansDoc(), (snap) => {
+    if (window._activeTeamListenerId !== _teamId1) return;
     if (!snap.exists()) return;
     window.sharedPlans = snap.data().plans || [];
     try { renderPlansLibrary(); } catch(e) {}
@@ -1444,7 +1446,9 @@ window.fbInitTeamListeners = (teamId) => {
   window._teamListenerUnsubs.push(unsub1);
 
   // Shared Templates
+  const _teamId2 = teamId;
   const unsub2 = onSnapshot(getSharedTemplatesDoc(), (snap) => {
+    if (window._activeTeamListenerId !== _teamId2) return;
     if (!snap.exists()) return;
     window.sharedTemplates = snap.data().templates || [];
     try { renderPlansLibrary(); } catch(e) {}
@@ -1452,7 +1456,9 @@ window.fbInitTeamListeners = (teamId) => {
   window._teamListenerUnsubs.push(unsub2);
 
   // Team Drills
+  const _teamId3 = teamId;
   const unsub3 = onSnapshot(getTeamDrillsDoc(), (snap) => {
+    if (window._activeTeamListenerId !== _teamId3) return; // veralteter Snapshot
     const teamDrills = (snap.exists() && Array.isArray(snap.data().drills)) ? snap.data().drills : [];
     const nonTeam = (window.DRILLS || []).filter(d => d.scope !== 'team');
     const combined = [...nonTeam, ...teamDrills];
