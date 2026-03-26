@@ -1112,6 +1112,7 @@ function getTeamPlansDoc()       { const t = window.currentTeam || 'wiesel2'; re
 function getTeamSeasonsDoc()     { const t = window.currentTeam || 'wiesel2'; return doc(db, 'teams', t, 'data', 'seasons'); }
 function getPublicDrillsDoc()    { return doc(db, 'public', 'drills'); }
 function getPublicPlansDoc()     { return doc(db, 'public', 'plans'); }
+function getPublicTemplatesDoc() { return doc(db, 'public', 'templates'); }
 
 // Dynamic docs — depend on currentUser (set after login)
 function getPlansDoc()          { const u = window.currentUser || 'anonymous'; return doc(db, 'users', u, 'data', 'plans'); }
@@ -1304,6 +1305,16 @@ window.fbInitTeamListeners = (teamId) => {
     try { if (typeof renderSharedPlansList === 'function' && plansLibTab === 'shared') renderSharedPlansList(); } catch(e) {}
   }, err => console.warn('PublicPlans snapshot:', err.message));
   window._teamListenerUnsubs.push(unsubPublic);
+
+  // Public templates listener
+  window.publicTemplates = window.publicTemplates || [];
+  const _teamIdPubTpl = teamId;
+  const unsubPublicTemplates = onSnapshot(getPublicTemplatesDoc(), (snap) => {
+    if (window._activeTeamListenerId !== _teamIdPubTpl) return;
+    window.publicTemplates = snap.exists() ? (snap.data().templates || []) : [];
+    try { if (typeof renderSharedTemplatesList === 'function' && plansLibTab === 'tpl-shared') renderSharedTemplatesList(); } catch(e) {}
+  }, err => console.warn('PublicTemplates snapshot:', err.message));
+  window._teamListenerUnsubs.push(unsubPublicTemplates);
 
   // Saison-Migration (einmalig: user→team) dann laden
   const _saisonTeam = teamId;
@@ -1725,10 +1736,17 @@ window.fbUnsharePlan = async (planId) => {
 // ---- Template teilen
 window.fbShareTemplate = async (tpl) => {
   try {
-    const snap = await getDoc(getSharedTemplatesDoc());
-    const existing = snap.exists() ? (snap.data().templates || []) : [];
-    const filtered = existing.filter(t => t.id !== tpl.id);
-    await setDoc(getSharedTemplatesDoc(), { templates: [...filtered, { ...tpl, scope: 'team' }], updatedAt: Date.now() });
+    if (tpl.scope === 'public') {
+      const snap = await getDoc(getPublicTemplatesDoc());
+      const existing = snap.exists() ? (snap.data().templates || []) : [];
+      const filtered = existing.filter(t => t.id !== tpl.id);
+      await setDoc(getPublicTemplatesDoc(), { templates: [...filtered, { ...tpl, scope: 'public' }], updatedAt: Date.now() });
+    } else {
+      const snap = await getDoc(getSharedTemplatesDoc());
+      const existing = snap.exists() ? (snap.data().templates || []) : [];
+      const filtered = existing.filter(t => t.id !== tpl.id);
+      await setDoc(getSharedTemplatesDoc(), { templates: [...filtered, { ...tpl, scope: 'team' }], updatedAt: Date.now() });
+    }
   } catch(e) { console.warn('fbShareTemplate:', e.message); }
 };
 
@@ -1774,9 +1792,15 @@ window._fbSaveLang = async (kuerzel, lang) => {
 window.fbUnshareTemplate = async (tplId) => {
   try {
     const snap = await getDoc(getSharedTemplatesDoc());
-    if (!snap.exists()) return;
-    const templates = (snap.data().templates || []).filter(t => t.id !== tplId);
-    await setDoc(getSharedTemplatesDoc(), { templates, updatedAt: Date.now() });
+    if (snap.exists()) {
+      const templates = (snap.data().templates || []).filter(t => t.id !== tplId);
+      await setDoc(getSharedTemplatesDoc(), { templates, updatedAt: Date.now() });
+    }
+    const pubSnap = await getDoc(getPublicTemplatesDoc());
+    if (pubSnap.exists()) {
+      const templates = (pubSnap.data().templates || []).filter(t => t.id !== tplId);
+      await setDoc(getPublicTemplatesDoc(), { templates, updatedAt: Date.now() });
+    }
   } catch(e) { console.warn('fbUnshareTemplate:', e.message); }
 };
 
@@ -4020,7 +4044,8 @@ function autoSave() {
 }
 
 function loadPlan(planId) {
-  const plan = savedPlans.find(p => p.id === planId);
+  const plan = savedPlans.find(p => p.id === planId)
+    || (window.sharedPlans||[]).find(p => p.id === planId);
   if (!plan) return;
   currentPlan = JSON.parse(JSON.stringify(plan));
   document.getElementById('plan-name').value = currentPlan.name || '';
@@ -4157,7 +4182,9 @@ function unshareAndDeletePlan(planId, e) {
 
 // ---- Template laden (als neuen Plan instantiieren)
 function loadTemplate(tplId, fromShared) {
-  const list = fromShared ? (window.sharedTemplates || []) : (window.myTemplates || []);
+  const list = fromShared
+    ? [...(window.sharedTemplates || []), ...(window.publicTemplates || [])]
+    : (window.myTemplates || []);
   const tpl = list.find(t => t.id === tplId);
   if (!tpl) return;
   const weekday = tpl.weekday || null;
@@ -5506,7 +5533,10 @@ function renderSharedTemplatesList() {
   const container = document.getElementById('saved-plans-list');
   const userFilter = document.getElementById('shared-user-filter')?.value || '';
   const search = (document.getElementById('shared-search')?.value || '').toLowerCase();
-  let templates = window.sharedTemplates || [];
+  // Team + public templates zusammenführen, keine Duplikate
+  const teamTpls = window.sharedTemplates || [];
+  const pubTpls = (window.publicTemplates || []).filter(t => !teamTpls.find(tt => tt.id === t.id));
+  let templates = [...teamTpls, ...pubTpls];
   if (userFilter) templates = templates.filter(t => t.createdBy === userFilter);
   if (search) templates = templates.filter(t => (t.name||'').toLowerCase().includes(search) || (t.theme||'').toLowerCase().includes(search));
   if (templates.length === 0) {
@@ -5624,7 +5654,9 @@ async function fbSaveSaison() {
 
 function saisonCalDayClick(dateStr) {
   const phases = saisonPhases.filter(p => dateStr >= p.startDate && dateStr <= p.endDate);
-  const plans = (savedPlans||[]).filter(pl => pl.date === dateStr);
+  const myPlans = (savedPlans||[]).filter(pl => pl.date === dateStr);
+  const teamPlans = (window.sharedPlans||[]).filter(pl => pl.date === dateStr && !myPlans.find(p => p.id === pl.id));
+  const plans = [...myPlans, ...teamPlans];
 
   // Leerer Tag ohne Phase/Plan → direkt Phasen-Modal mit Datum vorausgefüllt
   if (phases.length === 0 && plans.length === 0) {
@@ -5655,9 +5687,11 @@ function saisonCalDayClick(dateStr) {
 
   const planHtml = plans.map(pl => {
     const drCnt = (pl.slots||[]).reduce((a,s)=>a+(s.drills||[]).length,0);
+    const isOwn = !pl.createdBy || pl.createdBy === currentUser;
+    const ownerBadge = !isOwn ? `<span style="font-size:9px;color:var(--text-subtle);font-family:DM Mono,monospace;">👤 ${pl.sharedBy||pl.createdBy}</span>` : '';
     return `<div onclick="loadPlan('${pl.id}');document.getElementById('cal-day-popup').remove();" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:6px;cursor:pointer;margin-bottom:6px;transition:background .15s;" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='var(--surface2)'">
       <div style="font-size:12px;flex:1;">
-        <div style="font-weight:600;color:var(--text);">${pl.name||pl.date||'—'}</div>
+        <div style="font-weight:600;color:var(--text);">${pl.name||pl.date||'—'} ${ownerBadge}</div>
         <div style="font-size:10px;color:var(--text-subtle);font-family:DM Mono,monospace;">${drCnt} Drills${pl.theme?' · '+pl.theme:''}</div>
       </div>
       <div style="font-size:11px;color:var(--blue,#2E75B6);">${T['cal-open'][currentLang]}</div>
@@ -7407,6 +7441,7 @@ function _doLogin(val) {
   window.sharedPlans = [];
   window.sharedTemplates = [];
   window.publicPlans = [];
+  window.publicTemplates = [];
   saisonPhases = [];
   try { renderSaisonPage(); } catch(e) {}
   window._templatesLoadedFromFirestore = false;
