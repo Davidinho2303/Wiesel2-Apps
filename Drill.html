@@ -7565,9 +7565,11 @@ function _doLogin(val) {
   window._activeTeamListenerId = null;
   window._teamListenersActive = false;
   localStorage.removeItem('wiesel2_team');
-  // Laufende Team-Listener sofort stoppen
+  // Laufende Team- und User-Listener sofort stoppen
   (window._teamListenerUnsubs || []).forEach(unsub => { try { unsub(); } catch(e) {} });
   window._teamListenerUnsubs = [];
+  (window._userListenerUnsubs || []).forEach(unsub => { try { unsub(); } catch(e) {} });
+  window._userListenerUnsubs = [];
   // Reset plans + drills to avoid showing previous user's data before Firestore loads
   savedPlans = [];
   window.DRILLS = [];
@@ -8170,7 +8172,7 @@ window.renderPlanOverview   = renderPlanOverview;
         if(val){document.getElementById('user-modal-exists-warn').style.display='none';this.style.display='none';_doLogin(val);}
       ">Trotzdem fortfahren</button>
       <hr class="user-modal-divider">
-      <input type="text" id="user-modal-input" oninput="document.getElementById('user-modal-exists-warn').style.display='none';document.getElementById('user-modal-continue-btn').style.display='none';" class="form-input"
+      <input type="text" id="user-modal-input" oninput="document.getElementById('user-modal-exists-warn').style.display='none';document.getElementById('user-modal-continue-btn').style.display='none';const _v=this.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');const _ts=document.getElementById('user-modal-team-section');if(_ts)_ts.style.display=(_v&&_v===currentUser)?'flex':'none';" class="form-input"
         placeholder="z.B. günther, hannelore, udo …"
         maxlength="20"
         style="font-size:16px;"
