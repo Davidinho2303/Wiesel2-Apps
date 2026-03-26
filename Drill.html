@@ -1142,8 +1142,8 @@ window.loadDrillsFromFirestore = async function loadDrillsFromFirestore() {
       const data = teamSnap.data();
       if (Array.isArray(data.drills)) {
         let needsPatch = false;
-        // Scope-Patch NUR für team/drills — nie für public/drills
-        data.drills.forEach(d => { if (!d.scope || d.scope === 'public') { d.scope = 'team'; needsPatch = true; } });
+        // Scope-Patch nur für Drills ohne scope — nie public überschreiben
+        data.drills.forEach(d => { if (!d.scope) { d.scope = 'team'; needsPatch = true; } });
         teamDrills = data.drills;
         if (needsPatch) {
           console.log('[APP] Patching missing scope fields in team drills');
@@ -1492,11 +1492,16 @@ window.fbInitTeamListeners = (teamId) => {
   window._teamListenerUnsubs.push(unsubPublic);
 
   // Saison-Migration (einmalig: user→team) dann laden
+  const _saisonTeam = teamId;
   migrateSaisonToTeam().then(() => {
+    if (window.currentTeam !== _saisonTeam) return; // Team hat sich inzwischen geändert
     if (typeof window.fbLoadSaisonFromFirestore === 'function') window.fbLoadSaisonFromFirestore();
   });
   // Initialer Drill-Load
-  if (typeof window.loadDrillsFromFirestore === 'function') window.loadDrillsFromFirestore();
+  const _drillTeam = teamId;
+  if (typeof window.loadDrillsFromFirestore === 'function') window.loadDrillsFromFirestore().then(() => {
+    if (window.currentTeam !== _drillTeam) window.DRILLS = (window.DRILLS || []).filter(d => d.scope !== 'team');
+  });
   // Migration (einmalig)
   if (typeof window.migrateIfNeeded === 'function') window.migrateIfNeeded().catch(e => console.warn('migrate:', e.message));
 };
