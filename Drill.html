@@ -1574,6 +1574,8 @@ window._fbGetDoc = async (kuerzel) => {
 };
 
 window.fbRegisterUser = async (kuerzel) => {
+  const _sessionAtStart = window._loginSession || 0;
+  const _isStillActive = () => window.currentUser === kuerzel && (window._loginSession || 0) === _sessionAtStart;
   try {
     const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
     const snap = await getDoc(userDoc);
@@ -1596,7 +1598,7 @@ window.fbRegisterUser = async (kuerzel) => {
         window.setLangFromProfile(data.lang);
       }
       // Team aus Profil laden — nur wenn dieser User noch der aktive ist
-      if (data.activeTeam && window.currentUser === kuerzel) {
+      if (data.activeTeam && _isStillActive()) {
         window.currentTeam = data.activeTeam;
         localStorage.setItem('wiesel2_team', data.activeTeam);
         // Neu starten wenn Team sich geändert hat oder noch nicht aktiv
@@ -1843,9 +1845,17 @@ window.fbSaveDrills = async (drills) => {
 // ---- Plans speichern
 window.fbSavePlans = async (plans, mins) => {
   try {
-    // Alle Pläne bleiben unter users/{uid}/data/plans — scope-Feld bestimmt Sichtbarkeit
-    // Team-Pläne werden zusätzlich in sharedPlans gespiegelt
+    // Alle Pläne unter users/{uid}/data/plans
     await setDoc(getPlansDoc(), { plans, drillMins: mins || {}, updatedAt: Date.now() });
+    // Automatisch ins Team spiegeln (alle Pläne sind teamintern sichtbar)
+    if (window.currentTeam) {
+      const teamPlans = plans.map(p => ({ ...p, sharedBy: window.currentUser, scope: 'team' }));
+      const snap = await getDoc(getSharedPlansDoc());
+      const existing = snap.exists() ? (snap.data().plans || []) : [];
+      // Pläne anderer User behalten, eigene ersetzen
+      const otherUserPlans = existing.filter(p => p.sharedBy !== window.currentUser && p.createdBy !== window.currentUser);
+      await setDoc(getSharedPlansDoc(), { plans: [...otherUserPlans, ...teamPlans], updatedAt: Date.now() });
+    }
   } catch(e) {
     console.warn('Firebase save:', e.message);
     setStatus((window.currentLang||"de")==="en"?'⚠ Save failed':'⚠ Speichern fehlgeschlagen', 'var(--red)');
