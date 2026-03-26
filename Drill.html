@@ -4044,9 +4044,13 @@ function autoSave() {
 }
 
 function loadPlan(planId) {
-  const plan = savedPlans.find(p => p.id === planId)
-    || (window.sharedPlans||[]).find(p => p.id === planId);
+  const ownPlan = savedPlans.find(p => p.id === planId);
+  const sharedPlan = !ownPlan ? (window.sharedPlans||[]).find(p => p.id === planId) : null;
+  const plan = ownPlan || sharedPlan;
   if (!plan) return;
+  // Fremde Pläne read-only öffnen
+  const isOwn = !!ownPlan || !plan.createdBy || plan.createdBy === currentUser;
+  window._sharedPlanReadOnly = !isOwn;
   currentPlan = JSON.parse(JSON.stringify(plan));
   document.getElementById('plan-name').value = currentPlan.name || '';
   document.getElementById('plan-date').value = currentPlan.date || '';
@@ -4058,6 +4062,7 @@ function loadPlan(planId) {
   updatePlanDisplayHeader();
   showPage('planung');
   updateSidebarExportState();
+  if (!isOwn) toast(currentLang === 'en' ? '👁 Viewing shared plan' : '👁 Geteilter Plan (Read-only)');
 }
 
 // ---- Plan-Scope setzen (private / team / public)
@@ -5797,8 +5802,9 @@ function renderSaisonCalendar() {
   const daysInMonth = new Date(saisonCalYear, saisonCalMonth + 1, 0).getDate();
   const today = new Date().toISOString().slice(0,10);
 
-  // Training-Tage aus savedPlans
+  // Training-Tage: eigene + Team
   const trainingDays = new Set((savedPlans || []).map(p => p.date).filter(Boolean));
+  const teamTrainingDays = new Set((window.sharedPlans || []).filter(p => p.date && !trainingDays.has(p.date)).map(p => p.date));
 
   let html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border);">';
   ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach(d => {
@@ -5829,7 +5835,10 @@ function renderSaisonCalendar() {
     const clickHandler = `onclick="saisonCalDayClick('${dateStr}')" style="cursor:pointer;" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='${isWeekend?'var(--surface2)':'var(--surface)'}'"`;
     html += `<div ${clickHandler} style="padding:5px 4px;min-height:44px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:${isWeekend?'var(--surface2)':'var(--surface)'};">
       <div style="font-size:12px;font-weight:${isToday?'700':'400'};color:${isToday?'var(--blue,#2E75B6)':'var(--text)'};background:${isToday?'var(--blue,#2E75B6)22':'none'};border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;">${day}</div>
-      ${hasPlan ? '<div style="width:6px;height:6px;background:var(--green,#1A6B3A);border-radius:50%;margin:2px auto 0;" title="Training"></div>' : ''}
+      <div style="display:flex;justify-content:center;gap:2px;margin:2px 0 0;">
+        ${hasPlan ? '<div style="width:6px;height:6px;background:var(--green,#1A6B3A);border-radius:50%;" title="Training"></div>' : ''}
+        ${teamTrainingDays.has(dateStr) ? '<div style="width:5px;height:5px;background:var(--blue,#2E75B6);border-radius:50%;opacity:0.7;" title="Team-Training"></div>' : ''}
+      </div>
       ${phaseBar}
     </div>`;
   }
@@ -5849,6 +5858,7 @@ function renderSaisonCalendar() {
       html += `<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-subtle);"><span style="display:inline-block;width:10px;height:10px;background:${p.color};border-radius:2px;"></span>${p.name}</span>`;
     });
     html += '<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-subtle);"><span style="display:inline-block;width:6px;height:6px;background:var(--green,#1A6B3A);border-radius:50%;"></span>Training</span>';
+    html += '<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-subtle);"><span style="display:inline-block;width:5px;height:5px;background:var(--blue,#2E75B6);border-radius:50%;opacity:0.7;"></span>Team</span>';
     html += '</div>';
   }
 
