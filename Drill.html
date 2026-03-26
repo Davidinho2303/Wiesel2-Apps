@@ -7568,8 +7568,9 @@ function _doLogin(val) {
   // Laufende Team-Listener sofort stoppen
   (window._teamListenerUnsubs || []).forEach(unsub => { try { unsub(); } catch(e) {} });
   window._teamListenerUnsubs = [];
-  // Reset plans to avoid showing previous user's data before Firestore loads
+  // Reset plans + drills to avoid showing previous user's data before Firestore loads
   savedPlans = [];
+  window.DRILLS = [];
   window._templatesLoadedFromFirestore = false;
   window.myTemplates = [];
   try { renderSavedPlansList(); } catch(e) {}
