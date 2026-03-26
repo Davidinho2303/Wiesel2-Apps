@@ -1142,21 +1142,30 @@ window.loadDrillsFromFirestore = async function loadDrillsFromFirestore() {
       const data = teamSnap.data();
       if (Array.isArray(data.drills)) {
         let needsPatch = false;
-        data.drills.forEach(d => { if (!d.scope) { d.scope = 'team'; needsPatch = true; } });
+        // Scope-Patch NUR für team/drills — nie für public/drills
+        data.drills.forEach(d => { if (!d.scope || d.scope === 'public') { d.scope = 'team'; needsPatch = true; } });
         teamDrills = data.drills;
         if (needsPatch) {
-          console.log('[APP] Patching missing scope fields');
+          console.log('[APP] Patching missing scope fields in team drills');
           try { await setDoc(getTeamDrillsDoc(), { drills: teamDrills, updatedAt: Date.now() }); } catch(e) {}
         }
       }
     }
 
-    // Load public drills
+    // Load public drills — scope immer auf 'public' erzwingen, nie überschreiben
     let publicDrills = [];
     try {
       const publicSnap = await getDoc(getPublicDrillsDoc());
       if (publicSnap.exists() && Array.isArray(publicSnap.data().drills)) {
-        publicDrills = publicSnap.data().drills;
+        let needsPubPatch = false;
+        publicDrills = publicSnap.data().drills.map(d => {
+          if (d.scope !== 'public') { needsPubPatch = true; return { ...d, scope: 'public' }; }
+          return d;
+        });
+        if (needsPubPatch) {
+          console.log('[APP] Patching wrong scope in public drills');
+          try { await setDoc(getPublicDrillsDoc(), { drills: publicDrills, updatedAt: Date.now() }); } catch(e) {}
+        }
       }
     } catch(e) { console.warn('Public drills load error:', e.message); }
 
@@ -1328,7 +1337,7 @@ window.migrateIfNeeded = async function migrateIfNeeded() {
         });
         // Neue c-* Drills die noch nicht in public sind: aus DRILLS_SEED hinzufügen
         const existingIds = new Set(publicDrills.map(d => d.id));
-        const newConstraintDrills = (window.DRILLS_SEED || []).filter(d => d.canBeConstraint && !existingIds.has(d.id));
+        const newConstraintDrills = (window.DRILLS_SEED || []).filter(d => d.canBeConstraint && !existingIds.has(d.id)).map(d => ({ ...d, scope: 'public' }));
         const allPublic = [...publicDrills, ...newConstraintDrills];
         await setDoc(getPublicDrillsDoc(), { drills: allPublic, updatedAt: Date.now() });
         console.log('[MIGRATE] constraint patch: public', patched, 'patched,', newConstraintDrills.length, 'new');
@@ -1453,7 +1462,9 @@ window.fbInitTeamListeners = (teamId) => {
 
   // Public Drills listener
   const unsubPublicDrills = onSnapshot(getPublicDrillsDoc(), (snap) => {
-    const publicDrills = (snap.exists() && Array.isArray(snap.data().drills)) ? snap.data().drills : [];
+    const publicDrills = (snap.exists() && Array.isArray(snap.data().drills))
+      ? snap.data().drills.map(d => d.scope === 'public' ? d : { ...d, scope: 'public' })
+      : [];
     const nonPublic = (window.DRILLS || []).filter(d => d.scope !== 'public');
     const combined = [...publicDrills, ...nonPublic];
     window.DRILLS = Object.values(combined.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'private' || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
