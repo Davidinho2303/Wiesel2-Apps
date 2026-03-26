@@ -1169,9 +1169,10 @@ window.loadDrillsFromFirestore = async function loadDrillsFromFirestore() {
       }
     } catch(e) { console.warn('Public drills load error:', e.message); }
 
-    // Personal drills kommen aus fbInitUserListeners onSnapshot — nie aus altem State übernehmen
+    // Personal drills kommen aus fbInitUserListeners onSnapshot
     if (teamDrills.length > 0 || publicDrills.length > 0) {
-      window.DRILLS = [...publicDrills, ...teamDrills];
+      const existingPrivate = (window.DRILLS || []).filter(d => d.scope === 'private' || d.scope === 'personal');
+      window.DRILLS = [...publicDrills, ...teamDrills, ...existingPrivate];
   // Deduplizieren: gleiche ID → personal hat Vorrang
   window.DRILLS = Object.values(window.DRILLS.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
       try { applyBibFilters(); } catch(e) {}
@@ -1431,8 +1432,6 @@ window.fbInitTeamListeners = (teamId) => {
   window._teamListenersActive = true;
   window._activeTeamListenerId = teamId;
   window.currentTeam = teamId;
-  // Alte team+personal Drills entfernen — nur public behalten bis neue Listener feuern
-  window.DRILLS = (window.DRILLS || []).filter(d => d.scope === 'public');
 
   // Shared Plans
   const unsub1 = onSnapshot(getSharedPlansDoc(), (snap) => {
@@ -1453,11 +1452,9 @@ window.fbInitTeamListeners = (teamId) => {
   // Team Drills
   const unsub3 = onSnapshot(getTeamDrillsDoc(), (snap) => {
     const teamDrills = (snap.exists() && Array.isArray(snap.data().drills)) ? snap.data().drills : [];
-    // Nur public + personal aus aktuellem State übernehmen — nie team-Drills anderer User
-    const publicDrills = (window.DRILLS || []).filter(d => d.scope === 'public');
-    const personalDrills = (window.DRILLS || []).filter(d => d.scope === 'private' || d.scope === 'personal');
-    const combined = [...publicDrills, ...teamDrills, ...personalDrills];
-    window.DRILLS = Object.values(combined.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'private' || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
+    const nonTeam = (window.DRILLS || []).filter(d => d.scope !== 'team');
+    const combined = [...nonTeam, ...teamDrills];
+    window.DRILLS = Object.values(combined.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'team') acc[d.id] = d; return acc; }, {}));
     try { applyBibFilters(); } catch(e) {}
     const navCount = document.getElementById('nav-count-bib');
     if (navCount) navCount.textContent = window.DRILLS.length;
