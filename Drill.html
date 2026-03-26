@@ -4222,17 +4222,42 @@ function saveCurrentPlanAsTemplate() {
 function toggleShareTemplate(tplId) {
   const tpl = (window.myTemplates || []).find(t => t.id === tplId);
   if (!tpl) return;
-  if (tpl.scope === 'team') {
-    tpl.scope = 'personal';
+  // Kleines Scope-Picker Popup
+  const existing = document.getElementById('tpl-scope-picker');
+  if (existing) existing.remove();
+  const picker = document.createElement('div');
+  picker.id = 'tpl-scope-picker';
+  picker.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  picker.innerHTML = `<div style="background:var(--surface);border-radius:12px;padding:20px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,0.16);font-family:DM Sans,sans-serif;">
+    <div style="font-size:13px;font-weight:600;margin-bottom:14px;color:var(--text);">Template-Sichtbarkeit</div>
+    ${['private','team','public'].map(s => {
+      const icons = {private:'🔒',team:'👥',public:'🌐'};
+      const labels = {private:'Privat',team:'Team',public:'Public'};
+      const active = (tpl.scope||'private') === s || (s==='private' && (tpl.scope==='personal'||!tpl.scope));
+      return `<div onclick="setTemplateScope('${tplId}','${s}');document.getElementById('tpl-scope-picker').remove();" style="padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:6px;background:${active?'var(--blue-light,#e8f0fe)':'var(--surface2)'};color:${active?'var(--blue,#2E75B6)':'var(--text)'};">${icons[s]} ${labels[s]}${active?' ✓':''}</div>`;
+    }).join('')}
+    <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:6px;" onclick="document.getElementById('tpl-scope-picker').remove();">Abbrechen</button>
+  </div>`;
+  picker.addEventListener('click', e => { if (e.target === picker) picker.remove(); });
+  document.body.appendChild(picker);
+}
+
+function setTemplateScope(tplId, scope) {
+  const tpl = (window.myTemplates || []).find(t => t.id === tplId);
+  if (!tpl) return;
+  const oldScope = tpl.scope;
+  // Aus altem Scope entfernen
+  if (oldScope === 'team' || oldScope === 'public') {
     if (typeof window.fbUnshareTemplate === 'function') window.fbUnshareTemplate(tplId);
-    toast(currentLang === 'en' ? 'Template unshared' : 'Template zurückgezogen');
-  } else {
-    tpl.scope = 'team';
+  }
+  tpl.scope = scope;
+  // In neuem Scope teilen
+  if (scope === 'team' || scope === 'public') {
     if (typeof window.fbShareTemplate === 'function') window.fbShareTemplate(tpl);
-    toast(currentLang === 'en' ? '🌐 Template shared' : '🌐 Template geteilt');
   }
   if (typeof window.fbSaveTemplates === 'function') window.fbSaveTemplates(window.myTemplates);
   renderMyTemplatesList();
+  toast(scope === 'private' ? 'Template privat' : scope === 'team' ? '👥 Template geteilt' : '🌐 Template public');
 }
 
 // ---- Template löschen
@@ -5872,8 +5897,9 @@ function renderSaisonPhasesList() {
     const isActive = p.startDate <= today && p.endDate >= today;
     const isPast = p.endDate < today;
 
-    // Trainings in dieser Phase zählen (Hybrid: phaseId ODER Datum)
-    const phasePlans = (savedPlans || []).filter(plan =>
+    // Trainings in dieser Phase zählen (Hybrid: phaseId ODER Datum) — eigene + Team-Pläne
+    const allPlansForPhase = [...(savedPlans||[]), ...(window.sharedPlans||[]).filter(sp => !(savedPlans||[]).find(mp => mp.id === sp.id))];
+    const phasePlans = allPlansForPhase.filter(plan =>
       plan.phaseId === p.id ||
       (!plan.phaseId && plan.date && plan.date >= p.startDate && plan.date <= p.endDate)
     );
@@ -5965,10 +5991,12 @@ function renderSaisonPhasesList() {
           <div id="phase-plans-${p.id}" style="display:flex;flex-direction:column;gap:4px;margin-top:6px;">
             ${phasePlans.sort((a,b)=>(b.date||'')>(a.date||'')?1:-1).map(pl => {
               const drCnt = (pl.slots||[]).reduce((a,s)=>a+(s.drills||[]).length,0);
+              const isOwn = !pl.createdBy || pl.createdBy === currentUser;
+              const ownerBadge = !isOwn ? `<span style="font-size:9px;color:var(--text-subtle);"> · 👤 ${pl.sharedBy||pl.createdBy}</span>` : '';
               return `<div onclick="loadPlan('${pl.id}')" style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border-radius:6px;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='var(--surface2)'">
                 <div style="width:3px;height:28px;background:${p.color};border-radius:2px;flex-shrink:0;"></div>
                 <div style="flex:1;min-width:0;">
-                  <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${pl.name||pl.date||'—'}</div>
+                  <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${pl.name||pl.date||'—'}${ownerBadge}</div>
                   <div style="font-size:10px;color:var(--text-subtle);font-family:DM Mono,monospace;">${pl.date||''}${pl.theme?' · '+pl.theme:''} · ${drCnt} Drills</div>
                 </div>
                 <div style="font-size:10px;color:var(--blue,#2E75B6);">${T["cal-open"][currentLang]}</div>
