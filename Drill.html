@@ -1602,10 +1602,11 @@ window.fbRegisterUser = async (kuerzel) => {
           window.fbInitTeamListeners(data.activeTeam);
         }
       } else {
-        // Kein activeTeam → einmalige Migration (z.B. david → wiesel2)
-        if (typeof window.fbMigrateUserTeam === 'function') {
+        // Kein activeTeam → nur für david einmalige Migration, alle anderen: Team-Setup
+        if (kuerzel === 'david' && typeof window.fbMigrateUserTeam === 'function') {
           await window.fbMigrateUserTeam(kuerzel, 'wiesel2');
         }
+        // Andere User ohne Team: Team-Setup-Modal wird von _doLogin aufgerufen
       }
       await setDoc(userDoc, { lastSeen: Date.now() }, { merge: true });
       console.log('[USER] Updated lastSeen:', kuerzel, 'team:', window.currentTeam);
