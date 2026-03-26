@@ -1188,197 +1188,6 @@ window.loadDrillsFromFirestore = async function loadDrillsFromFirestore() {
 }
 
 // ---- Einmalige Migration: hardcoded Seed → Firestore
-window.migrateIfNeeded = async function migrateIfNeeded() {
-  try {
-    const metaSnap = await getDoc(getMetaDoc());
-    const meta = metaSnap.exists() ? metaSnap.data() : {};
-
-    // --- Einmalige User-Migration: alle bestehenden Drills + Pläne → david ---
-    if (!meta.userMigrated) {
-      setStatus('⏳ User-Migration...', 'var(--orange)');
-
-      // Drills: createdBy auf 'david' wenn noch 'seed' oder leer, scope auf 'team'
-      const drillsSnap = await getDoc(getTeamDrillsDoc());
-      if (drillsSnap.exists()) {
-        const drills = (drillsSnap.data().drills || []).map(d => ({
-          ...d,
-          createdBy: d.createdBy && d.createdBy !== 'seed' ? d.createdBy : 'david',
-          scope: d.scope || 'team'
-        }));
-        await setDoc(getTeamDrillsDoc(), { drills, updatedAt: Date.now() });
-      }
-
-      // Pläne: aus teams/wiesel2/data/plans → users/david/data/plans
-      const oldPlansDoc = doc(db, 'teams', 'wiesel2', 'data', 'plans');
-      const plansSnap = await getDoc(oldPlansDoc);
-      if (plansSnap.exists()) {
-        const data = plansSnap.data();
-        const davidPlansDoc = doc(db, 'users', 'david', 'data', 'plans');
-        const existingDavidSnap = await getDoc(davidPlansDoc);
-        // Nur migrieren wenn david noch keine eigenen Pläne hat
-        if (!existingDavidSnap.exists() || !(existingDavidSnap.data().plans?.length > 0)) {
-          const plans = (data.plans || []).map(p => ({
-            ...p,
-            createdBy: p.createdBy || 'david',
-            scope: p.scope || 'personal'
-          }));
-          await setDoc(davidPlansDoc, { ...data, plans, updatedAt: Date.now() });
-        } else {
-          // Patch existing plans: set createdBy + scope if missing
-          const existing = existingDavidSnap.data();
-          const patched = (existing.plans || []).map(p => ({
-            ...p,
-            createdBy: p.createdBy || 'david',
-            scope: p.scope || 'personal'
-          }));
-          await setDoc(davidPlansDoc, { ...existing, plans: patched, updatedAt: Date.now() });
-        }
-      }
-
-      await setDoc(getMetaDoc(), { ...meta, userMigrated: true, plansMigrated: true, userMigratedAt: Date.now() }, { merge: true });
-      return; // Migration done
-      setStatus('✓ Migration fertig', 'var(--green)');
-      setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
-      return;
-    }
-
-    // --- Patch: plans createdBy + scope ---
-    if (!meta.plansMigrated && window.currentUser === 'david') {
-      const davidPlansDoc = doc(db, 'users', 'david', 'data', 'plans');
-      const snap = await getDoc(davidPlansDoc);
-      if (snap.exists()) {
-        const data = snap.data();
-        const plans = (data.plans || []).map(p => ({
-          ...p,
-          createdBy: p.createdBy || 'david',
-          scope: p.scope || 'personal'
-        }));
-        await setDoc(davidPlansDoc, { ...data, plans, updatedAt: Date.now() });
-      }
-      await setDoc(getMetaDoc(), { ...meta, plansMigrated: true }, { merge: true });
-      console.log('[MIGRATE] plans patched with createdBy+scope');
-    }
-
-    // --- Drills team→public Migration ---
-    if (!meta.drillsPublicMigrated && window.currentUser === 'david') {
-      // Schritt 1: wiesel2/data/drills → public/drills (scope: public)
-      const wiesel2DrillsDoc = doc(db, 'teams', 'wiesel2', 'data', 'drills');
-      const wiesel2Snap = await getDoc(wiesel2DrillsDoc);
-      let publicDrills = [];
-      if (wiesel2Snap.exists()) {
-        publicDrills = (wiesel2Snap.data().drills || []).map(d => ({ ...d, scope: 'public' }));
-        // wiesel2 leeren
-        await setDoc(wiesel2DrillsDoc, { drills: [], updatedAt: Date.now() });
-      }
-
-      // Schritt 2: wieselherren2/data/drills bereinigen
-      // Nur Drills behalten die NICHT in public/drills landen (d.h. echte team-only Drills)
-      const teamDrillsSnap = await getDoc(getTeamDrillsDoc());
-      let teamDrills = teamDrillsSnap.exists() ? (teamDrillsSnap.data().drills || []) : [];
-      const publicIds = new Set(publicDrills.map(d => d.id));
-      // Team-Drills die bereits in public sind: entfernen. Resto behalten als scope:'team'
-      const cleanTeamDrills = teamDrills
-        .filter(d => !publicIds.has(d.id))
-        .map(d => ({ ...d, scope: 'team' }));
-      await setDoc(getTeamDrillsDoc(), { drills: cleanTeamDrills, updatedAt: Date.now() });
-
-      // Schritt 3: public/drills schreiben (dedupliziert)
-      if (publicDrills.length > 0) {
-        await setDoc(getPublicDrillsDoc(), { drills: publicDrills, updatedAt: Date.now() });
-        console.log('[MIGRATE] public drills:', publicDrills.length, '/ team drills:', cleanTeamDrills.length);
-      }
-
-      await setDoc(getMetaDoc(), { ...meta, drillsPublicMigrated: true }, { merge: true });
-      return;
-    }
-
-    // --- canBeConstraint Migration ---
-    // Patcht public/drills und team/drills: setzt canBeConstraint + constraintDesc
-    // für alle Drills die als Constraint gedacht sind.
-    if (!meta.constraintDrillsMigrated && window.currentUser === 'david') {
-      const CONSTRAINT_PATCH = {
-        'spielen-ohne-dribbling': { canBeConstraint: true, constraintDesc: 'Keine Dribbles erlaubt — nur Pässe, Cuts und Bewegung ohne Ball.' },
-        '3dribbles':              { canBeConstraint: true, constraintDesc: 'Max. 3 Dribbles pro Ballbesitz und/oder X Pässe vor Wurf — zwingt zu Bewegung, Spacing und Ball-Movement.' },
-        'bonuspunkte':            { canBeConstraint: true, constraintDesc: 'Offensiver Rebound gibt Bonuspunkte (z.B. +1 extra) — Fokus: OReb und Boxout.' },
-        'c-max3dribbel':          { canBeConstraint: true, constraintDesc: 'Max. 3 Dribbles pro Ballbesitz — zwingt zu Bewegung, Spacing und Ball-Movement.' },
-        'c-xpaesse':              { canBeConstraint: true, constraintDesc: 'Mindestanzahl Pässe erforderlich bevor ein Wurf erlaubt ist.' },
-        'c-kein-dribbling':       { canBeConstraint: true, constraintDesc: 'Keine Dribbles erlaubt — nur Pässe, Cuts und Bewegung ohne Ball.' },
-        'c-bonuspunkte-oreb':     { canBeConstraint: true, constraintDesc: 'Offensiver Rebound gibt Bonuspunkte (z.B. +1 extra) — Fokus: OReb und Boxout.' },
-        'c-nur-catchshot':        { canBeConstraint: true, constraintDesc: 'Würfe nur direkt aus dem Catch — kein zusätzliches Dribbling vor dem Abschluss.' },
-        'c-minus1-turnover':      { canBeConstraint: true, constraintDesc: 'Jeder Turnover gibt der Defense einen Punkt oder zieht der Offense einen ab.' },
-        'c-minus1-wrongcut':      { canBeConstraint: true, constraintDesc: 'Falscher Cut oder schlechtes Leseverhalten kostet sofort einen Punkt.' },
-        'c-wechsel-5stops':       { canBeConstraint: true, constraintDesc: 'Defense und Offense tauschen nach 5 erfolgreichen Defensiv-Stops.' },
-        'c-wechsel-score':        { canBeConstraint: true, constraintDesc: 'Nach jedem erfolgreichen Korb wechseln Offense und Defense.' },
-        'c-plays-erzwingen':      { canBeConstraint: true, constraintDesc: 'Offense muss gesetzte Plays laufen bevor frei gespielt werden darf.' },
-        'c-nur-backdoor':         { canBeConstraint: true, constraintDesc: 'Offense darf nur Backdoor Cuts machen wenn Defender in Passing Lane steht.' },
-        'c-3rd-man':              { canBeConstraint: true, constraintDesc: 'Nach PnR oder Cut: Ball muss zuerst zum 3rd Man bevor Abschluss möglich.' },
-        'c-highlow':              { canBeConstraint: true, constraintDesc: 'Jeder Angriff muss über High-Low Aktion initiiert werden.' },
-        'c-nur-zone':             { canBeConstraint: true, constraintDesc: 'Defense spielt ausschließlich Zone — keine Mann-Mann erlaubt.' },
-        'c-nur-mann':             { canBeConstraint: true, constraintDesc: 'Defense spielt ausschließlich Mann-Mann — keine Zone erlaubt.' },
-        'c-help-helper':          { canBeConstraint: true, constraintDesc: 'Nach jeder Helpside-Aktion muss ein zweiter Spieler rotieren und helfen.' },
-        'c-help-rotate':          { canBeConstraint: true, constraintDesc: 'Jede Rotation muss komplett durchgezogen werden — kein Hängenbleiben erlaubt.' },
-        'c-huetchen-helpline':    { canBeConstraint: true, constraintDesc: 'Defender muss Hütchen auf Helpside-Linie berühren bevor er helfen darf.' },
-        'c-baseline-first':       { canBeConstraint: true, constraintDesc: 'Defender muss erst Baseline berühren bevor er rotieren oder helfen darf.' },
-        'c-coach-drive':          { canBeConstraint: true, constraintDesc: 'Penetration oder Aktion ist erst erlaubt wenn Coach das Signal gibt.' },
-        'c-zeitdruck':            { canBeConstraint: true, constraintDesc: 'Angriff muss innerhalb von X Sekunden abgeschlossen werden (z.B. 8 Sek Shotclock).' },
-        'c-1sek-delay':           { canBeConstraint: true, constraintDesc: 'Defender oder Offense wartet 1 Sekunde nach Signal bevor Aktion beginnt.' },
-        'c-offense-halbfeld':     { canBeConstraint: true, constraintDesc: 'Offense darf nur von definierten Positionen (z.B. nur Wing) penetrieren oder abschließen.' },
-      };
-
-      let patched = 0;
-
-      // Patch public/drills
-      const pubSnap = await getDoc(getPublicDrillsDoc());
-      if (pubSnap.exists()) {
-        const publicDrills = (pubSnap.data().drills || []).map(d => {
-          const patch = CONSTRAINT_PATCH[d.id];
-          if (patch) { patched++; return { ...d, ...patch }; }
-          return d;
-        });
-        // Neue c-* Drills die noch nicht in public sind: aus DRILLS_SEED hinzufügen
-        const existingIds = new Set(publicDrills.map(d => d.id));
-        const newConstraintDrills = (window.DRILLS_SEED || []).filter(d => d.canBeConstraint && !existingIds.has(d.id)).map(d => ({ ...d, scope: 'public' }));
-        const allPublic = [...publicDrills, ...newConstraintDrills];
-        await setDoc(getPublicDrillsDoc(), { drills: allPublic, updatedAt: Date.now() });
-        console.log('[MIGRATE] constraint patch: public', patched, 'patched,', newConstraintDrills.length, 'new');
-      }
-
-      // Patch team/drills (falls dort noch Drills liegen)
-      const teamSnap2 = await getDoc(getTeamDrillsDoc());
-      if (teamSnap2.exists()) {
-        const teamDrills = (teamSnap2.data().drills || []).map(d => {
-          const patch = CONSTRAINT_PATCH[d.id];
-          if (patch) return { ...d, ...patch };
-          return d;
-        });
-        await setDoc(getTeamDrillsDoc(), { drills: teamDrills, updatedAt: Date.now() });
-      }
-
-      await setDoc(getMetaDoc(), { ...meta, constraintDrillsMigrated: true, constraintDrillsMigratedAt: Date.now() }, { merge: true });
-      console.log('[MIGRATE] constraintDrillsMigrated done');
-    }
-
-    // --- Original Seed-Migration ---
-    if (meta.drillsMigrated) {
-      const drillsSnap = await getDoc(getTeamDrillsDoc());
-      if (drillsSnap.exists()) {
-        const existing = drillsSnap.data().drills || [];
-        if (existing.length > 0 && existing[0].createdAt) return;
-      } else {
-        return;
-      }
-    }
-    if (!window.DRILLS_SEED || window.DRILLS_SEED.length === 0) return;
-
-    setStatus('⏳ Migriere Drills...', 'var(--orange)');
-    await setDoc(getTeamDrillsDoc(), { drills: window.DRILLS_SEED, updatedAt: Date.now() });
-    await setDoc(getMetaDoc(), { drillsMigrated: true, migratedAt: Date.now() }, { merge: true });
-    setStatus('Migration fertig', 'var(--green)');
-    setTimeout(() => setStatus('☁ Cloud', 'var(--text-subtle)'), 2000);
-  } catch(e) {
-    console.warn('Migration error:', e.message);
-  }
-}
 
 // ---- Einmalige Saison-Migration: users/{uid}/data/seasons → teams/{teamId}/data/seasons
 async function migrateSaisonToTeam() {
@@ -1412,7 +1221,6 @@ window._teamListenerUnsubs = window._teamListenerUnsubs || [];
 // Expose migration functions for debugging
 window.fbRunMigration = async () => {
   try {
-    await migrateIfNeeded();
     console.log('[MIGRATE] done');
   } catch(e) { console.warn('[MIGRATE] error:', e.message); }
 };
@@ -1509,7 +1317,6 @@ window.fbInitTeamListeners = (teamId) => {
     if (window.currentTeam !== _drillTeam) window.DRILLS = (window.DRILLS || []).filter(d => d.scope !== 'team');
   });
   // Migration (einmalig)
-  if (typeof window.migrateIfNeeded === 'function') window.migrateIfNeeded().catch(e => console.warn('migrate:', e.message));
 };
 
 window._userListenerUnsubs = window._userListenerUnsubs || [];
@@ -7594,9 +7401,14 @@ function _doLogin(val) {
   window._teamListenerUnsubs = [];
   (window._userListenerUnsubs || []).forEach(unsub => { try { unsub(); } catch(e) {} });
   window._userListenerUnsubs = [];
-  // Reset plans + drills to avoid showing previous user's data before Firestore loads
+  // Reset plans + drills + shared state
   savedPlans = [];
   window.DRILLS = [];
+  window.sharedPlans = [];
+  window.sharedTemplates = [];
+  window.publicPlans = [];
+  saisonPhases = [];
+  try { renderSaisonPage(); } catch(e) {}
   window._templatesLoadedFromFirestore = false;
   window.myTemplates = [];
   try { renderSavedPlansList(); } catch(e) {}
