@@ -1625,6 +1625,35 @@ window.fbSetActiveTeam = async (kuerzel, teamId) => {
   }
 };
 
+// ---- Team verlassen (Daten bleiben im Team)
+window.fbLeaveTeam = async (kuerzel, teamId) => {
+  try {
+    const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
+    const snap = await getDoc(userDoc);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const teams = (data.teams || []).filter(t => t !== teamId);
+    const newActive = teams.length > 0 ? teams[0] : null;
+    await setDoc(userDoc, { activeTeam: newActive, teams }, { merge: true });
+    window.currentTeam = newActive;
+    if (newActive) localStorage.setItem('wiesel2_team', newActive);
+    else localStorage.removeItem('wiesel2_team');
+    // Team-Listener neu starten
+    if (newActive && typeof window.fbInitTeamListeners === 'function') window.fbInitTeamListeners(newActive);
+    console.log('[TEAM] Left team:', teamId, '→ new active:', newActive);
+  } catch(e) { console.warn('[TEAM] leaveTeam error:', e.message); }
+};
+
+// ---- Teams-Liste eines Users laden
+window.fbGetUserTeams = async (kuerzel) => {
+  try {
+    const userDoc = doc(db, 'users', kuerzel, 'data', 'profile');
+    const snap = await getDoc(userDoc);
+    if (!snap.exists()) return [];
+    return snap.data().teams || [];
+  } catch(e) { console.warn('[TEAM] getUserTeams error:', e.message); return []; }
+};
+
 // ---- Team-Profil laden
 window._fbGetTeamProfile = async (teamId) => {
   const teamDoc = doc(db, 'teams', teamId, 'data', 'profile');
@@ -7267,7 +7296,60 @@ async function loadTeamProfileForModal() {
     // Join-Code
     const codeEl = document.getElementById('user-modal-join-code');
     if (codeEl) codeEl.textContent = data.joinCode || '—';
+    // Teams-Liste rendern
+    await renderUserTeamsList();
   } catch(e) { console.warn('loadTeamProfile:', e.message); }
+}
+
+// ---- Alle Teams des Users als Liste rendern
+async function renderUserTeamsList() {
+  const container = document.getElementById('user-modal-teams-list');
+  if (!container || typeof window.fbGetUserTeams !== 'function') return;
+  const teams = await window.fbGetUserTeams(currentUser);
+  if (teams.length <= 1) { container.style.display = 'none'; return; }
+  container.style.display = 'flex';
+  const profiles = await Promise.all(teams.map(async t => {
+    try { return { id: t, ...(await window._fbGetTeamProfile(t)) }; } catch(e) { return { id: t }; }
+  }));
+  container.innerHTML = profiles.map(p => {
+    const isActive = p.id === window.currentTeam;
+    return `<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:8px;background:${isActive ? 'var(--blue-light,#e8f0fe)' : 'var(--surface2)'};cursor:${isActive ? 'default' : 'pointer'};" ${isActive ? '' : `onclick="switchToTeam('${p.id}')"`}>
+      <span style="font-size:12px;flex:1;font-weight:${isActive ? '600' : '400'};color:${isActive ? 'var(--blue,#2E75B6)' : 'var(--text)'};">${p.name || p.id}</span>
+      ${isActive ? '<span style="font-size:10px;color:var(--blue,#2E75B6);">✓ aktiv</span>' : '<span style="font-size:10px;color:var(--text-subtle);">wechseln →</span>'}
+    </div>`;
+  }).join('');
+}
+
+async function switchToTeam(teamId) {
+  if (!currentUser || teamId === window.currentTeam) return;
+  if (typeof window.fbSetActiveTeam === 'function') {
+    await window.fbSetActiveTeam(currentUser, teamId);
+  }
+  if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
+  loadTeamProfileForModal();
+  toast('🏀 ' + teamId);
+}
+
+async function leaveCurrentTeam() {
+  if (!currentUser || !window.currentTeam) return;
+  const teamName = document.getElementById('user-modal-team-name')?.textContent || window.currentTeam;
+  if (!confirm(`Team „${teamName}" verlassen? Deine Daten im Team bleiben erhalten.`)) return;
+  if (typeof window.fbLeaveTeam === 'function') {
+    await window.fbLeaveTeam(currentUser, window.currentTeam);
+  }
+  // UI neu laden
+  const teamSection = document.getElementById('user-modal-team-section');
+  const teamName2 = document.getElementById('user-modal-team-name');
+  if (teamName2) teamName2.textContent = window.currentTeam || '—';
+  if (window.currentTeam) {
+    loadTeamProfileForModal();
+    if (typeof window.fbInitUserListeners === 'function') window.fbInitUserListeners(currentUser);
+  } else {
+    // Kein Team mehr → Setup-Modal
+    closeUserModal();
+    setTimeout(openTeamSetupModal, 300);
+  }
+  toast('👋 Team verlassen');
 }
 
 function openUserModal(force) {
@@ -7399,6 +7481,9 @@ function _doLogin(val) {
   currentUser = val;
   window.currentUser = val;
   localStorage.setItem('wiesel2_user', val);
+  // Reset team so fbRegisterUser loads it fresh from Firestore (prevents previous user's team leaking)
+  window.currentTeam = null;
+  localStorage.removeItem('wiesel2_team');
   // Reset plans to avoid showing previous user's data before Firestore loads
   savedPlans = [];
   window._templatesLoadedFromFirestore = false;
@@ -8049,7 +8134,14 @@ window.renderPlanOverview   = renderPlanOverview;
             <button class="btn btn-primary btn-sm" onclick="joinOrCreateTeam()">Anlegen</button>
           </div>
         </div>
-        <button class="btn btn-ghost btn-sm" style="align-self:flex-start;font-size:11px;" onclick="toggleTeamActions()">Team wechseln / beitreten</button>
+
+        <!-- Meine Teams (nur sichtbar wenn >1) -->
+        <div id="user-modal-teams-list" style="display:none;flex-direction:column;gap:4px;"></div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <button class="btn btn-ghost btn-sm" style="align-self:flex-start;font-size:11px;" onclick="toggleTeamActions()">+ beitreten / anlegen</button>
+          <button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red,#e53935);" onclick="leaveCurrentTeam()">Team verlassen</button>
+        </div>
       </div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;">
