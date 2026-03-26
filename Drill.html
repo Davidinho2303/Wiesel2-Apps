@@ -1593,8 +1593,8 @@ window.fbRegisterUser = async (kuerzel) => {
       if (data.lang && typeof window.setLangFromProfile === 'function') {
         window.setLangFromProfile(data.lang);
       }
-      // Team aus Profil laden
-      if (data.activeTeam) {
+      // Team aus Profil laden — nur wenn dieser User noch der aktive ist
+      if (data.activeTeam && window.currentUser === kuerzel) {
         window.currentTeam = data.activeTeam;
         localStorage.setItem('wiesel2_team', data.activeTeam);
         // Neu starten wenn Team sich geändert hat oder noch nicht aktiv
