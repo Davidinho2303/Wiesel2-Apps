@@ -1466,8 +1466,13 @@ window.fbInitTeamListeners = (teamId) => {
       ? snap.data().drills.map(d => d.scope === 'public' ? d : { ...d, scope: 'public' })
       : [];
     const nonPublic = (window.DRILLS || []).filter(d => d.scope !== 'public');
+    // nonPublic (team/personal) hat Vorrang bei gleicher ID
     const combined = [...publicDrills, ...nonPublic];
-    window.DRILLS = Object.values(combined.reduce((acc, d) => { if (!acc[d.id] || d.scope === 'private' || d.scope === 'personal') acc[d.id] = d; return acc; }, {}));
+    window.DRILLS = Object.values(combined.reduce((acc, d) => {
+      if (!acc[d.id]) { acc[d.id] = d; }
+      else if (d.scope === 'team' || d.scope === 'personal' || d.scope === 'private') { acc[d.id] = d; }
+      return acc;
+    }, {}));
     try { applyBibFilters(); } catch(e) {}
     const navCount = document.getElementById('nav-count-bib');
     if (navCount) navCount.textContent = window.DRILLS.length;
@@ -1754,6 +1759,24 @@ window.fbMigrateUserTeam = async (kuerzel, fallbackTeam) => {
       // fbInitUserListeners wird vom App-Init aufgerufen nach fbRegisterUser.then()
     }
   } catch(e) { console.warn('fbMigrateUserTeam:', e.message); }
+};
+
+// ---- Einzelnen Drill speichern (nach scope ins richtige Dokument)
+window.fbSaveDrill = async (drill) => {
+  try {
+    const scope = drill.scope || 'team';
+    let docRef;
+    if (scope === 'public') docRef = getPublicDrillsDoc();
+    else if (scope === 'private' || scope === 'personal') docRef = getPersonalDrillsDoc();
+    else docRef = getTeamDrillsDoc();
+    const snap = await getDoc(docRef);
+    const existing = (snap.exists() && Array.isArray(snap.data().drills)) ? snap.data().drills : [];
+    const idx = existing.findIndex(d => d.id === drill.id);
+    if (idx >= 0) existing[idx] = drill;
+    else existing.push(drill);
+    await setDoc(docRef, { drills: existing, updatedAt: Date.now() });
+    console.log('[DRILL] Saved:', drill.id, 'scope:', scope);
+  } catch(e) { console.warn('[DRILL] fbSaveDrill error:', e.message); }
 };
 
 window.fbSaveDrills = async (drills) => {
