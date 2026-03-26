@@ -7562,7 +7562,12 @@ function _doLogin(val) {
   localStorage.setItem('wiesel2_user', val);
   // Reset team so fbRegisterUser loads it fresh from Firestore (prevents previous user's team leaking)
   window.currentTeam = null;
+  window._activeTeamListenerId = null;
+  window._teamListenersActive = false;
   localStorage.removeItem('wiesel2_team');
+  // Laufende Team-Listener sofort stoppen
+  (window._teamListenerUnsubs || []).forEach(unsub => { try { unsub(); } catch(e) {} });
+  window._teamListenerUnsubs = [];
   // Reset plans to avoid showing previous user's data before Firestore loads
   savedPlans = [];
   window._templatesLoadedFromFirestore = false;
