@@ -47,7 +47,7 @@ assistr ist ein web-basiertes Coaching-Tool das Trainer beim Planen und Dokument
 
 ## Einstieg
 
-1. **assistr öffnen** → [Link](https://davidinho2303.github.io/wiesel2-dashboard/Drill.html)
+1. **assistr öffnen** → [Link](https://davidinho2303.github.io/Wiesel2-Apps/Drill.html)
 2. **Kürzel eingeben** (z.B. `david`) — merke es dir, es ist dein einziger Zugangscode
 3. **Team beitreten** (Join-Code vom Teamchef) oder neues Team anlegen
 4. Loslegen
