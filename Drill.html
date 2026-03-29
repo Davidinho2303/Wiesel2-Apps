@@ -1778,7 +1778,6 @@ signInAnonymously(auth).then(async () => {
         <span id="lang-flag">🇬🇧</span><span id="lang-label">EN</span>
       </button>
       <span id="sync-status" style="font-size:11px;color:var(--text-subtle);font-family:DM Mono,monospace;">☁ Cloud</span>
-      <button onclick="showDebug()" style="font-size:10px;padding:3px 7px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-family:DM Mono,monospace;color:var(--text-muted);">DBG</button>
       <button class="user-badge" id="user-badge-btn" onclick="openUserModal()">
         <span>🤖</span><span id="user-badge-label">—</span>
       </button>
@@ -2015,6 +2014,8 @@ signInAnonymously(auth).then(async () => {
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn btn-ghost btn-sm" id="saison-view-toggle" onclick="toggleSaisonView()">📅 Kalender</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportSaison('pdf')" title="Als PDF exportieren">⬇ PDF</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportSaison('word')" title="Als Word exportieren">⬇ Word</button>
           <button class="btn btn-primary btn-sm" id="saison-new-phase-btn" onclick="openPhaseModal(null)">+ Phase</button>
         </div>
       </div>
@@ -4628,14 +4629,6 @@ ${slotsHTML}
 ${plan.notes ? `<div class="notes"><strong>📌 Notizen:</strong><br>${esc(plan.notes).replace(/\n/g,'<br>')}</div>` : ''}
 <div class="footer">assistr · Weddinger Wiesel 2 · Saison 2025/2026 · ${new Date().toLocaleDateString('de-DE')}</div>
 
-<!-- DEBUG OVERLAY -->
-<div id="debug-overlay" style="display:none;position:fixed;bottom:70px;left:0;right:0;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,0.85);color:#0f0;font-family:monospace;font-size:10px;z-index:99999;padding:8px;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-    <span style="color:#fff;font-weight:bold;">DEBUG LOG</span>
-    <button onclick="document.getElementById('debug-overlay').style.display='none'" style="background:none;border:none;color:#f00;font-size:14px;cursor:pointer;">✕</button>
-  </div>
-  <div id="debug-log"></div>
-</div>
 </body>
 </html>`;
 }
@@ -5586,6 +5579,109 @@ function renderSaisonCalendar() {
   cal.innerHTML = html;
 }
 
+
+// ============================================================
+// SAISON EXPORT
+// ============================================================
+function exportSaison(format) {
+  if (!saisonPhases || saisonPhases.length === 0) { toast('Keine Phasen vorhanden'); return; }
+  const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const allPlans = [...(savedPlans||[]), ...(window.sharedPlans||[]).filter(sp =>
+    !(savedPlans||[]).find(mp => mp.id === sp.id))];
+
+  const sorted = [...saisonPhases].sort((a,b) => a.startDate.localeCompare(b.startDate));
+
+  // Build section per phase
+  const phaseSections = sorted.map(phase => {
+    const phasePlans = allPlans.filter(plan =>
+      plan.phaseId === phase.id ||
+      (!plan.phaseId && plan.date && plan.date >= phase.startDate && plan.date <= phase.endDate)
+    ).sort((a,b) => (a.date||'').localeCompare(b.date||''));
+
+    const totalDays = Math.ceil((new Date(phase.endDate) - new Date(phase.startDate)) / 86400000) + 1;
+    const totalWeeks = Math.ceil(totalDays / 7);
+    const soll = (phase.wochenZiel || 1) * totalWeeks;
+    const ist = phasePlans.length;
+
+    // Plans detail
+    const plansHTML = phasePlans.length === 0
+      ? '<p style="color:#999;font-style:italic;font-size:9pt;">Keine Trainings in dieser Phase.</p>'
+      : phasePlans.map(plan => {
+          const drillTotal = (plan.slots||[]).reduce((a,s) =>
+            a + (s.drills||[]).reduce((b,sd) => b+(parseInt(sd.mins)||0),0),0);
+          const slotsHTML = (plan.slots||[]).map(slot => {
+            if (!slot.drills || slot.drills.length === 0) return '';
+            const slotMins = (slot.drills||[]).reduce((a,sd) => a+(parseInt(sd.mins)||0),0);
+            const drillRows = slot.drills.map(sd => {
+              const d = (window.DRILLS||[]).find(x => x.id === sd.drillId);
+              const constraints = (sd.constraints||[]).length > 0
+                ? `<div style="font-size:7.5pt;color:#8b6900;">⚡ ${sd.constraints.join(' · ')}</div>` : '';
+              return `<tr>
+                <td style="padding:3pt 6pt;border-bottom:0.5pt solid #eee;font-weight:600;font-size:8.5pt;">${esc(d?d.name:sd.drillId)}${constraints}</td>
+                <td style="padding:3pt 6pt;border-bottom:0.5pt solid #eee;font-size:8pt;white-space:nowrap;">${sd.mins}'</td>
+                <td style="padding:3pt 6pt;border-bottom:0.5pt solid #eee;font-size:8pt;color:#555;">${esc(d?d.kat:'')}</td>
+              </tr>`;
+            }).join('');
+            return `<div style="margin-bottom:8pt;">
+              <div style="background:#f0efe9;padding:3pt 6pt;border-left:3pt solid #1A3A5C;font-size:8.5pt;font-weight:600;margin-bottom:2pt;">${esc(slot.label)} — ${slotMins} min</div>
+              <table style="width:100%;border-collapse:collapse;">${drillRows}</table>
+            </div>`;
+          }).join('');
+          const owner = plan.createdBy && plan.createdBy !== (window.currentUser||'david') ? ` <span style="color:#999;font-size:7.5pt;">(${plan.createdBy})</span>` : '';
+          return `<div style="margin-bottom:14pt;page-break-inside:avoid;border:0.5pt solid #ddd;border-radius:4pt;padding:8pt;background:#fafaf8;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6pt;border-bottom:0.5pt solid #ccc;padding-bottom:4pt;">
+              <div style="font-size:10pt;font-weight:700;">${esc(plan.name||plan.date)}${owner}</div>
+              <div style="font-size:8pt;color:#666;">${esc(plan.date||'')}${plan.theme?' · '+esc(plan.theme):''} · ${drillTotal} min</div>
+            </div>
+            ${slotsHTML}
+            ${plan.notes ? `<div style="background:#f5f4f1;border-left:2pt solid #999;padding:4pt 6pt;font-size:8pt;color:#555;margin-top:6pt;">📌 ${esc(plan.notes)}</div>` : ''}
+          </div>`;
+        }).join('');
+
+    const schwerpunkteStr = (phase.schwerpunkte||[]).map(s => `${s.kat} (${s.gewichtung}%)`).join(', ');
+
+    return `<div style="margin-bottom:28pt;page-break-inside:avoid;">
+      <div style="background:#1A3A5C;color:#fff;padding:8pt 12pt;border-radius:4pt 4pt 0 0;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <span style="font-size:13pt;font-weight:700;">${esc(phase.name)}</span>
+          <span style="font-size:8.5pt;margin-left:10pt;opacity:0.8;">${phase.startDate} – ${phase.endDate}</span>
+        </div>
+        <div style="font-size:8.5pt;opacity:0.9;">${ist} / ${soll} Trainings</div>
+      </div>
+      <div style="border:0.5pt solid #1A3A5C;border-top:none;border-radius:0 0 4pt 4pt;padding:10pt 12pt;">
+        ${phase.ziele ? `<div style="margin-bottom:8pt;"><span style="font-size:8pt;font-weight:600;color:#1A3A5C;text-transform:uppercase;letter-spacing:.05em;">Ziele</span><div style="font-size:9pt;margin-top:2pt;">${esc(phase.ziele)}</div></div>` : ''}
+        ${schwerpunkteStr ? `<div style="margin-bottom:10pt;"><span style="font-size:8pt;font-weight:600;color:#1A3A5C;text-transform:uppercase;letter-spacing:.05em;">Schwerpunkte</span><div style="font-size:9pt;margin-top:2pt;">${esc(schwerpunkteStr)}</div></div>` : ''}
+        <div style="font-size:8pt;font-weight:600;color:#1A3A5C;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8pt;border-top:0.5pt solid #D5E8F0;padding-top:8pt;">Trainings (${ist})</div>
+        ${plansHTML}
+      </div>
+    </div>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Saisonplanung</title>
+<style>
+  body { font-family: Calibri, Arial, sans-serif; font-size: 10pt; margin: 1.5cm 2cm; color: #1a1916; }
+  h1 { font-size: 20pt; font-weight: 700; color: #1A3A5C; margin: 0 0 4pt 0; }
+  .meta { font-size: 9pt; color: #666; margin-bottom: 12pt; }
+  .divider { border: none; border-top: 2pt solid #1A3A5C; margin: 10pt 0 16pt 0; }
+  @media print { .no-print { display: none; } @page { margin: 1.5cm 2cm; } }
+</style>
+</head><body>
+<h1>Saisonplanung</h1>
+<div class="meta">Weddinger Wiesel 2 · Saison 2025/2026 · ${sorted.length} Phasen · Stand: ${new Date().toLocaleDateString('de-DE')}</div>
+<hr class="divider">
+${phaseSections}
+<div style="margin-top:20pt;font-size:7.5pt;color:#aaa;border-top:0.5pt solid #eee;padding-top:5pt;">assistr · Weddinger Wiesel 2 · ${new Date().toLocaleDateString('de-DE')}</div>
+</body></html>`;
+
+  if (format === 'word') {
+    downloadText(html, 'wiesel2_saisonplanung.htm');
+  } else {
+    openPrintBlob(html);
+  }
+}
+
 function renderSaisonTimeline() {
   const el = document.getElementById('saison-timeline');
   if (!el || saisonPhases.length === 0) { if(el) el.innerHTML = ''; return; }
@@ -5830,7 +5926,6 @@ function savePhaseFromModal(phaseId) {
   const nameEl = document.getElementById('phase-name');
   const startEl = document.getElementById('phase-start');
   const endEl = document.getElementById('phase-end');
-  dbg('[Phase] save called, phaseId=' + phaseId + ' name=' + (nameEl?.value||'NULL') + ' start=' + (startEl?.value||'NULL') + ' end=' + (endEl?.value||'NULL'));
   const name = nameEl ? nameEl.value.trim() : '';
   const startDate = startEl ? startEl.value : '';
   const endDate = endEl ? endEl.value : '';
@@ -7759,26 +7854,7 @@ async function kiSaveSelected() {
 
 
 // DEBUG
-const _debugLog = [];
-function dbg(msg) {
-  _debugLog.unshift('[' + new Date().toLocaleTimeString() + '] ' + msg);
-  if (_debugLog.length > 50) _debugLog.pop();
-  const el = document.getElementById('debug-log');
-  if (el) el.innerHTML = _debugLog.map(l => '<div>' + l + '</div>').join('');
-}
-function showDebug() {
-  const u = window.currentUser || 'null';
-  const phases = (typeof saisonPhases !== 'undefined') ? saisonPhases.length : '?';
-  const hasFbSave = typeof window.fbSaveSaison === 'function';
-  const hasFbLoad = typeof window.fbLoadSaison === 'function';
-  const logs = _debugLog.slice(0, 15).join('\n') || '(keine Logs)';
-  alert('USER: ' + u + '\nPHASES: ' + phases + '\nfbSave: ' + hasFbSave + '\nfbLoad: ' + hasFbLoad + '\n\n' + logs);
-}
-// Intercept console.warn/log for saison messages
-const _origWarn = console.warn;
-const _origLog = console.log;
-console.warn = function(...args) { _origWarn(...args); dbg('⚠ ' + args.join(' ')); };
-console.log = function(...args) { _origLog(...args); const s = args.join(' '); if (s.includes('Saison') || s.includes('[')) dbg('ℹ ' + s); };
+
 
 
 // Expose functions for module script (Firebase onSnapshot)
