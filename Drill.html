@@ -4338,8 +4338,6 @@ function renderSlotHTML(slot, idx) {
   const isReadOnly = !!window._sharedPlanReadOnly;
   const controls = isLocked || isReadOnly
     ? `<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);padding:2px 6px;border:1px solid var(--border);border-radius:10px;">${isReadOnly ? '👁' : '🔒'}</span>`
-    : isFixed
-    ? `<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-subtle);padding:2px 6px;border:1px solid var(--border);border-radius:10px;">${currentLang === 'en' ? 'fixed' : 'fest'}</span>`
     : `${idx > 0 ? `<button class="btn btn-ghost btn-sm" onclick="moveSlot('${slot.id}',-1)">↑</button>` : ''}
        ${idx < currentPlan.slots.length - 1 ? `<button class="btn btn-ghost btn-sm" onclick="moveSlot('${slot.id}',1)">↓</button>` : ''}
        <button class="btn btn-danger btn-sm" onclick="removeSlot('${slot.id}')">✕</button>`;
@@ -4355,7 +4353,12 @@ function renderSlotHTML(slot, idx) {
   return `<div class="slot" id="slot-${slot.id}" ${isFixed ? 'style="border-left:3px solid var(--border-strong);"' : ''}>
     <div class="slot-header">
       <div class="slot-phase-indicator ${dotClass}"></div>
-      <span class="slot-phase-label">${tSlot(slot.label)}</span>
+      ${(isLocked || isReadOnly)
+        ? `<span class="slot-phase-label">${tSlot(slot.label)}</span>`
+        : `<input class="slot-phase-label" value="${slot.label.replace(/"/g,'&quot;')}"
+            style="background:none;border:none;border-bottom:1px dashed var(--border);padding:0 2px;font-size:inherit;font-family:inherit;font-weight:inherit;color:inherit;width:120px;cursor:text;"
+            onchange="renameSlot('${slot.id}',this.value)"
+            onclick="event.stopPropagation()">`}
       ${minsDisplay}
       <div class="slot-header-right">${controls}</div>
     </div>
@@ -4385,6 +4388,13 @@ function removeSlot(slotId) {
   currentPlan.slots = currentPlan.slots.filter(s => s.id !== slotId);
   renderSlots();
   updateTimeSummary();
+  autoSave();
+}
+
+function renameSlot(slotId, newLabel) {
+  const slot = currentPlan?.slots.find(s => s.id === slotId);
+  if (!slot || !newLabel.trim()) return;
+  slot.label = newLabel.trim();
   autoSave();
 }
 
