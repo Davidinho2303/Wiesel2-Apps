@@ -1116,6 +1116,7 @@ try {
   db = getFirestore(app);
 }
 const storage = getStorage(app);
+window._firestoreDb = db;
 
 // Upload file to Firebase Storage, returns download URL
 window.fbUploadFile = async (file, path, onProgress) => {
