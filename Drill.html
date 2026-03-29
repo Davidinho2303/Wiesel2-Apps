@@ -658,6 +658,31 @@
     flex-shrink: 0;
   }
   .constraint-chip-remove:hover { color: var(--red); }
+  /* Tooltip on hover/long-press via CSS */
+  .constraint-chip[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    white-space: pre-wrap;
+    max-width: 240px;
+    word-break: break-word;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 9999;
+    text-align: left;
+  }
+  .constraint-chip[data-tooltip]:hover::after,
+  .constraint-chip[data-tooltip].tooltip-show::after {
+    opacity: 1;
+  }
   .constraint-add-btn {
     background: none;
     border: 1px dashed #c8c090;
@@ -3006,10 +3031,10 @@ function renderBibliothek(drills) {
         <span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}">${tCat(d.kat)}</span>
       </div>
       <div class="drill-meta-row">
-        ${d.phase.map(p => `<span class="meta-pill phase-${p.toLowerCase()}">🔆 ${tPhase(p)}</span>`).join('')}
+        ${(Array.isArray(d.phase) ? d.phase : [d.phase]).filter(Boolean).map(p => `<span class="meta-pill phase-${p.toLowerCase()}">🔆 ${tPhase(p)}</span>`).join('')}
         <span class="meta-pill intensity-${d.intensity}">${tIntensity(d.intensity)}</span>
         <span class="meta-pill">👥 ${d.minSpieler}+</span>
-        ${d.spielphase.slice(0,2).map(sp => `<span class="meta-pill">${sp}</span>`).join('')}
+        ${(Array.isArray(d.spielphase) ? d.spielphase : (d.spielphase ? [d.spielphase] : [])).slice(0,2).map(sp => `<span class="meta-pill">${sp}</span>`).join('')}
       </div>
       <div class="drill-meta-row" style="margin-top:4px;">
         ${d.defense !== 'nein' ? `<span class="meta-pill" style="background:#fee8e8;color:#8b1a1a">D</span>` : ''}
@@ -3482,8 +3507,8 @@ function applyBibFilters() {
     const enCat = (CAT_EN[d.kat] || '').toLowerCase();
     if (search && !d.name.toLowerCase().includes(search) && !d.kat.toLowerCase().includes(search) && !enName.includes(search) && !enCat.includes(search)) return false;
     if (kat && d.kat !== kat) return false;
-    if (phase && !d.phase.includes(phase)) return false;
-    if (spielphase && !d.spielphase.includes(spielphase)) return false;
+    if (phase && !(Array.isArray(d.phase) ? d.phase : [d.phase]).includes(phase)) return false;
+    if (spielphase && !(Array.isArray(d.spielphase) ? d.spielphase : (d.spielphase ? [d.spielphase] : [])).includes(spielphase)) return false;
     if (intens && d.intensity !== intens) return false;
     if (d.minSpieler > spieler) return false;
     return true;
@@ -4275,7 +4300,7 @@ function renderSlotHTML(slot, idx) {
           <div class="constraint-row">
             ${constraints.map(c => {
               const displayC = currentLang === 'en' ? (CONSTRAINT_T[c]?.en || c) : c;
-              return `<span class="constraint-chip" title="${c}">
+              return `<span class="constraint-chip" data-tooltip="${c.replace(/"/g,'&quot;')}" ontouchstart="this.classList.add('tooltip-show')" ontouchend="setTimeout(()=>this.classList.remove('tooltip-show'),1800)">
                 ⚡ ${displayC}
                 <button class="constraint-chip-remove" onclick="removeConstraint('${slot.id}',${di},'${c.replace(/'/g,"\\'")}',event)" title="${currentLang === 'en' ? 'Remove' : 'Entfernen'}">✕</button>
               </span>`;
@@ -4476,8 +4501,8 @@ function applyPickerFilters() {
     const searchName = currentLang === 'en' ? (DRILL_NAMES_EN[d.id] || d.name) : d.name;
     if (search && !searchName.toLowerCase().includes(search) && !d.name.toLowerCase().includes(search)) return false;
     if (kat && d.kat !== kat) return false;
-    if (phase && !d.phase.includes(phase)) return false;
-    if (spielphase && !d.spielphase.includes(spielphase)) return false;
+    if (phase && !(Array.isArray(d.phase) ? d.phase : [d.phase]).includes(phase)) return false;
+    if (spielphase && !(Array.isArray(d.spielphase) ? d.spielphase : (d.spielphase ? [d.spielphase] : [])).includes(spielphase)) return false;
     if (intens && d.intensity !== intens) return false;
     if (d.minSpieler > spieler) return false;
     return true;
