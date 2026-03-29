@@ -3547,8 +3547,8 @@ function openDrillModal(drillId, fromPicker) {
 
   const L = ML[currentLang];
   const meta = [
-    [L.phase,       d.phase.map(tPhase).join(' + ')],
-    [L.spielphase,  d.spielphase.join(', ')],
+    [L.phase,       (Array.isArray(d.phase) ? d.phase : [d.phase||'Hauptteil']).map(tPhase).join(' + ')],
+    [L.spielphase,  (Array.isArray(d.spielphase) ? d.spielphase : (d.spielphase ? [d.spielphase] : [])).join(', ')],
     [L.intensity,   tIntensity(d.intensity)],
     [L.minSpieler,  d.minSpieler + '+'],
     [L.feld,        tFeld(d.feld)],
@@ -4457,10 +4457,11 @@ function quickAddDrill(drillId) {
 
   // Passenden Slot nach Drill-Phase finden
   let targetSlot = null;
-  if (drill.phase.includes('Warmup') && !drill.phase.includes('Hauptteil')) {
+  const _phase = Array.isArray(drill.phase) ? drill.phase : [drill.phase||'Hauptteil'];
+  if (_phase.includes('Warmup') && !_phase.includes('Hauptteil')) {
     // Nur Warmup → in Warmup-Block
     targetSlot = currentPlan.slots.find(s => s.phase === 'warmup' && s.label === 'Warmup');
-  } else if (drill.phase.includes('Hauptteil')) {
+  } else if (_phase.includes('Hauptteil')) {
     // Hauptteil (auch wenn zusätzlich Warmup) → in Hauptteil
     targetSlot = currentPlan.slots.find(s => s.phase === 'hauptteil');
   }
@@ -4525,7 +4526,7 @@ function applyPickerFilters() {
     <div class="drill-picker-item" onclick="addDrillToSlot('${d.id}')">
       <span class="drill-cat-badge ${CAT_CLASS[d.kat] || ''}" style="font-size:9px;">${tCat(d.kat)}</span>
       <span class="drill-picker-name">${getDrillName(d)}</span>
-      <span class="drill-picker-meta">${tIntensity(d.intensity)} · ${d.minSpieler}+ ${plLabel} · ${d.spielphase.join('/')}</span>
+      <span class="drill-picker-meta">${tIntensity(d.intensity)} · ${d.minSpieler}+ ${plLabel} · ${(Array.isArray(d.spielphase)?d.spielphase:(d.spielphase?[d.spielphase]:[])).join('/')}</span>
     </div>
   `).join('');
 }
@@ -4727,7 +4728,7 @@ function buildPrintHTML(plans, title) {
               <td style="padding:4px 8px;font-weight:600;">${esc(d ? d.name : sd.drillId)}</td>
               <td style="padding:4px 8px;white-space:nowrap;">${sd.mins} min</td>
               <td style="padding:4px 8px;">${esc(d ? d.kat : '')}</td>
-              <td style="padding:4px 8px;color:#555;">${esc(d ? d.minSpieler+'+ Sp · '+d.intensity+' · '+d.spielphase.join('/') : '')}</td>
+              <td style="padding:4px 8px;color:#555;">${esc(d ? d.minSpieler+'+ Sp · '+d.intensity+' · '+(Array.isArray(d.spielphase)?d.spielphase:(d.spielphase?[d.spielphase]:[])).join('/') : '')}</td>
             </tr>`;
           }).join('');
       return `<div style="margin-bottom:16px;page-break-inside:avoid;">
@@ -4785,7 +4786,7 @@ function buildPlanText(plan) {
     slot.drills.forEach(sd => {
       const d = window.DRILLS.find(x => x.id === sd.drillId);
       txt += `  • ${d ? d.name : sd.drillId} (${sd.mins} min)\n`;
-      if (d) txt += `    ${d.kat} · ${d.intensity} · ${d.minSpieler}+ Sp · ${d.spielphase.join('/')}\n`;
+      if (d) txt += `    ${d.kat} · ${d.intensity} · ${d.minSpieler}+ Sp · ${(Array.isArray(d.spielphase)?d.spielphase:(d.spielphase?[d.spielphase]:[])).join('/')}\n`;
     });
     txt += '\n';
   });
