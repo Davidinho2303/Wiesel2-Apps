@@ -342,6 +342,7 @@
   .cat-post { background: #fef0e8; color: #7a3b1a; }
   .cat-kondition { background: #f0f0f0; color: #4a4a4a; }
   .cat-plays { background: #e8e8fe; color: #1a1a8b; }
+  .cat-constraint { background: #fff8e0; color: #7a5c00; border: 1px solid #e8d060; }
 
   .drill-meta-row {
     display: flex;
@@ -1839,6 +1840,7 @@ signInAnonymously(auth).then(async () => {
             <option value="Post">Post</option>
             <option value="Kondition">Kondition</option>
             <option value="Plays">Plays</option>
+            <option value="Constraint">⚡ Constraint</option>
           </select>
         </div>
         <div class="filter-group">
@@ -2042,6 +2044,7 @@ signInAnonymously(auth).then(async () => {
             <option value="Post">Post</option>
             <option value="Kondition">Kondition</option>
             <option value="Plays">Plays</option>
+            <option value="Constraint">⚡ Constraint</option>
           </select>
           <div style="display:flex;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
             <input type="date" id="tracking-from" onchange="renderTracking()" style="border:none;background:transparent;padding:6px 8px;font-size:16px;color:var(--text);outline:none;min-width:0;max-width:140px;">
@@ -2184,6 +2187,7 @@ signInAnonymously(auth).then(async () => {
         <option value="Post">Post</option>
         <option value="Kondition">Kondition</option>
         <option value="Plays">Plays</option>
+        <option value="Constraint">⚡ Constraint</option>
       </select>
       <select class="filter-select" id="picker-phase" onchange="applyPickerFilters()" style="font-size:16px;">
         <option value="">Alle Phasen</option>
@@ -2234,6 +2238,10 @@ signInAnonymously(auth).then(async () => {
           style="flex:1;font-size:14px;" onkeydown="if(event.key==='Enter')addCustomConstraint()">
         <button class="btn btn-primary btn-sm" onclick="addCustomConstraint()">+ Add</button>
       </div>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--text-muted);cursor:pointer;">
+        <input type="checkbox" id="constraint-save-as-drill" style="cursor:pointer;">
+        Als Drill speichern 💾
+      </label>
     </div>
 
     <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -2318,7 +2326,7 @@ signInAnonymously(auth).then(async () => {
       </div>
       <div class="form-group">
         <label class="form-label">Kategorie *</label>
-        <select id="de-kat" class="form-select">
+        <select id="de-kat" class="form-select" onchange="if(this.value==='Constraint'){document.getElementById('de-canbeconstraint').checked=true;deToggleConstraintDesc();}">
           <option value="Passing">Passing</option>
           <option value="Ballhandling">Ballhandling</option>
           <option value="Shooting">Shooting</option>
@@ -2329,6 +2337,7 @@ signInAnonymously(auth).then(async () => {
           <option value="Post">Post</option>
           <option value="Kondition">Kondition</option>
           <option value="Plays">Plays</option>
+          <option value="Constraint">⚡ Constraint</option>
         </select>
       </div>
       <div class="form-group">
@@ -2826,6 +2835,41 @@ function addCustomConstraint() {
     autoSave();
     toast('+ Constraint: ' + val);
   }
+
+  // Als Drill speichern wenn Toggle gesetzt
+  const saveAsDrill = document.getElementById('constraint-save-as-drill')?.checked;
+  if (saveAsDrill) {
+    const exists = (window.DRILLS || []).find(d => d.kat === 'Constraint' && d.name === val);
+    if (!exists) {
+      const newDrill = {
+        id: 'constraint_' + Date.now(),
+        name: val,
+        kat: 'Constraint',
+        canBeConstraint: true,
+        scope: window.currentTeam ? 'team' : 'private',
+        createdBy: window.currentUser || '',
+        beschreibung: '',
+        variationen: '',
+        coachingPunkte: '',
+        bälle: '0',
+        material: 'keine',
+        defense: 'nein',
+        competitive: 'nein',
+        gamelike: false,
+        abschluss: false,
+        spieler: 0,
+        intensity: 'niedrig',
+        phase: 'Hauptteil',
+        usedConstraints: []
+      };
+      if (!window.DRILLS) window.DRILLS = [];
+      window.DRILLS.push(newDrill);
+      if (typeof window.fbSaveDrill === 'function') window.fbSaveDrill(newDrill);
+      toast('💾 Als Constraint-Drill gespeichert');
+    }
+    document.getElementById('constraint-save-as-drill').checked = false;
+  }
+
   document.getElementById('constraint-custom-input').value = '';
 
   const drill = window.DRILLS.find(d => d.id === sd.drillId);
@@ -2927,7 +2971,7 @@ function showPage(page) {
 const CAT_CLASS = {
   Passing: 'cat-passing', Ballhandling: 'cat-ballhandling', Shooting: 'cat-shooting',
   Transition: 'cat-transition', Defense: 'cat-defense', Rebounding: 'cat-rebounding',
-  Offense: 'cat-offense', Post: 'cat-post', Kondition: 'cat-kondition', Plays: 'cat-plays'
+  Offense: 'cat-offense', Post: 'cat-post', Kondition: 'cat-kondition', Plays: 'cat-plays', Constraint: 'cat-constraint'
 };
 
 function canEditDrill(d) {
@@ -3348,7 +3392,7 @@ async function saveDrillFromModal() {
     competitive: document.getElementById('de-competitive').value,
     gamelike: document.getElementById('de-gamelike').checked,
     abschluss: document.getElementById('de-abschluss').checked,
-    canBeConstraint: document.getElementById('de-canbeconstraint').checked,
+    canBeConstraint: document.getElementById('de-canbeconstraint').checked || document.getElementById('de-kat').value === 'Constraint',
     constraintDesc: document.getElementById('de-constraintdesc').value.trim(),
     beschreibung: document.getElementById('de-beschreibung').value.trim(),
     variationen: document.getElementById('de-variationen').value.trim(),
@@ -3509,6 +3553,15 @@ function openDrillModal(drillId, fromPicker) {
   if (extEl) {
     let extraHtml = '';
     if (d.variationen) extraHtml += `<div style="margin-top:10px;"><div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">${currentLang==='en'?'Variations':'Variationen'}</div><div style="font-size:13px;white-space:pre-wrap;">${d.variationen}</div></div>`;
+    if (d.usedConstraints && d.usedConstraints.length > 0) {
+      const chips = d.usedConstraints.map((uc, i) => {
+        const label = uc.label || uc;
+        const isDrill = uc.type === 'drill';
+        const badge = isDrill ? ' 🔗' : '';
+        return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:DM Mono,monospace;padding:2px 6px 2px 8px;border-radius:100px;background:#fffbe6;color:#7a5c00;border:1px solid #f0d070;white-space:nowrap;">⚡ ${label}${badge}<button onclick="removeDrillUsedConstraint('${d.id}',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:#b09030;padding:0;line-height:1;">✕</button></span>`;
+      }).join('');
+      extraHtml += `<div style="margin-top:10px;"><div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">${currentLang==='en'?'Used Constraints':'Genutzte Constraints'}</div><div style="display:flex;flex-wrap:wrap;gap:4px;">${chips}</div></div>`;
+    }
     if (d.coachingPunkte) extraHtml += `<div style="margin-top:10px;"><div style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">${currentLang==='en'?'Coaching Points':'Coaching-Punkte'}</div><div style="font-size:13px;white-space:pre-wrap;">${d.coachingPunkte}</div></div>`;
     if (d.bildUrl) extraHtml += `<div style="margin-top:12px;"><img src="${d.bildUrl}" style="max-width:100%;max-height:220px;border-radius:var(--radius);object-fit:contain;border:1px solid var(--border);cursor:pointer;" onclick="window.open('${d.bildUrl}','_blank')" title="${currentLang==='en'?'Click to open full size':'Klicken zum Vergrößern'}"></div>`;
     if (d.videoUrl) extraHtml += `<div style="margin-top:10px;"><a href="${d.videoUrl}" target="_blank" class="btn btn-ghost btn-sm" style="display:inline-flex;align-items:center;gap:4px;">▶ Video</a></div>`;
@@ -3730,6 +3783,46 @@ function savePlan() {
   renderSavedPlansList();
   renderNavSavedPlans();
   toast(toastMsg('saved'));
+  mergePlanConstraintsToDrills(currentPlan);
+}
+
+function mergePlanConstraintsToDrills(plan) {
+  const drillsToSave = new Set();
+  (plan.slots || []).forEach(slot => {
+    (slot.drills || []).forEach(sd => {
+      if (!sd.constraints || sd.constraints.length === 0) return;
+      const drill = (window.DRILLS || []).find(d => d.id === sd.drillId);
+      if (!drill) return;
+      if (!drill.usedConstraints) drill.usedConstraints = [];
+      let changed = false;
+      sd.constraints.forEach(label => {
+        const alreadyStored = drill.usedConstraints.some(uc =>
+          (uc.type === 'drill' && uc.label === label) ||
+          (uc.type === 'custom' && uc.label === label)
+        );
+        if (alreadyStored) return;
+        const cDrill = (window.DRILLS || []).find(d => d.kat === 'Constraint' && d.name === label);
+        if (cDrill) {
+          drill.usedConstraints.push({ type: 'drill', id: cDrill.id, label });
+        } else {
+          drill.usedConstraints.push({ type: 'custom', label });
+        }
+        changed = true;
+      });
+      if (changed) drillsToSave.add(drill);
+    });
+  });
+  drillsToSave.forEach(drill => {
+    if (typeof window.fbSaveDrill === 'function') window.fbSaveDrill(drill);
+  });
+}
+
+function removeDrillUsedConstraint(drillId, idx) {
+  const drill = (window.DRILLS || []).find(d => d.id === drillId);
+  if (!drill || !drill.usedConstraints) return;
+  drill.usedConstraints.splice(idx, 1);
+  if (typeof window.fbSaveDrill === 'function') window.fbSaveDrill(drill);
+  openDrillModal(drillId);
 }
 
 function saveSharedPlanNotes() {
@@ -5669,7 +5762,7 @@ function openPhaseModal(phaseId) {
   if (window.innerWidth > 768) document.getElementById('phase-name').focus();
 }
 
-const DRILL_KATS = ['Passing','Ballhandling','Shooting','Transition','Defense','Rebounding','Offense','Post','Kondition','Plays'];
+const DRILL_KATS = ['Passing','Ballhandling','Shooting','Transition','Defense','Rebounding','Offense','Post','Kondition','Plays','Constraint'];
 
 function addSchwerpunktRow(kat='', gewichtung='') {
   const list = document.getElementById('phase-schwerpunkte-list');
@@ -7490,7 +7583,7 @@ function renderKiResults() {
           <div class="form-group">
             <label class="form-label" style="font-size:10px;">Kategorie</label>
             <select class="form-select" style="font-size:12px;" onchange="kiDrillCandidates[${idx}].kat=this.value">
-              ${['Passing','Ballhandling','Shooting','Transition','Defense','Rebounding','Offense','Post','Kondition','Plays'].map(k=>`<option ${d.kat===k?'selected':''}>${k}</option>`).join('')}
+              ${['Passing','Ballhandling','Shooting','Transition','Defense','Rebounding','Offense','Post','Kondition','Plays','Constraint'].map(k=>`<option ${d.kat===k?'selected':''}>${k}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
