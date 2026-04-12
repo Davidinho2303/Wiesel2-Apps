@@ -3567,7 +3567,7 @@ function openDrillModal(drillId, fromPicker) {
 
   const descEl = document.getElementById('modal-drill-desc');
   // Prefer description stored on drill object, fallback to DRILL_DESC_DE lookup
-  const desc = d.beschreibung || getDrillDesc(d.id);
+  const desc = d.beschreibung || getDrillDesc(d.id) || d.constraintDesc || '';
   if (desc) {
     descEl.textContent = desc;
     descEl.style.display = 'block';
