@@ -643,9 +643,16 @@
     color: #7a5c00;
     border: 1px solid #f0d070;
     white-space: nowrap;
-    max-width: 200px;
+    max-width: 240px;
+    overflow: visible;
+  }
+  .constraint-chip-label {
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 160px;
+    display: inline-block;
+    vertical-align: middle;
+    white-space: nowrap;
   }
   .constraint-chip-remove {
     background: none;
@@ -1560,7 +1567,7 @@ window.fbJoinOrCreateTeam = async (kuerzel, val) => {
         if (typeof toast === 'function') toast('🏀 Team beigetreten: ' + teamId);
         return;
       } else {
-        if (typeof toast === 'function') toast(currentLang==='en'?'⚠️ Invalid or expired code':'⚠️ Code ungültig oder abgelaufen');
+        if (typeof toast === 'function') toast('⚠️ Code ungültig oder abgelaufen');
         return;
       }
     }
@@ -1888,7 +1895,7 @@ signInAnonymously(auth).then(async () => {
           </select>
         </div>
         <div class="filter-group">
-          <span class="filter-label" id="bib-label-intens">Intensität</span>
+          <span class="filter-label">Intensität</span>
           <select class="filter-select" id="bib-intens" onchange="applyBibFilters()">
             <option value="">Alle</option>
             <option value="hoch">Hoch</option>
@@ -2160,7 +2167,7 @@ signInAnonymously(auth).then(async () => {
       <!-- JSON Import versteckt -->
       <div style="margin-top:24px;" id="json-import-section">
         <div class="panel" style="max-width:600px;">
-          <div class="panel-title" id="json-manual-title">JSON manuell einfügen</div>
+          <div class="panel-title">JSON manuell einfügen</div>
           <div style="padding:12px 14px;">
             <textarea class="json-textarea" id="import-json" placeholder="JSON hier einfügen …"></textarea>
             <button class="btn btn-secondary" style="margin-top:8px;" onclick="importFromText()">Import</button>
@@ -2348,11 +2355,11 @@ signInAnonymously(auth).then(async () => {
 
     <div class="de-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
       <div class="form-group" style="grid-column:1/-1;">
-        <label class="form-label" id="de-label-name">Name *</label>
+        <label class="form-label">Name *</label>
         <input type="text" id="de-name" class="form-input" placeholder="z.B. Doppelpässe">
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-kat">Kategorie *</label>
+        <label class="form-label">Kategorie *</label>
         <select id="de-kat" class="form-select" onchange="if(this.value==='Constraint'){document.getElementById('de-canbeconstraint').checked=true;deToggleConstraintDesc();}">
           <option value="Passing">Passing</option>
           <option value="Ballhandling">Ballhandling</option>
@@ -2362,32 +2369,32 @@ signInAnonymously(auth).then(async () => {
           <option value="Rebounding">Rebounding</option>
           <option value="Offense">Offense</option>
           <option value="Post">Post</option>
-          <option value="Kondition" id="de-kat-kondition">Kondition</option>
+          <option value="Kondition">Kondition</option>
           <option value="Plays">Plays</option>
           <option value="Constraint">⚡ Constraint</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-intensity">Intensität</label>
+        <label class="form-label">Intensität</label>
         <select id="de-intensity" class="form-select">
-          <option value="niedrig" id="de-int-low">niedrig</option>
-          <option value="mittel" id="de-int-med">mittel</option>
-          <option value="hoch" id="de-int-high">hoch</option>
+          <option value="niedrig">niedrig</option>
+          <option value="mittel">mittel</option>
+          <option value="hoch">hoch</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-phase">Phase</label>
+        <label class="form-label">Phase</label>
         <div style="display:flex;gap:8px;padding-top:4px;">
           <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;">
-            <input type="checkbox" id="de-phase-warmup" value="Warmup"> <span id="de-phase-warmup-label">Warmup</span>
+            <input type="checkbox" id="de-phase-warmup" value="Warmup"> Warmup
           </label>
           <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;">
-            <input type="checkbox" id="de-phase-haupt" value="Hauptteil"> <span id="de-phase-haupt-label">Hauptteil</span>
+            <input type="checkbox" id="de-phase-haupt" value="Hauptteil"> Hauptteil
           </label>
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-spielphase">Spielphase (mehrere wählbar)</label>
+        <label class="form-label">Spielphase (mehrere wählbar)</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px;padding-top:4px;">
           <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="de-sp-technik" value="Technik"> Technik</label>
           <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="de-sp-so" value="SO"> SO</label>
@@ -2397,74 +2404,74 @@ signInAnonymously(auth).then(async () => {
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-spieler">Min. Spieler</label>
+        <label class="form-label">Min. Spieler</label>
         <input type="number" id="de-spieler" class="form-input" min="1" max="20" value="4">
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-feld">Feldgröße</label>
+        <label class="form-label">Feldgröße</label>
         <select id="de-feld" class="form-select">
-          <option value="Halbfeld" id="de-feld-opt-halb">Halbfeld</option>
-          <option value="Ganzfeld" id="de-feld-opt-ganz">Ganzfeld</option>
+          <option value="Halbfeld">Halbfeld</option>
+          <option value="Ganzfeld">Ganzfeld</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-baelle">Bälle</label>
+        <label class="form-label">Bälle</label>
         <input type="text" id="de-baelle" class="form-input" placeholder="z.B. 1, 2+, variabel">
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-material">Material</label>
+        <label class="form-label">Material</label>
         <input type="text" id="de-material" class="form-input" placeholder="z.B. Hütchen, Leiter, keine">
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-defense">Defense</label>
+        <label class="form-label">Defense</label>
         <select id="de-defense" class="form-select">
-          <option value="nein" id="de-def-nein">nein</option>
-          <option value="ja (live)" id="de-def-live">ja (live)</option>
-          <option value="ja (eingeschränkt)" id="de-def-restricted">ja (eingeschränkt)</option>
-          <option value="eingeschränkt" id="de-def-restricted2">eingeschränkt</option>
-          <option value="optional" id="de-def-optional">optional</option>
+          <option value="nein">nein</option>
+          <option value="ja (live)">ja (live)</option>
+          <option value="ja (eingeschränkt)">ja (eingeschränkt)</option>
+          <option value="eingeschränkt">eingeschränkt</option>
+          <option value="optional">optional</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-competitive">Competitive</label>
+        <label class="form-label">Competitive</label>
         <select id="de-competitive" class="form-select">
-          <option value="nein" id="de-comp-nein">nein</option>
-          <option value="ja" id="de-comp-ja">ja</option>
-          <option value="optional" id="de-comp-optional">optional</option>
+          <option value="nein">nein</option>
+          <option value="ja">ja</option>
+          <option value="optional">optional</option>
         </select>
       </div>
       <div class="form-group" style="grid-column:1/-1;display:flex;gap:20px;padding-top:4px;flex-wrap:wrap;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" id="de-gamelike"> <span id="de-label-gamelike">Gamelike</span>
+          <input type="checkbox" id="de-gamelike"> Gamelike
         </label>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" id="de-abschluss"> <span id="de-label-abschluss">Abschluss</span>
+          <input type="checkbox" id="de-abschluss"> Abschluss
         </label>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" id="de-canbeconstraint" onchange="deToggleConstraintDesc()"> <span id="de-label-canbeconstraint">⚡ Als Constraint verwendbar</span>
+          <input type="checkbox" id="de-canbeconstraint" onchange="deToggleConstraintDesc()"> ⚡ Als Constraint verwendbar
         </label>
       </div>
       <div class="form-group" style="grid-column:1/-1;display:none;" id="de-constraintdesc-group">
-        <label class="form-label" id="de-label-constraintdesc">⚡ Constraint-Beschreibung (kurz)</label>
+        <label class="form-label">⚡ Constraint-Beschreibung (kurz)</label>
         <input type="text" id="de-constraintdesc" class="form-input" placeholder="z.B. Max. 3 Dribbles pro Ballbesitz">
       </div>
     </div>
 
     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
       <div class="form-group">
-        <label class="form-label" id="de-label-beschreibung">Beschreibung</label>
+        <label class="form-label">Beschreibung</label>
         <textarea id="de-beschreibung" class="form-input" rows="3" style="resize:vertical;font-family:DM Sans,sans-serif;" placeholder="Ablauf des Drills…"></textarea>
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-variationen">Variationen</label>
+        <label class="form-label">Variationen</label>
         <textarea id="de-variationen" class="form-input" rows="2" style="resize:vertical;font-family:DM Sans,sans-serif;" placeholder="Optionale Varianten…"></textarea>
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-coaching">Coaching-Punkte</label>
+        <label class="form-label">Coaching-Punkte</label>
         <textarea id="de-coaching" class="form-input" rows="2" style="resize:vertical;font-family:DM Sans,sans-serif;" placeholder="Schwerpunkte für den Coach…"></textarea>
       </div>
       <div class="form-group">
-        <label class="form-label" id="de-label-notiz">Notiz</label>
+        <label class="form-label">Notiz</label>
         <input type="text" id="de-note" class="form-input" placeholder="z.B. Auch als Constraint verwendbar">
       </div>
       <!-- BILD -->
@@ -2734,7 +2741,7 @@ function tFeld(v) { return currentLang==='en'?({Ganzfeld:'Full Court',Halbfeld:'
 function tBool(v) { return currentLang==='en'?(v?'yes':'no'):(v?'ja':'nein'); }
 function tDefense(v) { return currentLang==='en'?({nein:'no','ja (live)':'yes (live)','ja (eingeschränkt)':'yes (restricted)','ja (live/eingeschränkt)':'yes (live/restricted)',eingeschränkt:'restricted',optional:'optional'}[v]||v):v; }
 function tCompetitive(v) { return currentLang==='en'?({nein:'no',ja:'yes',optional:'optional'}[v]||v):v; }
-const CAT_EN = {Kondition:'Conditioning',Plays:'Plays',Passing:'Passing',Ballhandling:'Ball Handling',Shooting:'Shooting',Transition:'Transition',Defense:'Defense',Rebounding:'Rebounding',Offense:'Offense',Post:'Post',Constraint:'Constraint'};
+const CAT_EN = {Kondition:'Conditioning',Plays:'Plays',Passing:'Passing',Ballhandling:'Ball Handling',Shooting:'Shooting',Transition:'Transition',Defense:'Defense',Rebounding:'Rebounding',Offense:'Offense',Post:'Post'};
 function tCat(c) { return currentLang==='en'?(CAT_EN[c]||c):c; }
 
 const DRILL_NOTES_EN = {
@@ -4143,7 +4150,7 @@ function openTemplateModal(tplId, fromPlan) {
       </div>
       <div class="form-group" style="margin-bottom:10px;">
         <label class="form-label">${currentLang==='en'?'Location/Theme':'Ort/Thema'}</label>
-        <input type="text" id="tpl-theme-input" class="form-input" value="${theme}" placeholder="${currentLang==='en'?'e.g. Court A':'z.B. Pankstraße'}">
+        <input type="text" id="tpl-theme-input" class="form-input" value="${theme}" placeholder="z.B. Pankstraße">
       </div>
       <div class="form-group" style="margin-bottom:10px;">
         <label class="form-label">${currentLang==='en'?'Auto-Date (weekday)':'Auto-Datum (Wochentag)'}</label>
@@ -4303,7 +4310,7 @@ function renderSlotHTML(slot, idx) {
             ${constraints.map(c => {
               const displayC = currentLang === 'en' ? (CONSTRAINT_T[c]?.en || c) : c;
               return `<span class="constraint-chip" data-tooltip="${c.replace(/"/g,'&quot;')}" ontouchstart="this.classList.add('tooltip-show')" ontouchend="setTimeout(()=>this.classList.remove('tooltip-show'),1800)">
-                ⚡ ${displayC}
+                <span class="constraint-chip-label">⚡ ${displayC}</span>
                 <button class="constraint-chip-remove" onclick="removeConstraint('${slot.id}',${di},'${c.replace(/'/g,"\\'")}',event)" title="${currentLang === 'en' ? 'Remove' : 'Entfernen'}">✕</button>
               </span>`;
             }).join('')}
@@ -4762,8 +4769,8 @@ function buildPrintHTML(plans, title) {
     .no-print { background:#1a1916;color:#fff;padding:8px 14px;font-size:11px;text-align:center;margin-bottom:12px;border-radius:4px; }
     @media print { .no-print { display:none; } @page { margin:10mm 15mm; } }
   </style></head><body>
-  <div class="no-print">${currentLang==='en'?'Print preview · Ctrl+P (Win) / ⌘+P (Mac) → Save as PDF or print':'Druckvorschau · Strg+P (Win) / ⌘+P (Mac) → PDF speichern oder drucken'}</div>
-  <h1>${esc(title||(currentLang==='en'?'Practice Plans':'Trainingspläne'))} <span style="font-size:10pt;color:#888;font-weight:normal;">${plansArr.length > 1 ? '('+plansArr.length+(currentLang==='en'?' plans':' Pläne')+')' : ''}</span></h1>
+  <div class="no-print">Druckvorschau · Strg+P (Win) / ⌘+P (Mac) → PDF speichern oder drucken</div>
+  <h1>${esc(title||'Trainingspläne')} <span style="font-size:10pt;color:#888;font-weight:normal;">${plansArr.length > 1 ? '('+plansArr.length+' Pläne)' : ''}</span></h1>
   ${plansHTML}
   <div style="margin-top:20px;font-size:8pt;color:#aaa;border-top:1px solid #eee;padding-top:6px;">assistr · Weddinger Wiesel 2 · Saison 2025/2026</div>
   </body></html>`;
@@ -4817,7 +4824,7 @@ function exportPlanCSV() {
 
 function exportAllPlansWord() {
   const plans = typeof getFilteredOverviewPlans === 'function' ? getFilteredOverviewPlans() : savedPlans;
-  if (!plans.length) { toast(currentLang==='en'?'No plans':'Keine Pläne'); return; }
+  if (!plans.length) { toast('Keine Pläne'); return; }
   const parts = plans.map(p => buildWordHTMLPro(p));
   // Kombiniere alle Pläne in ein Dokument mit Seitenumbruch
   const combined = parts.join('<div style="page-break-after:always;"></div>');
@@ -4900,7 +4907,7 @@ function importPlansCSV(event) {
 function exportAllPlansJSON() {
   const json = JSON.stringify(savedPlans, null, 2);
   downloadText(json, 'wiesel2_alle_plaene.json');
-  toast(currentLang==='en'?'⬇ All plans exported as JSON':'⬇ Alle Pläne als JSON exportiert');
+  toast('⬇ Alle Pläne als JSON exportiert');
 }
 
 function importFromText() {
@@ -4920,7 +4927,7 @@ function importFromText() {
     renderSavedPlansList();
     renderNavSavedPlans();
     toast('✓ ' + count + ' Plan(e) importiert');
-  } catch(e) { toast(currentLang==='en'?'⚠ Invalid JSON':'⚠ Ungültiges JSON'); }
+  } catch(e) { toast('⚠ Ungültiges JSON'); }
 }
 
 function importFromFile(event) {
@@ -4953,7 +4960,7 @@ function downloadText(content, filename) {
       // PWA blocks window.open — show copy fallback
       showTextFallback(content, filename);
     } else {
-      toast(currentLang==='en'?'📱 Page opens — Share → "Save to Files"':'📱 Seite öffnet — Teilen → "In Dateien" zum Speichern');
+      toast('📱 Seite öffnet — Teilen → "In Dateien" zum Speichern');
       setTimeout(() => URL.revokeObjectURL(url), 30000);
     }
     return;
@@ -5123,7 +5130,7 @@ function openPrintBlob(html) {
       // Still blocked — render inline in overlay with print button
       showPrintOverlay(html);
     } else {
-      toast(currentLang==='en'?'📱 Page opens — Share → Print':'📱 Seite öffnet — Teilen → Drucken');
+      toast('📱 Seite öffnet — Teilen → Drucken');
     }
     return;
   }
@@ -5144,8 +5151,8 @@ function showPrintOverlay(html) {
   overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:9999;display:flex;flex-direction:column;';
   overlay.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #eee;background:#fff;">
-      <button onclick="this.closest('[style]').remove()" style="padding:8px 14px;background:#1a1916;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;">${currentLang==='en'?'✕ Close':'✕ Schließen'}</button>
-      <span style="font-size:12px;color:#666;">${currentLang==='en'?'📱 Share → Print to save as PDF':'📱 Teilen-Button → Drucken zum Speichern als PDF'}</span>
+      <button onclick="this.closest('[style]').remove()" style="padding:8px 14px;background:#1a1916;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;">✕ Schließen</button>
+      <span style="font-size:12px;color:#666;">📱 Teilen-Button → Drucken zum Speichern als PDF</span>
     </div>
     <iframe srcdoc="" style="flex:1;border:none;width:100%;"></iframe>`;
   document.body.appendChild(overlay);
@@ -6331,6 +6338,9 @@ function getTouchDrillItem(el) {
 
 let touchLongPressTimer = null;
 let touchDragActive = false;
+let touchStartX = 0;
+let touchStartY = 0;
+const TOUCH_DRAG_THRESHOLD = 8; // px movement allowed before cancelling long-press
 
 function onDrillTouchStart(e) {
   const item = getTouchDrillItem(e.target);
@@ -6338,8 +6348,12 @@ function onDrillTouchStart(e) {
   if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
 
   const startTouch = e.touches[0];
+  touchStartX = startTouch.clientX;
+  touchStartY = startTouch.clientY;
 
-  // Only start drag after 300ms long press
+  // Only start drag after long press, and only from the drag handle
+  const isHandle = e.target.classList.contains('drag-handle') || e.target.closest('.drag-handle');
+
   touchLongPressTimer = setTimeout(() => {
     touchDragActive = true;
     touchDragSrc = { slotId: item.dataset.slot, idx: parseInt(item.dataset.idx), el: item };
@@ -6365,13 +6379,21 @@ function onDrillTouchStart(e) {
     `;
     document.body.appendChild(touchClone);
     item.style.opacity = '0.3';
-  }, 400);
+  }, isHandle ? 200 : 500);
 }
 
 function onDrillTouchMove(e) {
   if (!touchDragActive) {
-    // Cancel long press if finger moved before 300ms
-    if (touchLongPressTimer) { clearTimeout(touchLongPressTimer); touchLongPressTimer = null; }
+    // Cancel long press if finger moved more than threshold
+    if (touchLongPressTimer) {
+      const t = e.touches[0];
+      const dx = Math.abs(t.clientX - touchStartX);
+      const dy = Math.abs(t.clientY - touchStartY);
+      if (dx > TOUCH_DRAG_THRESHOLD || dy > TOUCH_DRAG_THRESHOLD) {
+        clearTimeout(touchLongPressTimer);
+        touchLongPressTimer = null;
+      }
+    }
     return;
   }
   if (!touchDragSrc || !touchClone) return;
@@ -6457,12 +6479,23 @@ function onDrillTouchEnd(e) {
   autoSave();
 }
 
+function onDrillTouchCancel() {
+  if (touchLongPressTimer) { clearTimeout(touchLongPressTimer); touchLongPressTimer = null; }
+  if (touchClone) { touchClone.remove(); touchClone = null; }
+  if (touchDragSrc?.el) touchDragSrc.el.style.opacity = '';
+  touchDragActive = false;
+  touchDragSrc = null;
+  document.querySelectorAll('.slot-drill-item.drag-over, .slot-content.drag-over')
+    .forEach(el => el.classList.remove('drag-over'));
+}
+
 // Attach touch listeners to all drill items after render
 function attachTouchDragListeners() {
   document.querySelectorAll('.slot-drill-item').forEach(item => {
     item.addEventListener('touchstart', onDrillTouchStart, { passive: false });
     item.addEventListener('touchmove', onDrillTouchMove, { passive: false });
     item.addEventListener('touchend', onDrillTouchEnd, { passive: false });
+    item.addEventListener('touchcancel', onDrillTouchCancel, { passive: true });
   });
 }
 
@@ -7042,75 +7075,6 @@ function applyLang() {
 
   // Re-render saison if visible (to update all inline strings)
   if (document.getElementById('page-saison')?.classList.contains('active')) renderSaisonPage();
-
-  // Drill-Edit-Modal labels & placeholders
-  const _del = (id, de, en) => { const el = document.getElementById(id); if (el) el.textContent = currentLang === 'en' ? en : de; };
-  const _dep = (id, de, en) => { const el = document.getElementById(id); if (el) el.placeholder = currentLang === 'en' ? en : de; };
-  _del('de-label-spielphase', 'Spielphase (mehrere wählbar)', 'Game Phase (multiple)');
-  _del('de-label-spieler', 'Min. Spieler', 'Min. Players');
-  _del('de-label-feld', 'Feldgröße', 'Court Size');
-  _del('de-label-baelle', 'Bälle', 'Balls');
-  _del('de-label-material', 'Material', 'Equipment');
-  _del('de-label-defense', 'Defense', 'Defense');
-  _del('de-label-competitive', 'Competitive', 'Competitive');
-  _del('de-label-gamelike', 'Gamelike', 'Gamelike');
-  _del('de-label-abschluss', 'Abschluss', 'Finishing');
-  _del('de-label-canbeconstraint', '⚡ Als Constraint verwendbar', '⚡ Usable as Constraint');
-  _del('de-label-beschreibung', 'Beschreibung', 'Description');
-  _del('de-label-variationen', 'Variationen', 'Variations');
-  _del('de-label-coaching', 'Coaching-Punkte', 'Coaching Points');
-  _del('de-label-notiz', 'Notiz', 'Note');
-  _del('de-label-constraintdesc', '⚡ Constraint-Beschreibung (kurz)', '⚡ Constraint Description (short)');
-  _del('de-label-intensity', 'Intensität', 'Intensity');
-  _del('de-label-name', 'Name *', 'Name *');
-  _del('de-label-kat', 'Kategorie *', 'Category *');
-  _del('de-label-phase', 'Phase', 'Phase');
-  _del('de-phase-warmup-label', 'Warmup', 'Warm-up');
-  _del('de-phase-haupt-label', 'Hauptteil', 'Main Part');
-  _del('bib-label-intens', 'Intensität', 'Intensity');
-  _del('de-kat-kondition', 'Kondition', 'Conditioning');
-  // Drill-Edit-Modal placeholders
-  _dep('de-name', 'z.B. Doppelpässe', 'e.g. Double Passes');
-  _dep('de-baelle', 'z.B. 1, 2+, variabel', 'e.g. 1, 2+, variable');
-  _dep('de-material', 'z.B. Hütchen, Leiter, keine', 'e.g. Cones, Ladder, none');
-  _dep('de-coaching', 'Schwerpunkte für den Coach…', 'Key coaching points…');
-  _dep('de-bild', 'https://… oder Datei unten wählen', 'https://… or choose file below');
-  _dep('de-video', 'https://youtube.com/… oder Datei unten wählen', 'https://youtube.com/… or choose file below');
-  _dep('de-constraintdesc', 'z.B. Max. 3 Dribbles pro Ballbesitz', 'e.g. Max. 3 dribbles per possession');
-  _dep('de-beschreibung', 'Ablauf des Drills…', 'Drill flow…');
-  _dep('de-variationen', 'Optionale Varianten…', 'Optional variations…');
-  _dep('de-note', 'z.B. Auch als Constraint verwendbar', 'e.g. Also usable as constraint');
-  // Drill-Edit-Modal select options
-  const _deo = (id, de, en) => { const el = document.getElementById(id); if (el) el.textContent = currentLang === 'en' ? en : de; };
-  _deo('de-feld-opt-halb', 'Halbfeld', 'Half Court');
-  _deo('de-feld-opt-ganz', 'Ganzfeld', 'Full Court');
-  _deo('de-def-nein', 'nein', 'no');
-  _deo('de-def-live', 'ja (live)', 'yes (live)');
-  _deo('de-def-restricted', 'ja (eingeschränkt)', 'yes (restricted)');
-  _deo('de-def-restricted2', 'eingeschränkt', 'restricted');
-  _deo('de-def-optional', 'optional', 'optional');
-  _deo('de-comp-nein', 'nein', 'no');
-  _deo('de-comp-ja', 'ja', 'yes');
-  _deo('de-comp-optional', 'optional', 'optional');
-  _deo('de-int-low', 'niedrig', 'low');
-  _deo('de-int-med', 'mittel', 'medium');
-  _deo('de-int-high', 'hoch', 'high');
-  // Drill-Import-Modal dropzone
-  const drillDropzoneLabel = document.getElementById('drill-import-dropzone-label');
-  if (drillDropzoneLabel) drillDropzoneLabel.textContent = currentLang === 'en' ? 'Choose JSON or CSV file' : 'JSON oder CSV wählen';
-  // JSON manual import
-  const jsonManualTitle = document.getElementById('json-manual-title');
-  if (jsonManualTitle) jsonManualTitle.textContent = currentLang === 'en' ? 'Paste JSON manually' : 'JSON manuell einfügen';
-  const importJsonEl = document.getElementById('import-json');
-  if (importJsonEl) importJsonEl.placeholder = currentLang === 'en' ? 'Paste JSON here …' : 'JSON hier einfügen …';
-  // User modal
-  const userModalInput = document.getElementById('user-modal-input');
-  if (userModalInput) userModalInput.placeholder = currentLang === 'en' ? 'e.g. john, jane, alex …' : 'z.B. günther, hannelore, udo …';
-  const teamNameInput = document.getElementById('user-modal-teamname-input');
-  if (teamNameInput) teamNameInput.placeholder = currentLang === 'en' ? 'Change team name' : 'Team-Name ändern';
-  // Bib intensity label
-  const bibLabelIntens = document.getElementById('bib-label-intens');
-  if (bibLabelIntens) bibLabelIntens.textContent = currentLang === 'en' ? 'Intensity' : 'Intensität';
 
   // Re-render dynamic content
   applyBibFilters();
@@ -7840,7 +7804,7 @@ function renderKiResults() {
           ${kiMode === 'image' && kiImageBase64 ? `<div class="form-group" style="grid-column:1/-1;">
             <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;">
               <input type="checkbox" ${d._attachImage !== false ? 'checked' : ''} onchange="kiDrillCandidates[${idx}]._attachImage=this.checked">
-              📷 ${currentLang==='en'?'Attach analysis image to this drill':'Analysebild an diesen Drill anhängen'}
+              📷 Analysebild an diesen Drill anhängen
             </label>
           </div>` : ''}
         </div>
@@ -8029,7 +7993,7 @@ window.renderPlanOverview   = renderPlanOverview;
       <div id="team-setup-choice" style="display:flex;flex-direction:column;gap:10px;">
         <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" onclick="showTeamSetupJoin()">🔑 Team beitreten (Code)</button>
         <button class="btn btn-ghost" style="width:100%;padding:12px;font-size:14px;" onclick="showTeamSetupCreate()">+ Neues Team anlegen</button>
-        <button class="btn btn-ghost btn-sm" style="font-size:12px;color:var(--text-subtle);margin-top:4px;" onclick="closeTeamSetupModal();openUserModal(true);">${currentLang==='en'?'← Wrong name? Back to login':'← Falscher Name? Zurück zum Login'}</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:12px;color:var(--text-subtle);margin-top:4px;" onclick="closeTeamSetupModal();openUserModal(true);">← Falscher Name? Zurück zum Login</button>
       </div>
 
       <!-- Beitreten -->
@@ -8068,7 +8032,7 @@ window.renderPlanOverview   = renderPlanOverview;
         <div style="font-size:12px;color:var(--text-subtle);">JSON oder CSV hochladen. Pflichtfelder: <code>id, name, kat, phase, spielphase, intensity, minSpieler, feld</code>.</div>
         <label for="drill-import-file" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed var(--border);border-radius:var(--radius);padding:32px;cursor:pointer;background:var(--surface2);">
           <span style="font-size:28px;">&#128229;</span>
-          <span id="drill-import-dropzone-label" style="font-size:13px;color:var(--text-subtle);">JSON oder CSV wählen</span>
+          <span style="font-size:13px;color:var(--text-subtle);">JSON oder CSV w&#228;hlen</span>
           <input type="file" id="drill-import-file" accept=".json,.csv" style="display:none;" onchange="handleDrillImportFile(this)">
         </label>
         <div id="drill-import-status" style="font-size:12px;color:var(--text-subtle);min-height:18px;"></div>
