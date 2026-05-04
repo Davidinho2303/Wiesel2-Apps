@@ -949,6 +949,19 @@
     color: var(--text);
   }
 
+  /* MOBILE NOTES BLOCK */
+  .mobile-notes-block {
+    display: none;
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  @media (max-width: 768px) {
+    .mobile-notes-block { display: block; }
+  }
+
   /* IMPORT/EXPORT SECTION */
   .json-textarea {
     width: 100%;
@@ -1984,6 +1997,10 @@ signInAnonymously(auth).then(async () => {
             <span class="time-summary-value" id="total-mins-display">0 min</span>
             <div class="time-bar"><div class="time-bar-fill" id="time-bar-fill" style="width:0%"></div></div>
             <span id="time-remaining" style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-muted);">90 min geplant</span>
+          </div>
+          <div class="mobile-notes-block">
+            <div style="font-family:DM Mono,monospace;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:6px;">Notizen zum Plan</div>
+            <textarea class="json-textarea" id="plan-notes-mobile" placeholder="Fokus des Trainings, Hinweise, Scouting …" style="min-height:72px;width:100%;" oninput="syncMobileNotes(this.value)"></textarea>
           </div>
         </div>
         <div class="plan-sidebar-panel">
@@ -3680,7 +3697,7 @@ function newPlan() {
   document.getElementById('plan-name').value = '';
   document.getElementById('plan-date').value = currentPlan.date;
   document.getElementById('plan-theme').value = '';
-  document.getElementById('plan-notes').value = '';
+  document.getElementById('plan-notes').value = ''; const _mn4 = document.getElementById('plan-notes-mobile'); if (_mn4) _mn4.value = '';
   document.getElementById('plan-total-time').value = '90';
   renderSlots();
   updateTimeSummary();
@@ -3718,8 +3735,16 @@ function updatePlanMeta() {
   currentPlan.theme = document.getElementById('plan-theme').value;
   currentPlan.notes = document.getElementById('plan-notes').value;
   currentPlan.totalTime = parseInt(document.getElementById('plan-total-time').value) || 90;
+  const mob = document.getElementById('plan-notes-mobile');
+  if (mob && mob !== document.activeElement) mob.value = currentPlan.notes;
   updateTimeSummary();
   updatePlanDisplayHeader();
+}
+
+function syncMobileNotes(val) {
+  const desktop = document.getElementById('plan-notes');
+  if (desktop) desktop.value = val;
+  if (currentPlan) { currentPlan.notes = val; autoSave(); }
 }
 
 function updatePlanReadOnlyBanner() {
@@ -3897,7 +3922,7 @@ function loadPlan(planId) {
   document.getElementById('plan-name').value = currentPlan.name || '';
   document.getElementById('plan-date').value = currentPlan.date || '';
   document.getElementById('plan-theme').value = currentPlan.theme || '';
-  document.getElementById('plan-notes').value = currentPlan.notes || '';
+  document.getElementById('plan-notes').value = currentPlan.notes || ''; const _mn = document.getElementById('plan-notes-mobile'); if (_mn) _mn.value = currentPlan.notes || '';
   document.getElementById('plan-total-time').value = currentPlan.totalTime || 90;
   renderSlots();
   updateTimeSummary();
@@ -4006,7 +4031,7 @@ function loadSharedPlanAsCopy(planId) {
   document.getElementById('plan-name').value = copy.name;
   document.getElementById('plan-date').value = copy.date || '';
   document.getElementById('plan-theme').value = copy.theme || '';
-  document.getElementById('plan-notes').value = copy.notes || '';
+  document.getElementById('plan-notes').value = copy.notes || ''; const _mn2 = document.getElementById('plan-notes-mobile'); if (_mn2) _mn2.value = copy.notes || '';
   document.getElementById('plan-total-time').value = copy.totalTime || 90;
   renderSlots(); updateTimeSummary(); updatePlanDisplayHeader();
   showPage('planung');
@@ -4053,6 +4078,7 @@ function loadTemplate(tplId, fromShared) {
   document.getElementById('plan-date').value = currentPlan.date;
   document.getElementById('plan-theme').value = currentPlan.theme;
   document.getElementById('plan-notes').value = currentPlan.notes;
+  const _mn5 = document.getElementById('plan-notes-mobile'); if (_mn5) _mn5.value = currentPlan.notes || '';
   document.getElementById('plan-total-time').value = currentPlan.totalTime;
   renderSlots(); updateTimeSummary(); updatePlanDisplayHeader();
   showPage('planung');
