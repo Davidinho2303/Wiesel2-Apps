@@ -5403,6 +5403,7 @@ let saisonPhases = [];
 let saisonCalMonth = new Date().getMonth();
 let saisonCalYear = new Date().getFullYear();
 let saisonView = 'calendar'; // 'calendar' | 'list'
+let phaseCollapseState = {}; // phaseId → true (collapsed) | false (expanded)
 
 const PHASE_COLORS = ['#2E75B6','#1A6B3A','#B65C2E','#6B2EB6','#B6A02E','#2EB6A0','#B62E6B'];
 
@@ -5751,11 +5752,27 @@ function renderSaisonPhasesList() {
   }
 
   const today = new Date().toISOString().slice(0,10);
-  const sorted = [...saisonPhases].sort((a,b) => a.startDate.localeCompare(b.startDate));
+  // Sortierung: aktiv zuerst, dann zukünftig, dann vergangen (jeweils nach startDate)
+  const sorted = [...saisonPhases].sort((a,b) => {
+    const aActive = a.startDate <= today && a.endDate >= today;
+    const bActive = b.startDate <= today && b.endDate >= today;
+    const aPast = a.endDate < today;
+    const bPast = b.endDate < today;
+    const aRank = aActive ? 0 : aPast ? 2 : 1;
+    const bRank = bActive ? 0 : bPast ? 2 : 1;
+    if (aRank !== bRank) return aRank - bRank;
+    return a.startDate.localeCompare(b.startDate);
+  });
 
   el.innerHTML = sorted.map(p => {
     const isActive = p.startDate <= today && p.endDate >= today;
     const isPast = p.endDate < today;
+
+    // Default: vergangene Phasen collapsed, aktive/zukünftige expanded
+    if (!(p.id in phaseCollapseState)) {
+      phaseCollapseState[p.id] = isPast;
+    }
+    const isCollapsed = phaseCollapseState[p.id];
 
     // Trainings in dieser Phase zählen (Hybrid: phaseId ODER Datum) — eigene + Team-Pläne
     const allPlansForPhase = [...(savedPlans||[]), ...(window.sharedPlans||[]).filter(sp => !(savedPlans||[]).find(mp => mp.id === sp.id))];
@@ -5810,21 +5827,22 @@ function renderSaisonPhasesList() {
 
     return `<div class="panel" style="border-left:4px solid ${p.color};opacity:${isPast?'0.7':'1'};">
       <div style="padding:12px 14px;">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;cursor:pointer;" onclick="phaseCollapseState['${p.id}']=!phaseCollapseState['${p.id}'];renderSaisonPage();">
           <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
               <div style="font-size:14px;font-weight:700;color:var(--text);">${p.name}</div>
               ${isActive ? `<span style="font-size:9px;background:${p.color};color:#fff;padding:2px 7px;border-radius:10px;font-weight:600;">${T['saison-active'][currentLang]}</span>` : ''}
               ${isPast ? `<span style="font-size:9px;color:var(--text-subtle);font-family:DM Mono,monospace;">${T['saison-done'][currentLang]}</span>` : ''}
             </div>
-            <div style="font-size:11px;color:var(--text-subtle);font-family:DM Mono,monospace;">${p.startDate} → ${p.endDate} · ${totalWeeks} ${T['saison-weeks'][currentLang]}</div>
-            ${p.ziele ? `<div style="font-size:12px;color:var(--text-subtle);margin-top:4px;">🎯 ${p.ziele}</div>` : ''}
+            <div style="font-size:11px;color:var(--text-subtle);font-family:DM Mono,monospace;">${p.startDate} → ${p.endDate} · ${totalWeeks} ${T['saison-weeks'][currentLang]}${isCollapsed && istTrainings > 0 ? ` · ${istTrainings}/${sollTrainings} T` : ''}</div>
+            ${!isCollapsed && p.ziele ? `<div style="font-size:12px;color:var(--text-subtle);margin-top:4px;">🎯 ${p.ziele}</div>` : ''}
           </div>
-          <div style="display:flex;gap:4px;flex-shrink:0;">
-            <button class="btn btn-ghost btn-sm" onclick="openPhaseModal('${p.id}')">✏️</button>
-            <button class="btn btn-danger btn-sm" onclick="deletePhase('${p.id}',event)">✕</button>
+          <div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">
+            <span style="font-size:13px;color:var(--text-subtle);padding:0 4px;user-select:none;">${isCollapsed ? '▸' : '▾'}</span>
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openPhaseModal('${p.id}')">✏️</button>
+            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deletePhase('${p.id}',event)">✕</button>
           </div>
-        </div>
+        </div>${isCollapsed ? '' : `
 
         <!-- Trainings-Tracking -->
         <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -5864,6 +5882,7 @@ function renderSaisonPhasesList() {
             }).join('')}
           </div>
         </div>` : ''}
+`}
       </div>
     </div>`;
   }).join('');
